@@ -215,7 +215,7 @@ func (q *Queries) ListRecipeCategories(ctx context.Context, recipeID int64) ([]C
 }
 
 const listRecipeIngredients = `-- name: ListRecipeIngredients :many
-SELECT ri.ingredient_id, i.name AS ingredient_name, ri.amount, COALESCE(u.name, '') AS unit_name
+SELECT ri.ingredient_id, i.name AS ingredient_name, ri.amount, ri.unit_id, COALESCE(u.name, '') AS unit_name
 FROM recipe_ingredients ri
 JOIN ingredients i ON i.id = ri.ingredient_id
 LEFT JOIN units u ON u.id = ri.unit_id
@@ -227,6 +227,7 @@ type ListRecipeIngredientsRow struct {
 	IngredientID   int64
 	IngredientName string
 	Amount         float64
+	UnitID         pgtype.Int8
 	UnitName       string
 }
 
@@ -243,6 +244,7 @@ func (q *Queries) ListRecipeIngredients(ctx context.Context, recipeID int64) ([]
 			&i.IngredientID,
 			&i.IngredientName,
 			&i.Amount,
+			&i.UnitID,
 			&i.UnitName,
 		); err != nil {
 			return nil, err
@@ -261,7 +263,7 @@ LEFT JOIN recipe_categories rc ON rc.recipe_id = r.id
 WHERE ($3::text IS NULL OR lower(r.name) LIKE '%' || lower($3::text) || '%')
   AND ($4::bigint IS NULL OR rc.category_id = $4::bigint)
   AND ($5::text IS NULL OR r.status = $5::text)
-ORDER BY r.name
+ORDER BY r.name, r.id
 LIMIT $1 OFFSET $2
 `
 

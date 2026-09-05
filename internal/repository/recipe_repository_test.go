@@ -138,6 +138,65 @@ func TestRecipeRepository_Update_ReplacesIngredientsWithoutDuplicating(t *testin
 	}
 }
 
+func TestRecipeRepository_Update_PreservesIngredientUnitOnRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.New(t)
+	repo := NewRecipeRepository(pool)
+	lookups := NewLookupRepository(pool)
+
+	butter, err := lookups.FindOrCreateIngredient(ctx, "Butter")
+	if err != nil {
+		t.Fatalf("FindOrCreateIngredient() error = %v", err)
+	}
+	el, err := lookups.FindOrCreateUnit(ctx, "EL")
+	if err != nil {
+		t.Fatalf("FindOrCreateUnit() error = %v", err)
+	}
+
+	r := &domain.Recipe{
+		Name: "Rührei", Source: "src-ruehrei", Status: domain.StatusPublished,
+		Ingredients: []domain.RecipeIngredient{
+			{IngredientID: butter.ID, Amount: 2, UnitID: &el.ID},
+		},
+	}
+	if err := repo.Create(ctx, r); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	// A read must populate the write-side UnitID, not just the display UnitName.
+	loaded, err := repo.GetByID(ctx, r.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if len(loaded.Ingredients) != 1 {
+		t.Fatalf("Ingredients = %+v, want 1", loaded.Ingredients)
+	}
+	if got := loaded.Ingredients[0].UnitID; got == nil || *got != el.ID {
+		t.Fatalf("GetByID Ingredients[0].UnitID = %v, want &%d", got, el.ID)
+	}
+
+	// Load-modify-save: change an unrelated field, hand the loaded Ingredients
+	// slice straight back to Update — the unit must survive, not get nulled.
+	loaded.Name = "Rührei mit Schnittlauch"
+	if err := repo.Update(ctx, loaded); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	reloaded, err := repo.GetByID(ctx, r.ID)
+	if err != nil {
+		t.Fatalf("GetByID() after update error = %v", err)
+	}
+	if len(reloaded.Ingredients) != 1 {
+		t.Fatalf("Ingredients after update = %+v, want 1", reloaded.Ingredients)
+	}
+	if got := reloaded.Ingredients[0].UnitName; got != "EL" {
+		t.Errorf("UnitName after update = %q, want EL", got)
+	}
+	if got := reloaded.Ingredients[0].UnitID; got == nil || *got != el.ID {
+		t.Errorf("UnitID after update = %v, want &%d", got, el.ID)
+	}
+}
+
 func TestRecipeRepository_GetBySource_NotFound(t *testing.T) {
 	repo := newTestRecipeRepo(t)
 	_, err := repo.GetBySource(context.Background(), "does-not-exist")

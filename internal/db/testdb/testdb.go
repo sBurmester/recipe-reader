@@ -8,9 +8,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/sBurmester/recipe-reader/internal/db"
 )
@@ -24,11 +22,16 @@ func New(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
 
+	// BasicWaitStrategies is the module's own two-step readiness gate: wait for
+	// "ready to accept connections" logged twice (the official image starts
+	// Postgres, runs init scripts, then restarts) and then for the mapped port
+	// to be served on localhost. v0.44's tcpostgres.Run sets no wait strategy
+	// of its own, so this must be passed explicitly or migrate races startup.
 	container, err := tcpostgres.Run(ctx, "postgres:17-alpine",
 		tcpostgres.WithDatabase("recipes_test"),
 		tcpostgres.WithUsername("recipes"),
 		tcpostgres.WithPassword("recipes"),
-		testcontainers.WithWaitStrategy(wait.ForListeningPort("5432/tcp")),
+		tcpostgres.BasicWaitStrategies(),
 	)
 	if err != nil {
 		t.Fatalf("testdb: start postgres container: %v", err)

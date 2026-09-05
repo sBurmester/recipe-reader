@@ -24,7 +24,7 @@ LEFT JOIN recipe_categories rc ON rc.recipe_id = r.id
 WHERE (sqlc.narg(text)::text IS NULL OR lower(r.name) LIKE '%' || lower(sqlc.narg(text)::text) || '%')
   AND (sqlc.narg(category_id)::bigint IS NULL OR rc.category_id = sqlc.narg(category_id)::bigint)
   AND (sqlc.narg(status)::text IS NULL OR r.status = sqlc.narg(status)::text)
-ORDER BY r.name
+ORDER BY r.name, r.id
 LIMIT $1 OFFSET $2;
 
 -- name: CountRecipes :one
@@ -35,7 +35,7 @@ WHERE (sqlc.narg(text)::text IS NULL OR lower(r.name) LIKE '%' || lower(sqlc.nar
   AND (sqlc.narg(status)::text IS NULL OR r.status = sqlc.narg(status)::text);
 
 -- name: ListRecipeIngredients :many
-SELECT ri.ingredient_id, i.name AS ingredient_name, ri.amount, COALESCE(u.name, '') AS unit_name
+SELECT ri.ingredient_id, i.name AS ingredient_name, ri.amount, ri.unit_id, COALESCE(u.name, '') AS unit_name
 FROM recipe_ingredients ri
 JOIN ingredients i ON i.id = ri.ingredient_id
 LEFT JOIN units u ON u.id = ri.unit_id

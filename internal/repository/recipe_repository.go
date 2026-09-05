@@ -191,6 +191,8 @@ func (r *pgRecipeRepository) Search(ctx context.Context, q SearchQuery) ([]domai
 		return nil, 0, fmt.Errorf("repository: count recipes: %w", err)
 	}
 
+	// SearchRecipes orders by (name, id): recipes.name is not unique, so id is
+	// the tiebreaker that keeps paging stable across successive page fetches.
 	rows, err := r.queries.SearchRecipes(ctx, sqlc.SearchRecipesParams{
 		Text: textArg, CategoryID: categoryArg, Status: statusArg,
 		Limit: int32(pageSize), Offset: int32((page - 1) * pageSize),
@@ -226,10 +228,17 @@ func (r *pgRecipeRepository) assemble(ctx context.Context, row sqlc.Recipe) (*do
 		return nil, fmt.Errorf("repository: list ingredients for recipe %d: %w", row.ID, err)
 	}
 	for _, ir := range ingredientRows {
-		recipe.Ingredients = append(recipe.Ingredients, domain.RecipeIngredient{
+		ing := domain.RecipeIngredient{
 			IngredientID: ir.IngredientID, IngredientName: ir.IngredientName,
 			Amount: ir.Amount, UnitName: ir.UnitName,
-		})
+		}
+		// Populate the write-side UnitID too, so a load-modify-save round trip
+		// through Update preserves the unit instead of nulling it.
+		if ir.UnitID.Valid {
+			v := ir.UnitID.Int64
+			ing.UnitID = &v
+		}
+		recipe.Ingredients = append(recipe.Ingredients, ing)
 	}
 
 	categoryRows, err := r.queries.ListRecipeCategories(ctx, row.ID)

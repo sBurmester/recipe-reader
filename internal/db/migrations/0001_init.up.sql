@@ -23,6 +23,10 @@ CREATE TABLE recipes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- idx_recipes_name_lower serves a future exact lower(name) = $1 lookup only.
+-- It does NOT accelerate SearchRecipes: that filter is a leading-wildcard
+-- LIKE ('%term%'), which no btree index can serve — substring search is a
+-- seq scan until this is replaced with pg_trgm + a GIN index.
 CREATE INDEX idx_recipes_name_lower ON recipes (lower(name));
 CREATE INDEX idx_recipes_status ON recipes (status);
 
