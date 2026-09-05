@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 1: Domain & Persistence (sqlc + Postgres).
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 3: Database Schema, Migrations, sqlc Codegen & Domain Models
 
@@ -56,14 +56,20 @@ func New(t *testing.T) *pgxpool.Pool   // starts an ephemeral Postgres container
 
 Every later task that touches the database (Task 4, 5, 12, 15, 16, 17, 18) imports `internal/domain` for types and either `internal/db` (connect/migrate/seed, wired once in `main.go`) or `internal/db/testdb` (in tests). `int64` is the ID type throughout — Postgres `BIGSERIAL`/`BIGINT`, not the `uint` GORM used, since there is no ORM auto-mapping doing that conversion anymore.
 
-- [ ] **Step 1: Add dependencies**
+> **Deviations from plan (as implemented):**
+> - **Migrate driver (Step 7/8):** `golang-migrate/migrate/v4` v4.19.1's `database/pgx/v5` package exposes only `WithInstance` and registers itself under the `pgx5://` URL scheme via `init()`. Implemented as a blank import `_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"` plus a `migrateURL()` helper that rewrites `postgres://` / `postgresql://` → `pgx5://` before `migrate.NewWithSourceInstance("iofs", src, …)`. The `pgxmigrate` alias import and the `var _ = pgxmigrate.WithInstance` placeholder were removed (Step 8 instructs this). `Connect` now closes the pool on ping failure; `Migrate` defers `m.Close()` so the driver's DB handle isn't leaked. `seed.go` wraps its errors with context instead of bare `return err`.
+> - **Vulnerability bumps (project CLAUDE.md requires a clean `govulncheck`):** `go get` of the testcontainers set pulled reachable advisories, fixed by bumping `golang.org/x/crypto` v0.54.0 → v0.56.0 (GO-2026-6354/6355) and `github.com/moby/go-archive` v0.2.0 → v0.3.3 (GO-2026-6253); `go mod tidy` also nudged `klauspost/compress`, `moby/sys/user`, `golang.org/x/text`. One residual advisory (GO-2026-5932, `golang.org/x/crypto/openpgp`, unmaintained, *Fixed in: N/A*, not called by our code) cannot be resolved and is left as-is.
+> - **sqlc:** v1.31.1 generated cleanly under Go 1.27 — no version bump. Downstream-relevant generated names: `sqlc.Recipe.ImageUrl` (not `ImageURL`); `CreatedAt`/`UpdatedAt` are `pgtype.Timestamptz`; `SearchRecipes` returns `[]sqlc.Recipe` (no dedicated `Row` type); `SearchRecipesParams`/`CountRecipesParams` are separate structs. `.golangci.yml` needed no generated-code exclusion (0 issues).
+> - Godoc comments were added to the exported identifiers in `internal/domain/models.go` and `internal/db/*.go`; no struct fields or signatures changed.
+
+- [x] **Step 1: Add dependencies**
 
 ```bash
 go get github.com/jackc/pgx/v5 github.com/golang-migrate/migrate/v4
 go get github.com/testcontainers/testcontainers-go github.com/testcontainers/testcontainers-go/modules/postgres
 ```
 
-- [ ] **Step 2: Write the schema migration**
+- [x] **Step 2: Write the schema migration**
 
 ```sql
 -- internal/db/migrations/0001_init.up.sql
@@ -124,7 +130,7 @@ DROP TABLE IF EXISTS units;
 
 `default_unit_id` on ingredients (present in the original GORM model) is dropped here — nothing in the app ever reads or writes it, so it doesn't earn a place in a hand-written schema the way it might have as an unused ORM struct field. Add it back in a `0002_...` migration if a real use for it shows up.
 
-- [ ] **Step 3: Write `sqlc.yaml`**
+- [x] **Step 3: Write `sqlc.yaml`**
 
 ```yaml
 version: "2"
@@ -140,7 +146,7 @@ sql:
         emit_interface: true
 ```
 
-- [ ] **Step 4: Write the query files**
+- [x] **Step 4: Write the query files**
 
 ```sql
 -- internal/db/queries/units.sql
@@ -245,7 +251,7 @@ DELETE FROM recipe_categories WHERE recipe_id = $1;
 
 `sqlc.narg(...)` marks a nullable/optional query parameter — `Search`/`Count` callers pass a `pgtype.Text`/`pgtype.Int8` with `Valid: false` for "no filter", which sqlc's generated code turns into a SQL `NULL` bound to that parameter. Task 4 shows exactly how the repository constructs these.
 
-- [ ] **Step 5: Generate and inspect the sqlc output**
+- [x] **Step 5: Generate and inspect the sqlc output**
 
 ```bash
 sqlc generate
@@ -253,7 +259,7 @@ sqlc generate
 
 Expected: `internal/db/sqlc/` now contains `db.go`, `models.go`, `querier.go`, and one `*.sql.go` file per query file above, with a `Queries` struct and one Go method per `-- name:` annotation. Run `go doc ./internal/db/sqlc` and skim the generated `Recipe`, `SearchRecipesParams`, `SearchRecipesRow`, and `ListRecipeIngredientsRow` struct field names — Task 4/5's code below assumes sqlc's standard `snake_case` → `PascalCase` naming (e.g. `ingredient_id` → `IngredientID`, `image_url` → `ImageUrl`); if a generated field name differs, fix the repository code to match what the compiler/`go doc` actually shows rather than guessing further.
 
-- [ ] **Step 6: Implement `internal/domain/models.go`**
+- [x] **Step 6: Implement `internal/domain/models.go`**
 
 ```go
 package domain
@@ -309,7 +315,7 @@ type Recipe struct {
 }
 ```
 
-- [ ] **Step 7: Implement `internal/db/connect.go`**
+- [x] **Step 7: Implement `internal/db/connect.go`**
 
 ```go
 package db
@@ -360,7 +366,7 @@ func Migrate(dsn string) error {
 var _ = pgxmigrate.WithInstance // referenced only to document the intended driver; see Step 8 note
 ```
 
-- [ ] **Step 8: Verify the migration driver against the installed module**
+- [x] **Step 8: Verify the migration driver against the installed module**
 
 `golang-migrate`'s pgx-v5 support has moved between import paths and setup calls across versions. Run:
 
@@ -370,7 +376,7 @@ go doc github.com/golang-migrate/migrate/v4/database/pgx/v5
 
 If `migrate.NewWithSourceInstance("iofs", src, dsn)` doesn't compile against what that shows (e.g. it wants a registered driver via a blank import like `_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"` plus a `pgx5://` DSN scheme, or an explicit `pgxmigrate.WithInstance(...)` call producing a `database.Driver` passed to `migrate.NewWithInstance`), adjust `Connect`/`Migrate` to match and delete the placeholder `var _ = pgxmigrate.WithInstance` line — it exists only to keep the import from being flagged as unused while you wire up whichever exact call shape the installed version expects. This is real, load-bearing code to get right, not a stub: don't move on until `go build ./internal/db/...` succeeds and Step 11's test passes against a real container.
 
-- [ ] **Step 9: Implement `internal/db/seed.go`**
+- [x] **Step 9: Implement `internal/db/seed.go`**
 
 ```go
 package db
@@ -406,7 +412,7 @@ func Seed(ctx context.Context, pool *pgxpool.Pool) error {
 }
 ```
 
-- [ ] **Step 10: Implement `internal/db/testdb/testdb.go`**
+- [x] **Step 10: Implement `internal/db/testdb/testdb.go`**
 
 ```go
 package testdb
@@ -462,7 +468,7 @@ func New(t *testing.T) *pgxpool.Pool {
 }
 ```
 
-- [ ] **Step 11: Write and run the verification test**
+- [x] **Step 11: Write and run the verification test**
 
 ```go
 // internal/db/db_test.go
@@ -509,7 +515,7 @@ func TestMigrateConnectSeed(t *testing.T) {
 Run: `go test ./internal/db/... -v` (needs Docker running)
 Expected: PASS — this single test exercises `Migrate`, `Connect`, and `Seed` together against a real, disposable Postgres.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add sqlc.yaml internal/domain internal/db go.mod go.sum
