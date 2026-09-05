@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 0: Bootstrap & Tooling.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 1: Project Scaffold & Tooling
 
@@ -12,13 +12,13 @@
 **Interfaces:**
 - Produces: module path `github.com/sBurmester/recipe-reader`, `Makefile` targets `build`, `test`, `lint`, `vuln`, `check`, `run`, `frontend`, `docker`, `sqlc-generate` — later tasks assume these exist.
 
-- [ ] **Step 1: Initialize the Go module**
+- [x] **Step 1: Initialize the Go module**
 
 ```bash
 go mod init github.com/sBurmester/recipe-reader
 ```
 
-- [ ] **Step 2: Create `.gitignore`**
+- [x] **Step 2: Create `.gitignore`**
 
 ```gitignore
 /bin/
@@ -30,7 +30,7 @@ internal/webui/dist/*
 !internal/webui/dist/index.html
 ```
 
-- [ ] **Step 3: Create `.env.example`**
+- [x] **Step 3: Create `.env.example`**
 
 ```dotenv
 HTTP_ADDR=:8080
@@ -51,7 +51,7 @@ ANTHROPIC_MODEL=claude-opus-5
 IMPORT_INTERVAL=6h
 ```
 
-- [ ] **Step 4: Create the committed embed placeholder**
+- [x] **Step 4: Create the committed embed placeholder**
 
 ```bash
 mkdir -p internal/webui/dist
@@ -66,7 +66,7 @@ mkdir -p internal/webui/dist
 </html>
 ```
 
-- [ ] **Step 5: Create `.golangci.yml`**
+- [x] **Step 5: Create `.golangci.yml`**
 
 ```yaml
 version: "2"
@@ -86,7 +86,7 @@ formatters:
 
 golangci-lint v2 requires the `version: "2"` key and splits formatters (`gofmt`, `goimports`) out of `linters` into their own `formatters` section — the v1-style config fails with `unsupported version of the configuration` on v2. Confirmed against golangci-lint 2.13.2 while executing this task.
 
-- [ ] **Step 6: Create the `Makefile`**
+- [x] **Step 6: Create the `Makefile`**
 
 ```makefile
 .PHONY: build test lint vuln check run docker frontend sqlc-generate db-up
@@ -127,7 +127,7 @@ docker:
 	docker build -t recipe-reader .
 ```
 
-- [ ] **Step 7: Minimal `cmd/server/main.go`**
+- [x] **Step 7: Minimal `cmd/server/main.go`**
 
 ```go
 package main
@@ -142,12 +142,12 @@ func main() {
 }
 ```
 
-- [ ] **Step 8: Verify it builds**
+- [x] **Step 8: Verify it builds**
 
 Run: `go build ./...`
 Expected: no output, exit code 0.
 
-- [ ] **Step 9: Install dev-time tools**
+- [x] **Step 9: Install dev-time tools**
 
 `sqlc` and `golangci-lint` are dev-time tools, not `go.mod` dependencies:
 
@@ -156,7 +156,7 @@ go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 # golangci-lint: follow https://golangci-lint.run/welcome/install/ for your platform
 ```
 
-- [ ] **Step 10: Create `README.md` skeleton**
+- [x] **Step 10: Create `README.md` skeleton**
 
 ```markdown
 # Recipe Reader
@@ -176,7 +176,7 @@ Imports recipes from Instagram saved posts, extracts structured data, and serves
                  # go test spins up ephemeral Postgres containers via testcontainers-go — Docker must be running.
 ```
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add go.mod .gitignore .env.example Makefile .golangci.yml README.md cmd/server/main.go internal/webui/dist/index.html
