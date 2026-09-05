@@ -5,7 +5,7 @@
 # Task 18: `main.go` Wiring & Graceful Shutdown
 
 **Files:**
-- Modify: `cmd/server/main.go` (replace the Task 1 placeholder entirely)
+- Modify: `cmd/recipe-reader/main.go` (replace the Task 1 placeholder entirely)
 - Create: `internal/instagram/fetcher_adapter.go`
 
 **Interfaces:**
@@ -45,10 +45,10 @@ func (f *PipelineFetcher) FetchNewPosts(_ context.Context) ([]SavedPost, error) 
 }
 ```
 
-- [ ] **Step 2: Replace `cmd/server/main.go`**
+- [ ] **Step 2: Replace `cmd/recipe-reader/main.go`**
 
 ```go
-// cmd/server/main.go
+// cmd/recipe-reader/main.go
 package main
 
 import (
@@ -172,7 +172,7 @@ Expected: `{"status":"ok"}` and a JSON array of the seeded categories.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add cmd/server/main.go internal/instagram/fetcher_adapter.go
+git add cmd/recipe-reader/main.go internal/instagram/fetcher_adapter.go
 git commit -m "$(cat <<'EOF'
 feat: wire config, db, extraction, instagram, pipeline, and API into main.go
 
