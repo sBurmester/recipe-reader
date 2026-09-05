@@ -8,7 +8,7 @@ Check a task's own checkboxes as its steps complete, and flip its **Status** lin
 ## Phase 0: Bootstrap & Tooling
 
 - [x] [Task 1: Project Scaffold & Tooling](01-project-scaffold-tooling.md)
-- [ ] [Task 2: Configuration Package](02-configuration-package.md)
+- [x] [Task 2: Configuration Package](02-configuration-package.md)
 
 ## Phase 1: Domain & Persistence (sqlc + Postgres)
 

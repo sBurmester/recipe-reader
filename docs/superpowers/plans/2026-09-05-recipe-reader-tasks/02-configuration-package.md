@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 0: Bootstrap & Tooling.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 2: Configuration Package
 
@@ -11,7 +11,7 @@
 **Interfaces:**
 - Produces: `config.Config` struct (fields: `HTTPAddr`, `DBDSN`, `InstagramUsername`, `InstagramPassword`, `InstagramSessionPath`, `InstagramCollection`, `ExtractionMode`, `ExtractionThreshold float64`, `AnthropicAPIKey`, `AnthropicModel`, `ImportInterval time.Duration`) and `config.Load() (Config, error)`. All later tasks (Task 3 DB, Task 8 LLM, Task 10 Instagram, Task 13 worker, Task 18 main) consume `config.Config` by field name above — do not rename fields later.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/config/config_test.go
@@ -54,12 +54,12 @@ func TestLoad_InvalidThreshold(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/config/... -v`
 Expected: FAIL — `package config: config.go: no such file or directory` (or `undefined: Load`).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/config/config.go
@@ -126,12 +126,12 @@ func getEnv(key, fallback string) string {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/config/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/config
