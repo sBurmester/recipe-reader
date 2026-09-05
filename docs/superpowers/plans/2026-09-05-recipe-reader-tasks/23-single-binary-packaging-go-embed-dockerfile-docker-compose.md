@@ -6,7 +6,7 @@
 
 **Files:**
 - Create: `internal/webui/embed.go`
-- Modify: `cmd/server/main.go` (mount the embedded frontend behind the API routes)
+- Modify: `cmd/recipe-reader/main.go` (mount the embedded frontend behind the API routes)
 - Create: `Dockerfile`, `docker-compose.yml`
 
 **Interfaces:**
@@ -85,7 +85,7 @@ Add `"github.com/sBurmester/recipe-reader/internal/webui"` to the import block.
 ```bash
 go build ./...
 make db-up
-go run ./cmd/server &
+go run ./cmd/recipe-reader &
 curl -s localhost:8080/ | grep -o 'Frontend not built yet'
 curl -s localhost:8080/api/healthz
 kill %1
@@ -97,7 +97,7 @@ Expected: the placeholder message and `{"status":"ok"}`.
 
 ```bash
 make frontend
-go run ./cmd/server &
+go run ./cmd/recipe-reader &
 curl -s localhost:8080/ | grep -o '<title>Recipe Reader</title>'
 curl -s localhost:8080/recipes/999   # SPA fallback: a deep link must still return the app shell, not 404
 kill %1
@@ -125,7 +125,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=frontend /app/web/dist ./internal/webui/dist
-RUN CGO_ENABLED=0 go build -o /recipe-reader ./cmd/server
+RUN CGO_ENABLED=0 go build -o /recipe-reader ./cmd/recipe-reader
 
 FROM alpine:3.20
 RUN adduser -D -u 10001 appuser
@@ -189,7 +189,7 @@ Expected: `{"status":"ok"}`, served by the app container against the compose-man
 - [ ] **Step 8: Commit**
 
 ```bash
-git add internal/webui/embed.go cmd/server/main.go Dockerfile docker-compose.yml
+git add internal/webui/embed.go cmd/recipe-reader/main.go Dockerfile docker-compose.yml
 git commit -m "$(cat <<'EOF'
 feat: embed frontend build into the binary and add Docker packaging
 

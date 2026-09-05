@@ -7,7 +7,7 @@
 **Files:**
 - Create: `go.mod`, `.gitignore`, `.env.example`, `Makefile`, `.golangci.yml`, `README.md`
 - Create: `internal/webui/dist/index.html` (placeholder so `go:embed` compiles before the frontend exists)
-- Create: `cmd/server/main.go` (minimal — prints version and exits, filled in fully in Task 18)
+- Create: `cmd/recipe-reader/main.go` (minimal — prints version and exits, filled in fully in Task 18)
 
 **Interfaces:**
 - Produces: module path `github.com/sBurmester/recipe-reader`, `Makefile` targets `build`, `test`, `lint`, `vuln`, `check`, `run`, `frontend`, `docker`, `sqlc-generate` — later tasks assume these exist.
@@ -23,6 +23,7 @@ go mod init github.com/sBurmester/recipe-reader
 ```gitignore
 /bin/
 /data/
+/recipe-reader
 .env
 node_modules/
 web/dist/
@@ -105,7 +106,7 @@ db-up:
 	docker compose up -d db
 
 build:
-	CGO_ENABLED=0 go build -o bin/recipe-reader ./cmd/server
+	CGO_ENABLED=0 go build -o bin/recipe-reader ./cmd/recipe-reader
 
 test:
 	go test ./...
@@ -121,13 +122,13 @@ vuln:
 check: lint vuln test
 
 run:
-	go run ./cmd/server
+	go run ./cmd/recipe-reader
 
 docker:
 	docker build -t recipe-reader .
 ```
 
-- [x] **Step 7: Minimal `cmd/server/main.go`**
+- [x] **Step 7: Minimal `cmd/recipe-reader/main.go`**
 
 ```go
 package main
@@ -179,7 +180,7 @@ Imports recipes from Instagram saved posts, extracts structured data, and serves
 - [x] **Step 11: Commit**
 
 ```bash
-git add go.mod .gitignore .env.example Makefile .golangci.yml README.md cmd/server/main.go internal/webui/dist/index.html
+git add go.mod .gitignore .env.example Makefile .golangci.yml README.md cmd/recipe-reader/main.go internal/webui/dist/index.html
 git commit -m "$(cat <<'EOF'
 chore: scaffold Go module, tooling, and build targets
 

@@ -165,7 +165,7 @@ make check
 make db-up
 make frontend
 make build
-go run ./cmd/server &
+go run ./cmd/recipe-reader &
 sleep 1
 curl -sf localhost:8080/api/healthz
 curl -sf localhost:8080/
