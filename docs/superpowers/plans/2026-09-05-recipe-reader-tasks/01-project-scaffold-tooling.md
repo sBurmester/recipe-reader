@@ -69,6 +69,7 @@ mkdir -p internal/webui/dist
 - [ ] **Step 5: Create `.golangci.yml`**
 
 ```yaml
+version: "2"
 run:
   timeout: 5m
 linters:
@@ -77,9 +78,13 @@ linters:
     - staticcheck
     - unused
     - errcheck
+formatters:
+  enable:
     - gofmt
     - goimports
 ```
+
+golangci-lint v2 requires the `version: "2"` key and splits formatters (`gofmt`, `goimports`) out of `linters` into their own `formatters` section — the v1-style config fails with `unsupported version of the configuration` on v2. Confirmed against golangci-lint 2.13.2 while executing this task.
 
 - [ ] **Step 6: Create the `Makefile`**
 
