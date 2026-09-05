@@ -14,7 +14,7 @@ db-up:
 	docker compose up -d db
 
 build:
-	CGO_ENABLED=0 go build -o bin/recipe-reader ./cmd/server
+	CGO_ENABLED=0 go build -o bin/recipe-reader ./cmd/recipe-reader
 
 test:
 	go test ./...
@@ -30,7 +30,7 @@ vuln:
 check: lint vuln test
 
 run:
-	go run ./cmd/server
+	go run ./cmd/recipe-reader
 
 docker:
 	docker build -t recipe-reader .

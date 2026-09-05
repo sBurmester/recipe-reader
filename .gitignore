@@ -1,6 +1,6 @@
 /bin/
 /data/
-/server
+/recipe-reader
 .env
 node_modules/
 web/dist/
