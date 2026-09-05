@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 1: Domain & Persistence (sqlc + Postgres).
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 5: Lookup Repository (Categories, Units, Ingredients)
 
@@ -27,7 +27,7 @@ func NewLookupRepository(pool *pgxpool.Pool) LookupRepository
 
 Task 12 (pipeline) uses `FindOrCreate*` to resolve extracted ingredient/unit/category names into IDs before building a `domain.Recipe`. Task 16 (HTTP handlers) uses the `List*` methods.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/repository/lookup_repository_test.go
@@ -94,12 +94,12 @@ func TestLookupRepository_FindOrCreateUnitAndCategory(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/repository/... -run TestLookupRepository -v`
 Expected: FAIL — `LookupRepository` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/repository/lookup_repository.go
@@ -193,12 +193,12 @@ func (r *pgLookupRepository) FindOrCreateIngredient(ctx context.Context, name st
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/repository/... -v`
 Expected: PASS (full `internal/repository` suite: recipe repository + lookup repository)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/repository/lookup_repository.go internal/repository/lookup_repository_test.go

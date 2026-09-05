@@ -12,9 +12,9 @@ Check a task's own checkboxes as its steps complete, and flip its **Status** lin
 
 ## Phase 1: Domain & Persistence (sqlc + Postgres)
 
-- [ ] [Task 3: Database Schema, Migrations, sqlc Codegen & Domain Models](03-database-schema-migrations-sqlc-codegen-domain-models.md)
-- [ ] [Task 4: Recipe Repository (CRUD + Search)](04-recipe-repository-crud-search.md)
-- [ ] [Task 5: Lookup Repository (Categories, Units, Ingredients)](05-lookup-repository-categories-units-ingredients.md)
+- [x] [Task 3: Database Schema, Migrations, sqlc Codegen & Domain Models](03-database-schema-migrations-sqlc-codegen-domain-models.md)
+- [x] [Task 4: Recipe Repository (CRUD + Search)](04-recipe-repository-crud-search.md)
+- [x] [Task 5: Lookup Repository (Categories, Units, Ingredients)](05-lookup-repository-categories-units-ingredients.md)
 
 ## Phase 2: Recipe Extraction Engine
 

@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 1: Domain & Persistence (sqlc + Postgres).
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 4: Recipe Repository (CRUD + Search)
 
@@ -35,7 +35,11 @@ func NewRecipeRepository(pool *pgxpool.Pool) RecipeRepository
 
 `GetByID`/`GetBySource` return `(nil, repository.ErrNotFound)` when missing — Task 12 (pipeline dedupe) and Task 15 (HTTP 404 mapping) both branch on this sentinel. `Create`/`Update` replace both the `Ingredients` and `Categories` child rows atomically in one transaction — there is no ORM association layer to get half-right here, so both are handled explicitly by the same `writeAssociations` helper.
 
-- [ ] **Step 1: Write the failing test**
+> **Deviations from plan (as implemented):**
+> - **Test fix — `TestRecipeRepository_CreateWithIngredientsAndCategories`:** the Step 1 code builds `lookups` from `NewLookupRepository(testdb.New(t))`, a *second* ephemeral Postgres container, while `repo` uses the one from `newTestRecipeRepo(t)`. The ingredient/unit/category rows are then created in a different database than `repo.Create` writes to, so the insert fails the `recipe_ingredients_ingredient_id_fkey` foreign key. Changed to a single shared pool (`pool := testdb.New(t); repo := NewRecipeRepository(pool); lookups := NewLookupRepository(pool)`), matching `TestRecipeRepository_Update_ReplacesIngredientsWithoutDuplicating` in the same file. This is the only functional change — no implementation logic or control flow was altered.
+> - Godoc comments were added to `ErrNotFound`, `SearchQuery`, `RecipeRepository`, `NewRecipeRepository` and the package. No compiler-driven changes to the Step 3 code were needed — the generated `sqlc` names matched (`ImageUrl`, `ListRecipeIngredientsRow`, split `SearchRecipesParams`/`CountRecipesParams`, `DeleteRecipe(...) (int64, error)`).
+
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/repository/recipe_repository_test.go
@@ -222,12 +226,12 @@ func TestRecipeRepository_Search(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/repository/... -v`
 Expected: FAIL — package doesn't compile (`RecipeRepository`, `ErrNotFound`, `NewLookupRepository` undefined; the latter arrives in Task 5, so this whole package's tests only fully pass once both Task 4 and Task 5 are done — that's fine, they're one PR-sized unit of work).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/repository/recipe_repository.go
@@ -470,12 +474,12 @@ func (r *pgRecipeRepository) assemble(ctx context.Context, row sqlc.Recipe) (*do
 
 `sqlc generate`'s exact field names (`ImageUrl` vs `ImageURL`, `ListRecipeIngredientsRow` field names, whether `SearchRecipes`/`CountRecipes` params share one generated struct) depend on the installed sqlc version's naming conventions — this is the same "write it, then fix against the compiler" situation as Task 3 Step 8. Run `go build ./internal/repository/...` after `sqlc generate` and correct any field-name mismatches the compiler reports; the query logic and control flow above are what matters and shouldn't need to change.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/repository/... -v` (needs Docker running; each test starts its own Postgres container)
 Expected: PASS once Task 5's `NewLookupRepository`/`FindOrCreate*` exist too.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/repository/recipe_repository.go internal/repository/recipe_repository_test.go
