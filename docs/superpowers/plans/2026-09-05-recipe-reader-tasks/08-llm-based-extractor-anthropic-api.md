@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 2: Recipe Extraction Engine.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 8: LLM-Based Extractor (Anthropic API)
 
@@ -14,13 +14,13 @@
 
 Per this session's default-model policy, `model` defaults to `claude-opus-5` when empty. This is a background batch-extraction task on short captions, not a chat product, so cost-sensitive deployments may prefer swapping in `claude-sonnet-5` or `claude-haiku-4-5` via the `ANTHROPIC_MODEL` env var (Task 2) — that is the user's call to make at deploy time, not a default this code should silently apply.
 
-- [ ] **Step 1: Add the SDK dependency**
+- [x] **Step 1: Add the SDK dependency**
 
 ```bash
 go get github.com/anthropics/anthropic-sdk-go
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 The live API is not called in this test — `parseToolInput` (the JSON→`ExtractedRecipe` mapping) is unit-tested directly against a fixture, since that is the only genuinely new logic; the API call itself is exercised manually per Step 5.
 
@@ -71,12 +71,12 @@ func TestParseToolInput_NoRecipeFound(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `go test ./internal/extraction/... -run TestParseToolInput -v`
 Expected: FAIL — `parseToolInput` undefined.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 ```go
 // internal/extraction/llm.go
@@ -198,7 +198,7 @@ func parseToolInput(raw []byte) (*ExtractedRecipe, error) {
 }
 ```
 
-- [ ] **Step 5: Run tests, then fix any SDK field-name mismatches against the compiler**
+- [x] **Step 5: Run tests, then fix any SDK field-name mismatches against the compiler**
 
 Run: `go test ./internal/extraction/... -v`
 
@@ -206,7 +206,7 @@ The Go SDK's exact field names for `ToolChoiceUnionParam` / `ToolChoiceToolParam
 
 Expected once fixed: PASS for `TestParseToolInput` and `TestParseToolInput_NoRecipeFound`.
 
-- [ ] **Step 6: Manual live-API smoke test (not part of `go test`, run once by hand)**
+- [ ] **Step 6: Manual live-API smoke test (not part of `go test`, run once by hand)** — _deferred: needs a real `ANTHROPIC_API_KEY` and incurs cost; run once before first production import._
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -233,7 +233,7 @@ rm /tmp/llm_smoke_test.go
 
 Expected: prints a populated `ExtractedRecipe` with `Confidence: 0.9` and no error. This confirms the live request/response shape against the real API; keep it as a manual check, not a CI test (it costs money and requires a real key).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add internal/extraction/llm.go internal/extraction/llm_test.go go.mod go.sum

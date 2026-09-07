@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 2: Recipe Extraction Engine.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 9: Hybrid Extractor
 
@@ -24,7 +24,7 @@ func NewHybridExtractor(rules, llm Extractor, threshold float64) *HybridExtracto
 
 Implements `Extractor`. This is what Task 12 (pipeline) and Task 18 (`main.go` wiring) instantiate and use — `main.go` passes `llm = nil` when `config.AnthropicAPIKey == ""`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/extraction/hybrid_test.go
@@ -109,12 +109,12 @@ func TestHybridExtractor_LLMErrorFallsBackToRulesResult(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/extraction/... -run TestHybridExtractor -v`
 Expected: FAIL — `NewHybridExtractor` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/extraction/hybrid.go
@@ -150,12 +150,12 @@ func (h *HybridExtractor) Extract(ctx context.Context, caption string) (*Extract
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/extraction/... -v`
 Expected: PASS (all extraction package tests: units, rules, llm parsing, hybrid)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/extraction/hybrid.go internal/extraction/hybrid_test.go
