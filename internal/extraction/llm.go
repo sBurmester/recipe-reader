@@ -1,4 +1,3 @@
-// internal/extraction/llm.go
 package extraction
 
 import (

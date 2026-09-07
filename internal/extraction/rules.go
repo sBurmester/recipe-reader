@@ -1,4 +1,3 @@
-// internal/extraction/rules.go
 package extraction
 
 import (

@@ -1,4 +1,3 @@
-// internal/extraction/llm_test.go
 package extraction
 
 import "testing"

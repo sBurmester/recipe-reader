@@ -1,4 +1,3 @@
-// internal/extraction/rules_test.go
 package extraction
 
 import (
