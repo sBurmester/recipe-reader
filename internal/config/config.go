@@ -26,10 +26,36 @@ type Config struct {
 	ExtractionMode      string  `name:"extraction-mode" env:"EXTRACTION_MODE" default:"hybrid" help:"Recipe extraction strategy: rule, llm, or hybrid."`
 	ExtractionThreshold float64 `name:"extraction-confidence-threshold" env:"EXTRACTION_CONFIDENCE_THRESHOLD" default:"0.6" help:"Minimum rule-based confidence before falling back to the LLM extractor."`
 
-	AnthropicAPIKey string `name:"anthropic-api-key" env:"ANTHROPIC_API_KEY" help:"API key for the Anthropic LLM extractor."`
-	AnthropicModel  string `name:"anthropic-model" env:"ANTHROPIC_MODEL" default:"claude-opus-5" help:"Anthropic model id for the LLM extractor."`
+	AnthropicAPIKey string `name:"anthropic-api-key" env:"ANTHROPIC_API_KEY" help:"API key for the Anthropic LLM extractor (fallback for LLM_API_KEY when the provider is anthropic)."`
+	AnthropicModel  string `name:"anthropic-model" env:"ANTHROPIC_MODEL" default:"claude-opus-5" help:"Anthropic model id for the LLM extractor (fallback for LLM_MODEL when the provider is anthropic)."`
+
+	LLMProvider string `name:"llm-provider" env:"LLM_PROVIDER" default:"anthropic" help:"LLM extractor transport: anthropic, or openai for any OpenAI-compatible endpoint."`
+	LLMAPIKey   string `name:"llm-api-key" env:"LLM_API_KEY" help:"API key for the LLM extractor; falls back to ANTHROPIC_API_KEY when the provider is anthropic."`
+	LLMModel    string `name:"llm-model" env:"LLM_MODEL" help:"Model id for the LLM extractor; falls back to ANTHROPIC_MODEL when the provider is anthropic."`
+	LLMBaseURL  string `name:"llm-base-url" env:"LLM_BASE_URL" help:"Override the LLM endpoint base URL, e.g. https://api.groq.com/openai/v1 or http://localhost:11434/v1."`
 
 	ImportInterval time.Duration `name:"import-interval" env:"IMPORT_INTERVAL" default:"6h" help:"How often the background worker imports new saved posts."`
+}
+
+// LLMExtractorConfig resolves the effective LLM extractor settings, applying
+// the ANTHROPIC_* fallbacks for the anthropic provider. ok is false when no API
+// key is configured for the selected provider, in which case the caller should
+// disable the LLM fallback (pass a nil LLM to the hybrid extractor).
+func (c Config) LLMExtractorConfig() (provider, apiKey, model, baseURL string, ok bool) {
+	provider = c.LLMProvider
+	if provider == "" {
+		provider = "anthropic"
+	}
+	apiKey, model, baseURL = c.LLMAPIKey, c.LLMModel, c.LLMBaseURL
+	if provider == "anthropic" {
+		if apiKey == "" {
+			apiKey = c.AnthropicAPIKey
+		}
+		if model == "" {
+			model = c.AnthropicModel
+		}
+	}
+	return provider, apiKey, model, baseURL, apiKey != ""
 }
 
 // Load parses configuration from the process command-line arguments and the

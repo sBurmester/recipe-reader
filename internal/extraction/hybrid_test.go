@@ -77,3 +77,29 @@ func TestHybridExtractor_LLMErrorFallsBackToRulesResult(t *testing.T) {
 		t.Errorf("Name = %q, want A (fell back to rules result on LLM error)", result.Name)
 	}
 }
+
+// TestHybridExtractor_FallsBackThroughOpenAICompatibleProvider drives the
+// hybrid extractor with a real LLMExtractor backed by an OpenAI-compatible
+// endpoint (httptest), proving the LLM fallback path is provider-agnostic
+// end to end and not tied to Anthropic.
+func TestHybridExtractor_FallsBackThroughOpenAICompatibleProvider(t *testing.T) {
+	srv := openAIChatStub(t)
+	defer srv.Close()
+
+	llm, err := NewLLMExtractor(LLMConfig{
+		Provider: ProviderOpenAI, APIKey: "test", Model: "llama-3.3-70b", BaseURL: srv.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewLLMExtractor() error = %v", err)
+	}
+	rules := &stubExtractor{result: &ExtractedRecipe{Name: "weak", Confidence: 0.2}}
+	h := NewHybridExtractor(rules, llm, 0.6)
+
+	result, err := h.Extract(context.Background(), "caption")
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+	if result.Name != "Kürbis-Risotto" {
+		t.Errorf("Name = %q, want Kürbis-Risotto (OpenAI-compatible LLM result)", result.Name)
+	}
+}
