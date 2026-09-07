@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 2: Recipe Extraction Engine.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 6: Extractor Interface & Unit Normalization
 
@@ -36,7 +36,7 @@ func NormalizeUnit(candidate string) string
 
 Task 7 (rules), Task 8 (LLM), Task 9 (hybrid), and Task 12 (pipeline) all implement/consume `Extractor` and `ExtractedRecipe` exactly as defined here — do not add fields without updating all four.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/extraction/units_test.go
@@ -68,12 +68,12 @@ func TestNormalizeUnit(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/extraction/... -v`
 Expected: FAIL — package doesn't exist yet.
 
-- [ ] **Step 3: Implement `extractor.go`**
+- [x] **Step 3: Implement `extractor.go`**
 
 ```go
 // internal/extraction/extractor.go
@@ -100,7 +100,7 @@ type Extractor interface {
 }
 ```
 
-- [ ] **Step 4: Implement `units.go`**
+- [x] **Step 4: Implement `units.go`**
 
 ```go
 // internal/extraction/units.go
@@ -136,12 +136,12 @@ func NormalizeUnit(candidate string) string {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/extraction/... -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/extraction/extractor.go internal/extraction/units.go internal/extraction/units_test.go
