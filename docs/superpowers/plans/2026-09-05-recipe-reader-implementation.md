@@ -13,7 +13,7 @@
 - **Go version:** always latest stable (`go version`); do not pin to an old release. Installed at plan-writing time: `go1.27.1`.
 - **Database access: `sqlc`, not an ORM.** This is a standing preference for Go projects, not specific to this one — write raw SQL in `internal/db/queries/*.sql`, generate type-safe Go with `sqlc generate`, commit the generated code. No GORM, no `database/sql` hand-rolled scanning for anything `sqlc` can generate.
 - **Database engine: Postgres everywhere** (dev, test, prod) — decided specifically because `sqlc` compiles queries against one SQL dialect; maintaining parallel Postgres/SQLite query sets for every schema change is real ongoing cost this project doesn't need. Local dev runs Postgres via `docker-compose`; tests spin up an ephemeral Postgres via `testcontainers-go` (requires Docker running wherever `go test` runs, including CI — GitHub Actions' `ubuntu-latest` runners support this natively).
-- **Extraction:** hybrid — rule-based parser first; fall back to an LLM call (Anthropic API) only when rule-based confidence is below threshold. LLM fallback must be optional/disableable (no `ANTHROPIC_API_KEY` → hybrid extractor silently behaves as rules-only).
+- **Extraction:** hybrid — rule-based parser first; fall back to an LLM call only when rule-based confidence is below threshold. The LLM call works with Anthropic **or** any OpenAI-compatible endpoint (Groq, Together, OpenRouter, Ollama, vLLM, LM Studio), selected by `LLM_PROVIDER` / `LLM_BASE_URL` — see Task 25. LLM fallback must be optional/disableable (no API key configured → hybrid extractor silently behaves as rules-only).
 - **Frontend:** Vanilla TypeScript + Vite, no framework. Production build is embedded into the Go binary via `go:embed`.
 - **Lint/vet/vuln/format/test — run before every commit** (per user's global CLAUDE.md): `gofmt -w .`, `go vet ./...`, `golangci-lint run ./...`, `govulncheck ./...`, `go test ./...`. Fix all findings; do not skip without explicit user approval. The Makefile's `check` target runs all five. `golangci-lint` must resolve on `$PATH` — the Makefile invokes the bare command, never a machine-specific absolute path, since this repo is pushed to a shared GitHub remote.
 - **Commit messages:** every commit ends with `Assisted-by: <Model Name> via <Tool Name>` (e.g. `Assisted-by: Claude Sonnet 5 via Claude Code`) per user's global CLAUDE.md. Adjust the model/tool name to whichever agent is actually executing.
@@ -2028,6 +2028,8 @@ EOF
 - Consumes: `Extractor`, `ExtractedRecipe`, `ExtractedIngredient` (Task 6).
 - Produces: `func NewLLMExtractor(apiKey, model string) *LLMExtractor` implementing `Extractor`. Uses a single forced tool call (`record_recipe`) so the model's structured JSON input *is* the parsed result — no free-text parsing.
 
+> **Superseded by [Task 25](2026-09-05-recipe-reader-tasks/25-provider-agnostic-llm-extractor.md):** the constructor becomes `NewLLMExtractor(cfg LLMConfig) (*LLMExtractor, error)` and gains an OpenAI-compatible transport. The `record_recipe` schema, `parseToolInput`, and the fixed `Confidence` values are unchanged.
+
 Per this session's default-model policy, `model` defaults to `claude-opus-5` when empty. This is a background batch-extraction task on short captions, not a chat product, so cost-sensitive deployments may prefer swapping in `claude-sonnet-5` or `claude-haiku-4-5` via the `ANTHROPIC_MODEL` env var (Task 2) — that is the user's call to make at deploy time, not a default this code should silently apply.
 
 - [ ] **Step 1: Add the SDK dependency**
@@ -2287,7 +2289,9 @@ type HybridExtractor struct {
 func NewHybridExtractor(rules, llm Extractor, threshold float64) *HybridExtractor
 ```
 
-Implements `Extractor`. This is what Task 12 (pipeline) and Task 18 (`main.go` wiring) instantiate and use — `main.go` passes `llm = nil` when `config.AnthropicAPIKey == ""`.
+Implements `Extractor`. This is what Task 12 (pipeline) and Task 18 (`main.go` wiring) instantiate and use — `main.go` passes `llm = nil` when no LLM API key is configured.
+
+> **[Task 25](2026-09-05-recipe-reader-tasks/25-provider-agnostic-llm-extractor.md)** requires this extractor to work with non-Anthropic providers too. No code change is needed here — `HybridExtractor` depends only on the `Extractor` interface — but Task 25 adds a regression test that drives it through an OpenAI-compatible `LLMExtractor`, and `main.go` gains the `nil`-when-no-key check for every provider, not just Anthropic.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4236,6 +4240,8 @@ EOF
 - Consumes: everything from Tasks 2-17: `config.Load`, `db.Connect`/`Migrate`/`Seed`, `repository.NewRecipeRepository`/`NewLookupRepository`, `extraction.NewRuleBasedExtractor`/`NewLLMExtractor`/`NewHybridExtractor`, `instagram.NewClient`, `pipeline.Pipeline`/`NewWorker`, `api.NewRouter`/`Deps`.
 - Produces: the running binary. No other task consumes this one — it is the composition root.
 
+> **If [Task 25](2026-09-05-recipe-reader-tasks/25-provider-agnostic-llm-extractor.md) is done first,** replace the `NewLLMExtractor(cfg.AnthropicAPIKey, cfg.AnthropicModel)` block in Step 2's `run()` with the config-driven `extraction.LLMConfig` construction from Task 25 Step 6 (handles `LLM_PROVIDER` / `LLM_BASE_URL` and returns an `error`). The `llm == nil ⇒ rules-only` behaviour is unchanged.
+
 - [ ] **Step 1: Implement the fetcher adapter**
 
 ```go
@@ -5546,6 +5552,63 @@ Assisted-by: Claude Sonnet 5 via Claude Code
 EOF
 )"
 ```
+
+---
+
+## Task 25: Provider-Agnostic LLM Extractor (OpenAI-compatible + Anthropic)
+
+> Phase 2 follow-up, added after Tasks 6–9 shipped. Working file: [`2026-09-05-recipe-reader-tasks/25-provider-agnostic-llm-extractor.md`](2026-09-05-recipe-reader-tasks/25-provider-agnostic-llm-extractor.md).
+
+**Requirement:** the LLM extractor **and** the hybrid extractor MUST work with LLM providers other than Anthropic. `HybridExtractor` (Task 9) is already provider-agnostic — it depends only on the `Extractor` interface — so the work is making `LLMExtractor` (Task 8) pluggable: keep the native Anthropic path and add an OpenAI-compatible path that also covers Groq, Together, OpenRouter, Fireworks, a local Ollama (`/v1`), vLLM, and LM Studio (all speak the OpenAI Chat Completions + tool-calling dialect).
+
+The `Extractor` interface, `ExtractedRecipe`, `ExtractedIngredient` (Task 6), `parseToolInput`, the `record_recipe` schema, the fixed `Confidence` values (0.9 / 0 on `NO_RECIPE_FOUND`), and the `HybridExtractor` contract all stay **exactly** as defined — this task changes only how the raw structured arguments are obtained.
+
+**Files:**
+- Create: `internal/extraction/llm_provider.go` — the `llmClient` seam plus its Anthropic and OpenAI-compatible implementations.
+- Modify: `internal/extraction/llm.go` — `LLMExtractor` delegates to an `llmClient`; new config-struct constructor.
+- Modify: `internal/extraction/llm_test.go`; Create: `internal/extraction/llm_provider_test.go`; Modify: `internal/extraction/hybrid_test.go`.
+- Modify: `internal/config/config.go` (amends Task 2) — provider-selection fields + `LLMExtractorConfig()`.
+- Modify: `.env.example`, `README.md`, and the Task 8/9/18 cross-references in this plan.
+
+**Interfaces:**
+- Consumes: `Extractor`, `ExtractedRecipe`, `ExtractedIngredient` (Task 6); `parseToolInput`, `recordRecipeTool`, `systemPrompt`, `defaultLLMModel` (Task 8).
+- Introduces the package-private seam `llmClient` with one method `recordRecipe(ctx, caption) ([]byte, error)` returning the raw JSON arguments the model produced for `record_recipe`.
+- Produces:
+
+```go
+type LLMProvider string
+
+const (
+	ProviderAnthropic LLMProvider = "anthropic" // native Anthropic Messages API (default)
+	ProviderOpenAI    LLMProvider = "openai"    // any OpenAI-compatible /chat/completions endpoint
+)
+
+type LLMConfig struct {
+	Provider LLMProvider // "" => ProviderAnthropic
+	APIKey   string
+	Model    string // "" => Anthropic: defaultLLMModel; OpenAI: required (error if empty)
+	BaseURL  string // "" => provider default; set to target Groq/Together/OpenRouter/Ollama/vLLM/LM Studio
+}
+
+func NewLLMExtractor(cfg LLMConfig) (*LLMExtractor, error)
+```
+
+`LLMExtractor.Extract` and its `Extractor` conformance are unchanged; internally it holds an `llmClient` and does `raw, err := e.client.recordRecipe(ctx, caption)` then `return parseToolInput(raw)`.
+
+**Breaking change to Task 8's shipped API:** `NewLLMExtractor(apiKey, model string) *LLMExtractor` → `NewLLMExtractor(cfg LLMConfig) (*LLMExtractor, error)`. Nothing consumes the old signature yet (Task 18 unbuilt), so the blast radius is `llm.go` + `llm_test.go`.
+
+**Config additions** (`internal/config/config.go`, amends Task 2 — keep the existing `AnthropicAPIKey` / `AnthropicModel` as the anthropic-provider fallback): `LLMProvider` (`LLM_PROVIDER`, default `anthropic`), `LLMAPIKey` (`LLM_API_KEY`), `LLMModel` (`LLM_MODEL`), `LLMBaseURL` (`LLM_BASE_URL`), plus a `Config.LLMExtractorConfig() (provider, apiKey, model, baseURL string, ok bool)` helper that applies the `ANTHROPIC_*` fallbacks and reports `ok == false` when no key is configured (so `main.go` passes `llm = nil` and hybrid stays rules-only — unchanged Global Constraint, now per-provider).
+
+- [ ] **Step 1: Add the OpenAI SDK dependency** — `go get github.com/openai/openai-go` (official SDK, `option.WithBaseURL` per host; a hand-rolled `net/http` client is an acceptable alternative).
+- [ ] **Step 2: Write the failing tests** — extend `llm_test.go`; add `llm_provider_test.go` with `httptest.Server` stubs returning a canned Anthropic `tool_use` response and a canned OpenAI `tool_calls` response (both carrying the same `record_recipe` args JSON); add `TestHybridExtractor_FallsBackThroughOpenAICompatibleProvider`. No live API. Assert both transports yield an identical `ExtractedRecipe` (name, one ingredient, `Confidence == 0.9`), that the openai provider errors with no model, and that an unknown provider errors.
+- [ ] **Step 3: Run tests to verify they fail** — `LLMConfig` / `ProviderOpenAI` / new constructor undefined.
+- [ ] **Step 4: Implement `llm_provider.go`** — `llmClient` interface; `anthropicClient` (moves the shipped forced-tool-call code from `llm.go`, adds `option.WithBaseURL` when `cfg.BaseURL != ""`, returns `tu.Input`); `openAIClient` (`openai.Chat.Completions.New` with `SystemMessage`/`UserMessage`, a `record_recipe` function whose parameters mirror `recordRecipeTool.InputSchema`, `ToolChoice` forced to that function, reads `resp.Choices[0].Message.ToolCalls[0].Function.Arguments`); `newLLMClient(cfg)` switch on `cfg.Provider`. **SDK-surface caveat (as in Task 8 Step 5):** verify the `openai-go` forced-function-call type names with `go doc` against the installed version and fix the literal if `go build` complains.
+- [ ] **Step 5: Rewrite `llm.go` to delegate** — keep `defaultLLMModel`, `systemPrompt`, `recordRecipeTool`, `parseToolInput` unchanged; `LLMExtractor` becomes `struct{ client llmClient }`; new constructor calls `newLLMClient`; `Extract` = `recordRecipe` + `parseToolInput`; drop the now-unused `anthropic`/`option` imports from `llm.go`.
+- [ ] **Step 6: Wire through config and `main.go`** — add the four fields + `LLMExtractorConfig()` to `config.go`; in Task 18's `run()` build `extraction.LLMConfig` from it, `return fmt.Errorf(...)` on constructor error, keep `llm == nil ⇒ rules-only`.
+- [ ] **Step 7: Run the full suite** — `go test ./internal/extraction/... ./internal/config/... -v`, expect PASS.
+- [ ] **Step 8: Update docs** — `.env.example` (`LLM_PROVIDER` / `LLM_API_KEY` / `LLM_MODEL` / `LLM_BASE_URL`, with the OpenAI-compatible-host comment and the `ANTHROPIC_*` fallback note); `README.md` extraction notes; this plan's Global Constraints "Extraction" bullet (done).
+- [ ] **Step 9: Pre-commit gate & commit** — `gofmt -w . && go vet ./... && golangci-lint run ./... && govulncheck ./... && go test ./...`, then commit `feat: make the LLM and hybrid extractors provider-agnostic` with the `Assisted-by:` footer.
+- [ ] **Step 10: Manual live smoke test (deferred)** — one run per provider with real keys before production, e.g. `LLM_PROVIDER=openai LLM_BASE_URL=https://api.groq.com/openai/v1 LLM_API_KEY=… LLM_MODEL=… go run ./cmd/recipe-reader`.
 
 ---
 

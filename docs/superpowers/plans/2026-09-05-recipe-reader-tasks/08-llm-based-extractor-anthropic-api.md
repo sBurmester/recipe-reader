@@ -12,6 +12,8 @@
 - Consumes: `Extractor`, `ExtractedRecipe`, `ExtractedIngredient` (Task 6).
 - Produces: `func NewLLMExtractor(apiKey, model string) *LLMExtractor` implementing `Extractor`. Uses a single forced tool call (`record_recipe`) so the model's structured JSON input *is* the parsed result — no free-text parsing.
 
+> **Superseded by [Task 25](25-provider-agnostic-llm-extractor.md):** the constructor becomes `NewLLMExtractor(cfg LLMConfig) (*LLMExtractor, error)` and gains an OpenAI-compatible transport. The `record_recipe` schema, `parseToolInput`, and the fixed `Confidence` values carry over unchanged.
+
 Per this session's default-model policy, `model` defaults to `claude-opus-5` when empty. This is a background batch-extraction task on short captions, not a chat product, so cost-sensitive deployments may prefer swapping in `claude-sonnet-5` or `claude-haiku-4-5` via the `ANTHROPIC_MODEL` env var (Task 2) — that is the user's call to make at deploy time, not a default this code should silently apply.
 
 - [x] **Step 1: Add the SDK dependency**
