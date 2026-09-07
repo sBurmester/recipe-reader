@@ -12,6 +12,8 @@
 - Consumes: everything from Tasks 2-17: `config.Load`, `db.Connect`/`Migrate`/`Seed`, `repository.NewRecipeRepository`/`NewLookupRepository`, `extraction.NewRuleBasedExtractor`/`NewLLMExtractor`/`NewHybridExtractor`, `instagram.NewClient`, `pipeline.Pipeline`/`NewWorker`, `api.NewRouter`/`Deps`.
 - Produces: the running binary. No other task consumes this one — it is the composition root.
 
+> **If [Task 25](25-provider-agnostic-llm-extractor.md) is done first,** replace the `NewLLMExtractor(cfg.AnthropicAPIKey, cfg.AnthropicModel)` block in Step 2's `run()` with the config-driven `extraction.LLMConfig` construction from Task 25 Step 6 (handles `LLM_PROVIDER` / `LLM_BASE_URL`, returns an `error`). The `llm == nil ⇒ rules-only` behaviour is unchanged.
+
 - [ ] **Step 1: Implement the fetcher adapter**
 
 ```go

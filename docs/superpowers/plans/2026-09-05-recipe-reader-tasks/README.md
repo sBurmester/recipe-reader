@@ -22,6 +22,7 @@ Check a task's own checkboxes as its steps complete, and flip its **Status** lin
 - [x] [Task 7: Rule-Based Extractor](07-rule-based-extractor.md)
 - [x] [Task 8: LLM-Based Extractor (Anthropic API)](08-llm-based-extractor-anthropic-api.md)
 - [x] [Task 9: Hybrid Extractor](09-hybrid-extractor.md)
+- [ ] [Task 25: Provider-Agnostic LLM Extractor (OpenAI-compatible + Anthropic)](25-provider-agnostic-llm-extractor.md) — follow-up, added after Tasks 6–9 shipped
 
 ## Phase 3: Instagram Integration
 

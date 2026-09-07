@@ -22,7 +22,9 @@ type HybridExtractor struct {
 func NewHybridExtractor(rules, llm Extractor, threshold float64) *HybridExtractor
 ```
 
-Implements `Extractor`. This is what Task 12 (pipeline) and Task 18 (`main.go` wiring) instantiate and use — `main.go` passes `llm = nil` when `config.AnthropicAPIKey == ""`.
+Implements `Extractor`. This is what Task 12 (pipeline) and Task 18 (`main.go` wiring) instantiate and use — `main.go` passes `llm = nil` when no LLM API key is configured.
+
+> **[Task 25](25-provider-agnostic-llm-extractor.md)** requires this extractor to work with non-Anthropic providers. No code change here — `HybridExtractor` depends only on the `Extractor` interface — but Task 25 adds a regression test that drives it through an OpenAI-compatible `LLMExtractor`.
 
 - [x] **Step 1: Write the failing test**
 
