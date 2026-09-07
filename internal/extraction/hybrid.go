@@ -1,0 +1,39 @@
+package extraction
+
+import "context"
+
+// HybridExtractor runs the rule-based extractor first and only falls back to the
+// LLM extractor when the rules result's Confidence is below Threshold. It is the
+// Extractor the import pipeline uses in production.
+type HybridExtractor struct {
+	Rules     Extractor
+	LLM       Extractor // nil disables LLM fallback entirely (rules-only)
+	Threshold float64
+}
+
+// NewHybridExtractor wires rules and llm together with the given confidence
+// threshold. Pass llm == nil (e.g. when no ANTHROPIC_API_KEY is configured) to
+// run rules-only: Extract then always returns the rules result.
+func NewHybridExtractor(rules, llm Extractor, threshold float64) *HybridExtractor {
+	return &HybridExtractor{Rules: rules, LLM: llm, Threshold: threshold}
+}
+
+// Extract runs the rules extractor, and if it errored returns that error. When
+// the LLM is disabled or the rules result already meets Threshold, that result
+// is returned as-is. Otherwise the LLM extractor is tried; a low-confidence
+// rules result is still returned if the LLM call fails, so an LLM hiccup never
+// fails the whole import (the pipeline flags the weak result as needs_review).
+func (h *HybridExtractor) Extract(ctx context.Context, caption string) (*ExtractedRecipe, error) {
+	result, err := h.Rules.Extract(ctx, caption)
+	if err != nil {
+		return nil, err
+	}
+	if h.LLM == nil || result.Confidence >= h.Threshold {
+		return result, nil
+	}
+	llmResult, err := h.LLM.Extract(ctx, caption)
+	if err != nil {
+		return result, nil
+	}
+	return llmResult, nil
+}
