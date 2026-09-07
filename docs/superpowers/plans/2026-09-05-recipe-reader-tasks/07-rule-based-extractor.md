@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 2: Recipe Extraction Engine.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 7: Rule-Based Extractor
 
@@ -12,7 +12,7 @@
 - Consumes: `Extractor`, `ExtractedRecipe`, `ExtractedIngredient`, `IsKnownUnit`, `NormalizeUnit` (Task 6).
 - Produces: `func NewRuleBasedExtractor() *RuleBasedExtractor` implementing `Extractor`. Parses German `Zutaten:` / `Zubereitung:` sections; assigns `Confidence` 0.5 per non-empty ingredients list and 0.5 per non-empty instructions (max 1.0) — Task 9's hybrid extractor and Task 12's pipeline both key off this exact scoring to decide LLM fallback / `needs_review` status.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/extraction/rules_test.go
@@ -84,12 +84,12 @@ func TestRuleBasedExtractor_NoRecipeSections(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/extraction/... -run TestRuleBasedExtractor -v`
 Expected: FAIL — `NewRuleBasedExtractor` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/extraction/rules.go
@@ -197,12 +197,12 @@ func confidenceFor(r *ExtractedRecipe) float64 {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/extraction/... -v`
 Expected: PASS. If `TestRuleBasedExtractor_FullCaption` fails on the ingredient count or the `400 g` match, print `result.Ingredients` with `t.Logf("%+v", result.Ingredients)` and adjust `ingredientLineRe` / `parseIngredientLine` — regex-based parsing of freeform captions is inherently approximate; iterate against the test fixtures until they pass, then add any caption shape you find failing in real usage as a new test case.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/extraction/rules.go internal/extraction/rules_test.go

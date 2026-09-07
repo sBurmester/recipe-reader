@@ -19,9 +19,9 @@ Check a task's own checkboxes as its steps complete, and flip its **Status** lin
 ## Phase 2: Recipe Extraction Engine
 
 - [x] [Task 6: Extractor Interface & Unit Normalization](06-extractor-interface-unit-normalization.md)
-- [ ] [Task 7: Rule-Based Extractor](07-rule-based-extractor.md)
-- [ ] [Task 8: LLM-Based Extractor (Anthropic API)](08-llm-based-extractor-anthropic-api.md)
-- [ ] [Task 9: Hybrid Extractor](09-hybrid-extractor.md)
+- [x] [Task 7: Rule-Based Extractor](07-rule-based-extractor.md)
+- [x] [Task 8: LLM-Based Extractor (Anthropic API)](08-llm-based-extractor-anthropic-api.md)
+- [x] [Task 9: Hybrid Extractor](09-hybrid-extractor.md)
 
 ## Phase 3: Instagram Integration
 
