@@ -27,7 +27,7 @@ Check a task's own checkboxes as its steps complete, and flip its **Status** lin
 ## Phase 3: Instagram Integration
 
 - [x] [Task 10: Instagram Client Wrapper (Login & Session Persistence)](10-instagram-client-wrapper-login-session-persistence.md)
-- [ ] [Task 11: Saved-Posts & Collection Fetching](11-saved-posts-collection-fetching.md)
+- [x] [Task 11: Saved-Posts & Collection Fetching](11-saved-posts-collection-fetching.md) — code complete; Step 6 (live verification against a real account) still required before Task 12 relies on these fetchers
 
 ## Phase 4: Import Pipeline
 

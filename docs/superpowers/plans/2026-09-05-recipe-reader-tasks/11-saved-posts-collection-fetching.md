@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 3: Instagram Integration.
 >
-> **Status:** [ ] not started
+> **Status:** [x] code complete (Steps 1–5) — Step 6 live verification still required before Task 12 relies on it; needs real Instagram credentials + network, so it cannot run in CI/this environment
 
 # Task 11: Saved-Posts & Collection Fetching
 
@@ -34,7 +34,7 @@ Task 12 (pipeline) consumes `SavedPost` and calls either `FetchSavedPosts` or `F
 
 **⚠️ Verification required before production use.** `instago` (verified against its source on 2026-09-05) has no typed method for saved posts or collections — this task calls the private/unofficial `feed/saved/posts/`, `collections/list/`, and `feed/collection/{id}/posts/` endpoints directly via `instago`'s generic `PrivateRequest`, using endpoint paths and a response shape inferred from other open-source Instagram clients, not from `instago`'s own documentation. The media-parsing logic (`extractMedia`) *is* grounded in `instago`'s verified internal JSON field mapping (`caption.text`, `image_versions2.candidates[].url`). Step 6 below is a mandatory manual verification against a real account before this is relied on.
 
-- [ ] **Step 1: Write the failing test (parsing logic only, no network)**
+- [x] **Step 1: Write the failing test (parsing logic only, no network)**
 
 ```go
 // internal/instagram/saved_test.go
@@ -77,12 +77,12 @@ func TestExtractMedia_MissingCode(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/instagram/... -run TestExtractMedia -v`
 Expected: FAIL — `extractMedia` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/instagram/saved.go
@@ -220,12 +220,12 @@ func extractMedia(media map[string]any) (SavedPost, bool) {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/instagram/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/instagram/saved.go internal/instagram/saved_test.go
@@ -241,7 +241,7 @@ EOF
 )"
 ```
 
-- [ ] **Step 6: Manual live verification (do this once, by hand, before relying on the import pipeline)**
+- [ ] **Step 6: Manual live verification (do this once, by hand, before relying on the import pipeline)** — NOT DONE: requires real Instagram credentials and network access to the private API; run this by hand before Task 12 depends on these fetchers
 
 ```bash
 export INSTAGRAM_USERNAME=...
