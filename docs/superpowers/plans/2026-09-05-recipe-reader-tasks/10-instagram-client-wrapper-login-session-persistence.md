@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 3: Instagram Integration.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 10: Instagram Client Wrapper (Login & Session Persistence)
 
@@ -11,13 +11,13 @@
 **Interfaces:**
 - Produces: `func NewClient() *Client`, `func (c *Client) LoginOrRestore(username, password, sessionPath string) error`. Task 11 adds methods to the same `*Client`; Task 18 (`main.go`) constructs one `*Client` and calls `LoginOrRestore` once at startup.
 
-- [ ] **Step 1: Add the dependency**
+- [x] **Step 1: Add the dependency**
 
 ```bash
 go get github.com/felipeinf/instago
 ```
 
-- [ ] **Step 2: Write the test**
+- [x] **Step 2: Write the test**
 
 Live Instagram login can't run in CI (real credentials, 2FA, rate limits). This test only verifies the wrapper's session-restore short-circuit logic using a temp file, not real network calls.
 
@@ -50,12 +50,12 @@ func TestClient_LoginOrRestore_RestoresExistingSession(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `go test ./internal/instagram/... -v`
 Expected: FAIL — package doesn't exist.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 ```go
 // internal/instagram/client.go
@@ -93,12 +93,12 @@ func (c *Client) LoginOrRestore(username, password, sessionPath string) error {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/instagram/... -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/instagram/client.go internal/instagram/client_test.go go.mod go.sum
