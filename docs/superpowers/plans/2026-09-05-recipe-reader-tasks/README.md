@@ -52,4 +52,4 @@ Check a task's own checkboxes as its steps complete, and flip its **Status** lin
 ## Phase 7: Packaging & CI
 
 - [x] [Task 23: Single-Binary Packaging (go:embed, Dockerfile, docker-compose)](23-single-binary-packaging-go-embed-dockerfile-docker-compose.md)
-- [ ] [Task 24: CI Workflow & Final Documentation](24-ci-workflow-final-documentation.md)
+- [x] [Task 24: CI Workflow & Final Documentation](24-ci-workflow-final-documentation.md)

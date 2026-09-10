@@ -24,8 +24,12 @@ lint:
 	go vet ./...
 	golangci-lint run ./...
 
+# Run via `go run` rather than a bare `govulncheck`: it needs no global
+# install and no GOPATH/bin on PATH, so `make check` works on a fresh clone,
+# and it always resolves the current release. This is the same invocation CI
+# uses, so the two cannot drift.
 vuln:
-	govulncheck ./...
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 check: lint vuln test
 
