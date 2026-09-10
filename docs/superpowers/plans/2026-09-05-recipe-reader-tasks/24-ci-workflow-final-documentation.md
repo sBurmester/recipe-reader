@@ -1,6 +1,17 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 7: Packaging & CI.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
+>
+> **Corrections made during implementation:**
+> 1. **`make check` was broken and could never have passed Step 2 or Step 4 (real bug, fixed).** The `vuln` target invoked a bare `govulncheck`, which is not on `PATH` for a plain `go install` (it lands in `GOPATH/bin`), so `make check` died with `No such file or directory` — while the README this task writes documents `make check` as *the* way to test. Changed to `go run golang.org/x/vuln/cmd/govulncheck@latest ./...`, which needs no global install, works on a fresh clone, and is the exact invocation CI uses so the two cannot drift.
+> 2. **Every pinned action was several majors stale.** `actions/checkout` v4 → **v7**, `actions/setup-go` v5 → **v7**, `actions/setup-node` v4 → **v7**, `golangci/golangci-lint-action` v6 → **v9**. Go 1.27 and Node 26 were still current and were left as written.
+> 3. **The README was merged, not replaced.** The task says to "replace the Task 1 skeleton", but by this point the README had grown an HTTP API endpoint table (Phase 5), a Frontend section (Phase 6), and a Docker section (Task 23). A wholesale replacement would have deleted all of it. The plan's new sections — Requirements, Setup, Changing the database schema, Architecture, and the Instagram ToS caveat — were folded in around what was already there.
+> 4. **The sqlc drift check missed newly generated files.** `git diff --exit-code` does not see untracked files, so a query producing a brand-new generated file would have passed. Uses `git status --porcelain` instead, and prints the diff before failing.
+> 5. Added `permissions: contents: read` (no job needs write), a `concurrency` group cancelling superseded runs (the backend job starts real Postgres containers, so this saves real minutes), and per-job `timeout-minutes` so a hung run cannot burn the budget.
+>
+> **Worth knowing:** `golangci-lint-action`'s `version: latest` and the two `go run ...@latest` steps are deliberately unpinned, matching the project's "always latest stable" rule — the trade-off is that a new upstream release can fail CI on an unrelated pull request. Pin them if that becomes disruptive.
+>
+> **Step 4 (final acceptance for the whole plan) passed:** `make check`, `make db-up`, `make frontend`, and `make build` each exited 0, and the built binary served `/api/healthz`, `/api/categories`, and `/` with the real embedded frontend (placeholder absent).
 
 # Task 24: CI Workflow & Final Documentation
 
@@ -12,7 +23,7 @@
 - Consumes: `Makefile` targets `check`, `frontend`, `build`, `sqlc-generate` (Task 1); `npm run typecheck`/`build` (Task 19/22).
 - Produces: nothing further consumes this — it is the last task in the plan.
 
-- [ ] **Step 1: Create the CI workflow**
+- [x] **Step 1: Create the CI workflow**
 
 ```yaml
 # .github/workflows/ci.yml
@@ -82,7 +93,7 @@ jobs:
 
 Check the current Go/Node minor versions at execution time (`go version`, `node --version`) and update the `go-version`/`node-version` fields to match — this workflow was written against Go 1.27 and Node 26, current at plan-writing time.
 
-- [ ] **Step 2: Verify the workflow's steps locally**
+- [x] **Step 2: Verify the workflow's steps locally**
 
 ```bash
 sqlc generate && git diff --exit-code -- internal/db/sqlc
@@ -94,7 +105,7 @@ docker build -t recipe-reader:ci .
 
 Expected: every command succeeds (`make check` = gofmt + go vet + golangci-lint + govulncheck + go test, per Task 1's Makefile; the `go test` leg needs Docker running for the testcontainers-backed suites).
 
-- [ ] **Step 3: Finalize `README.md`**
+- [x] **Step 3: Finalize `README.md`**
 
 ```markdown
 # Recipe Reader
@@ -158,7 +169,7 @@ Service risk — use it against your own account for personal recipe
 collection, not as a scraping service.
 ```
 
-- [ ] **Step 4: Final full-repo verification**
+- [x] **Step 4: Final full-repo verification**
 
 ```bash
 make check
@@ -174,7 +185,7 @@ kill %1
 
 Expected: every command exits 0; both `curl` calls return valid responses. This is the final acceptance check for the whole plan — if it passes, the app builds, tests pass, lints clean, and serves both the API and the embedded frontend from one binary against Postgres.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add .github/workflows/ci.yml README.md
