@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 4: Import Pipeline.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 13: Background Worker (Scheduled + Manual Trigger)
 
@@ -23,7 +23,7 @@ func (w *Worker) Status() (lastRun time.Time, lastResult ImportResult, lastErr e
 
 Task 17 (`handlers_import.go`) calls `RunOnce` (trigger endpoint) and `Status` (status endpoint) on the single `*Worker` instance constructed in Task 18 (`main.go`), which also calls `Start` once at boot.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/pipeline/worker_test.go
@@ -95,12 +95,12 @@ func TestWorker_RunOnce_SkipsConcurrentOverlap(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/pipeline/... -run TestWorker -v`
 Expected: FAIL — `NewWorker` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/pipeline/worker.go
@@ -171,16 +171,16 @@ func (w *Worker) Status() (lastRun time.Time, lastResult ImportResult, lastErr e
 }
 ```
 
-- [ ] **Step 4: Add the missing test-file imports**
+- [x] **Step 4: Add the missing test-file imports** — folded into Step 1: the file was written with both imports present from the start, so Step 2's build failure was `undefined: NewWorker` (the intended TDD signal) rather than a missing-import error.
 
 `internal/pipeline/worker_test.go` needs `"github.com/sBurmester/recipe-reader/internal/extraction"` and `"github.com/sBurmester/recipe-reader/internal/instagram"` added to its import block (used by `fakeExtractor`/`instagram.SavedPost` inside `blockingFetcher`).
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/pipeline/... -v -race`
 Expected: PASS. Run with `-race` since `Worker` is accessed from two goroutines in the overlap test — this is the moment to catch a missing lock, not later in production.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/pipeline/worker.go internal/pipeline/worker_test.go

@@ -31,8 +31,8 @@ Check a task's own checkboxes as its steps complete, and flip its **Status** lin
 
 ## Phase 4: Import Pipeline
 
-- [ ] [Task 12: Import Pipeline (Fetch → Extract → Store)](12-import-pipeline-fetch-extract-store.md)
-- [ ] [Task 13: Background Worker (Scheduled + Manual Trigger)](13-background-worker-scheduled-manual-trigger.md)
+- [x] [Task 12: Import Pipeline (Fetch → Extract → Store)](12-import-pipeline-fetch-extract-store.md)
+- [x] [Task 13: Background Worker (Scheduled + Manual Trigger)](13-background-worker-scheduled-manual-trigger.md)
 
 ## Phase 5: REST API
 

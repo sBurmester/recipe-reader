@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 4: Import Pipeline.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 12: Import Pipeline (Fetch → Extract → Store)
 
@@ -34,7 +34,7 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error)
 
 Task 13 (worker) wraps `Pipeline.Run`. Task 18 (`main.go`) implements `PostFetcher` with a tiny adapter around `*instagram.Client` (Task 10/11's `PipelineFetcher`).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/pipeline/pipeline_test.go
@@ -178,12 +178,12 @@ func TestPipeline_ExtractionFailureCountsAsFailedNotFatal(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/pipeline/... -v`
 Expected: FAIL — package doesn't exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/pipeline/pipeline.go
@@ -297,12 +297,12 @@ func (p *Pipeline) toRecipe(ctx context.Context, post instagram.SavedPost, ex *e
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/pipeline/... -v` (needs Docker running)
 Expected: PASS (all four scenarios)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/pipeline/pipeline.go internal/pipeline/pipeline_test.go
