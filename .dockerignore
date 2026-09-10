@@ -1,0 +1,29 @@
+# Keep the build context small and force the image to build from source rather
+# than from whatever happens to be lying around in the working tree.
+
+.git
+.gitignore
+.github
+
+# Dependencies and build output are produced inside the image.
+web/node_modules
+web/dist
+web/dist-ts
+web/*.tsbuildinfo
+bin/
+
+# The frontend stage supplies internal/webui/dist, so the committed
+# placeholder (and any local `make frontend` output) must not shadow it.
+internal/webui/dist
+
+# Local runtime state and secrets never belong in an image.
+data/
+.env
+.env.*
+
+docs/
+*.md
+LICENSE
+Dockerfile
+.dockerignore
+docker-compose.yml
