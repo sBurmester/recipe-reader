@@ -1,6 +1,17 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 7: Packaging & CI.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
+>
+> **Corrections made during implementation:**
+> 1. **The final image had no TLS trust store (real bug, fixed).** A bare `alpine` image ships no CA certificates, and the app makes outbound HTTPS calls to both the Instagram and Anthropic APIs — every one would have failed with `x509: certificate signed by unknown authority`. The final stage now installs `ca-certificates`. Verified present in the running container.
+> 2. **`INSTAGRAM_SESSION_PATH` was unwritable in the container (real bug, fixed).** It defaults to the *relative* `data/instagram-session.json`, but the final stage set no `WORKDIR`, so it resolved against `/` — which `appuser` (uid 10001) cannot write. Session persistence would have silently failed and the app would have re-logged in on every restart, exactly what [Task 10](10-instagram-client-wrapper-login-session-persistence.md) exists to avoid. Now `WORKDIR /app` with `/app/data` owned by `appuser`, plus an `app-data` volume in compose so it survives restarts. Verified writable in the running container.
+> 3. **`Handler()` could panic on an empty request path.** `path[1:]` on an empty `URL.Path` panics, and a panicking file server is not behind the API's recovery middleware. Uses `strings.TrimPrefix` instead, covered by `TestHandler_EmptyPathDoesNotPanic`.
+> 4. **The doc comment's rationale was wrong.** The SPA fallback is *not* "required for the hash-router SPA to work on a hard refresh" — hash fragments are never sent to the server, so a deep link arrives as plain `/`. The fallback is still worth having (a typo or stale bookmark returns the app instead of a bare 404), and the comment now says that.
+> 5. **Base image bumped:** `alpine:3.20` → `alpine:3.23`, the current release. `node:26-alpine` and `golang:1.27-alpine` were already current (no `node:27` or `golang:1.28` exists yet). `npm install` → `npm ci`, since `package-lock.json` is committed and `ci` installs exactly what it pins.
+> 6. **Added `.dockerignore`**, which the task did not mention. Without it `COPY . .` and `COPY web/ ./` drag `.git`, `web/node_modules`, and prior build output into the context — and the committed `internal/webui/dist` placeholder would shadow the frontend stage's real build.
+> 7. Added `internal/webui/embed_test.go` (root, fallback, empty-path), which the task did not call for. The tests assert behaviour rather than page content, so they pass with either the placeholder or a real `make frontend` build.
+>
+> **Verified in the running container:** API and seeded lookups, the real embedded frontend (placeholder absent), hashed assets served with correct content types, SPA fallback returning 200, non-root `uid=10001`, and a 19.5 MB image.
 
 # Task 23: Single-Binary Packaging (go:embed, Dockerfile, docker-compose)
 
@@ -13,7 +24,7 @@
 - Consumes: `internal/webui/dist/*` (placeholder from Task 1, real build from Task 22's `npm run build` + the `make frontend` copy step).
 - Produces: `func webui.Handler() (http.Handler, error)` — SPA-fallback file server. Task 18's `main.go` wiring is extended (not replaced) to serve it for any path not under `/api/`.
 
-- [ ] **Step 1: Implement the embed handler**
+- [x] **Step 1: Implement the embed handler**
 
 ```go
 // internal/webui/embed.go
@@ -54,7 +65,7 @@ func Handler() (http.Handler, error) {
 }
 ```
 
-- [ ] **Step 2: Wire it into `main.go`**
+- [x] **Step 2: Wire it into `main.go`**
 
 In `run()` (Task 18), replace:
 
@@ -80,7 +91,7 @@ server := &http.Server{Addr: cfg.HTTPAddr, Handler: mux}
 
 Add `"github.com/sBurmester/recipe-reader/internal/webui"` to the import block.
 
-- [ ] **Step 3: Verify with the placeholder frontend**
+- [x] **Step 3: Verify with the placeholder frontend**
 
 ```bash
 go build ./...
@@ -93,7 +104,7 @@ kill %1
 
 Expected: the placeholder message and `{"status":"ok"}`.
 
-- [ ] **Step 4: Verify with the real frontend**
+- [x] **Step 4: Verify with the real frontend**
 
 ```bash
 make frontend
@@ -106,7 +117,7 @@ git checkout -- internal/webui/dist/index.html   # restore the committed placeho
 
 Expected: both requests return HTML (the real app shell), not the placeholder or a 404.
 
-- [ ] **Step 5: Create the `Dockerfile`**
+- [x] **Step 5: Create the `Dockerfile`**
 
 Check `docker --version`, current Node LTS, and current Go stable before building — pin close to what's actually current rather than these exact tags if newer patch releases exist. `sqlc generate`'s output (`internal/db/sqlc/`) is committed to git (Task 3), so the Docker build never needs the `sqlc` CLI itself — it's building already-generated Go source like any other package.
 
@@ -135,7 +146,7 @@ EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/recipe-reader"]
 ```
 
-- [ ] **Step 6: Create `docker-compose.yml`**
+- [x] **Step 6: Create `docker-compose.yml`**
 
 ```yaml
 services:
@@ -176,7 +187,7 @@ volumes:
 
 `make db-up` (Task 1) runs `docker compose up -d db` — the same service the full `app` container talks to, so local dev and the containerized app hit an identical schema/dialect.
 
-- [ ] **Step 7: Build and run the Docker image**
+- [x] **Step 7: Build and run the Docker image**
 
 ```bash
 docker compose up --build
@@ -186,7 +197,7 @@ docker compose down
 
 Expected: `{"status":"ok"}`, served by the app container against the compose-managed Postgres.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add internal/webui/embed.go cmd/recipe-reader/main.go Dockerfile docker-compose.yml

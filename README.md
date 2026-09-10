@@ -60,6 +60,23 @@ app from one embedded directory with no server-side rewrite rules.
 that correspondence at compile time — if you change one side, change the other, or the drift
 surfaces as `undefined` values in the UI.
 
+## Docker
+
+The frontend build is embedded into the binary with `go:embed`, so the application ships as a
+single file with no assets to deploy beside it. Anything not under `/api/` is served from that
+embedded directory, falling back to the app shell rather than a 404.
+
+    docker compose up --build   # app on :8080, Postgres on :5432
+    docker compose down
+
+The image builds the frontend and the Go binary in separate stages and ships only the binary on
+Alpine — about 20 MB, running as a non-root user. Credentials come from the environment (see
+`docker-compose.yml`), and the Instagram session is kept in the `app-data` volume so the app does
+not log in again on every restart, which Instagram rate-limits.
+
+`make db-up` starts only the Postgres service, for running the Go binary locally against the same
+database the container would use.
+
 ## Testing
 
     make check   # gofmt + go vet + golangci-lint + govulncheck + go test
