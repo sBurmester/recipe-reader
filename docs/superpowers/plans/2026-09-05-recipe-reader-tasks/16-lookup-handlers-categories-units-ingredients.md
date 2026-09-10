@@ -1,6 +1,6 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 5: REST API.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
 
 # Task 16: Lookup Handlers (Categories, Units, Ingredients)
 
@@ -13,7 +13,7 @@
 - Consumes: `Deps`, `writeJSON` (Task 14/15); `repository.LookupRepository` (Task 5); `CategoryDTO` (Task 15).
 - Produces: `Deps.handleListCategories`, `Deps.handleListUnits`, `Deps.handleListIngredients` (already referenced by Task 14's router).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/api/handlers_lookups_test.go
@@ -63,12 +63,12 @@ func TestLookupHandlers_ListCategoriesUnitsIngredients(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/api/... -run TestLookupHandlers -v`
 Expected: FAIL — `handleListCategories` etc. undefined (router already references them per Task 14, so this is a compile error until they exist).
 
-- [ ] **Step 3: Extend `dto.go`**
+- [x] **Step 3: Extend `dto.go`**
 
 ```go
 type UnitDTO struct {
@@ -82,7 +82,7 @@ type IngredientLookupDTO struct {
 }
 ```
 
-- [ ] **Step 4: Implement handlers**
+- [x] **Step 4: Implement handlers**
 
 ```go
 // internal/api/handlers_lookups.go
@@ -130,12 +130,12 @@ func (d Deps) handleListIngredients(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/api/... -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/api/dto.go internal/api/handlers_lookups.go internal/api/handlers_lookups_test.go

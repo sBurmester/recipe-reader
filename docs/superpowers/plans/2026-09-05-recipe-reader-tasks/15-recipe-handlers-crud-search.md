@@ -1,6 +1,11 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 5: REST API.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
+>
+> **Corrections made during implementation:**
+> 1. **`dtoToRecipe` dropped ingredient and unit names on the wire (real bug, fixed).** It populated only the write-side `IngredientID`/`UnitID`, but `toRecipeDTO` reads the read-side `IngredientName`/`UnitName`, so a successful create returned `"ingredients":[{"name":"","amount":200,"unit":""}]`. Now copies `ingredient.Name`/`unit.Name` across as well — free, since `repository.writeAssociations` only reads the ID and Amount fields, and `domain.RecipeIngredient` is documented as deliberately carrying both sides. Verified end-to-end against a live server.
+> 2. **`json.Unmarshal`'s return was ignored in the search test.** errcheck is enabled and does inspect `_test.go` files, so this would have failed lint. Now checked.
+> 3. **The update test never verified the update took effect** — it PUT and checked only the status code. A GET assertion was added between the PUT and DELETE so a no-op `Update` would fail the test.
 
 # Task 15: Recipe Handlers (CRUD + Search)
 
@@ -13,7 +18,7 @@
 - Consumes: `Deps` (Task 14); `repository.RecipeRepository`, `repository.LookupRepository`, `repository.SearchQuery`, `repository.ErrNotFound` (Task 4/5); `domain.Recipe`, `domain.RecipeIngredient`, `domain.Category`, `domain.RecipeStatus` (Task 3); `testdb.New` (Task 3).
 - Produces: `writeJSON`, `writeError` helpers; `RecipeDTO`, `IngredientDTO`, `CategoryDTO` (JSON shape for the frontend — Task 19's `types.ts` mirrors these field names exactly; IDs are JSON numbers either way, so the Go `int64` vs the old `uint` makes no difference on the wire), `toRecipeDTO(domain.Recipe) RecipeDTO`, and the five `Deps.handle*Recipe*` methods wired in Task 14's router.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/api/handlers_recipes_test.go
@@ -150,12 +155,12 @@ func TestRecipeHandlers_CreateValidation(t *testing.T) {
 
 Add `"fmt"` to this test file's imports (used by `fmt.Sprintf` above).
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/api/... -run TestRecipeHandlers -v`
 Expected: FAIL — `RecipeDTO` undefined.
 
-- [ ] **Step 3: Implement `dto.go`**
+- [x] **Step 3: Implement `dto.go`**
 
 ```go
 // internal/api/dto.go
@@ -217,7 +222,7 @@ func toRecipeDTO(r domain.Recipe) RecipeDTO {
 }
 ```
 
-- [ ] **Step 4: Implement handlers**
+- [x] **Step 4: Implement handlers**
 
 ```go
 // internal/api/handlers_recipes.go
@@ -391,12 +396,12 @@ func parseIDParam(r *http.Request) (int64, error) {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/api/... -v` (needs Docker running)
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/api/dto.go internal/api/handlers_recipes.go internal/api/handlers_recipes_test.go
