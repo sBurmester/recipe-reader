@@ -1,6 +1,13 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 6: Frontend (Vanilla TS + Vite).
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
+>
+> **Corrections made during implementation:**
+> 1. **Pagination was permanently dead (real bug, fixed).** The plan writes `{ disabled: page <= 1 ? "true" : "" }`, but `dom.ts`'s `el()` forwards every string prop to `setAttribute`, and `setAttribute("disabled", "")` still disables the element — HTML keys off the attribute's *presence*, not its value. So both `‹` and `›` were disabled in every state. This typechecks perfectly, so Step 2 could never have caught it. Fixed by setting the DOM property (`next.disabled = page >= totalPages`) plus bounds guards in the handlers, and verified in a real headless browser with 25 recipes: page 1 renders prev disabled and next enabled.
+> 2. **`(err as Error).message`** is an unchecked cast under `strict`'s `useUnknownInCatchVariables`; a non-`Error` rejection would render `Fehler: undefined`. Replaced with an `instanceof` check.
+> 3. **`loadCategories()` had no error handling**, so a failing `/api/categories` became a silent unhandled rejection. Now caught — the filter stays at "Alle Kategorien" and search/pagination keep working.
+> 4. **`ReturnType<typeof setTimeout>` is fragile here.** It resolves to `number` only because no `@types/node` is present; any future transitive dependency pulling it in would push the type toward `NodeJS.Timeout` and break `clearTimeout`. Changed to `window.setTimeout`/`window.clearTimeout` with `number | undefined`.
+> 5. Dropped the redundant `as HTMLInputElement`/`as HTMLSelectElement` casts — `el` is generic over `HTMLElementTagNameMap` and already returns the precise type, so the casts only served to hide future real type errors.
 
 # Task 20: Recipe List Page (Search, Filter, Pagination)
 
@@ -11,7 +18,7 @@
 - Consumes: `listRecipes`, `listCategories` (Task 19 `api.ts`); `el`, `clear` (Task 19 `dom.ts`); `Recipe`, `Category` (Task 19 `types.ts`).
 - Produces: `export function renderListPage(container: HTMLElement): void`. Task 22 (`main.ts` router) calls this for the `#/` route.
 
-- [ ] **Step 1: Implement**
+- [x] **Step 1: Implement**
 
 ```ts
 // web/src/pages/list.ts
@@ -102,12 +109,12 @@ export function renderListPage(container: HTMLElement): void {
 }
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `npm --prefix web run typecheck`
 Expected: no errors. (Manual browser verification happens in Task 22 once the router wires this page in.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add web/src/pages/list.ts

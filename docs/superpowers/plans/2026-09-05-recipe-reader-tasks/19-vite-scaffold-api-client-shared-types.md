@@ -1,6 +1,12 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 6: Frontend (Vanilla TS + Vite).
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
+>
+> **Notes from implementation:**
+> 1. **Dependency versions bumped to current majors:** TypeScript `^7.0.0` (7.0.2) and Vite `^8.0.0` (8.3.0), rather than the plan's `^5.6.0` / `^6.0.0`, which were two majors stale. Validated empirically — install clean with 0 vulnerabilities, `tsc --noEmit` clean, `tsc -b` build mode works on this non-composite project, and `vite build` produces `dist/`. No fallback needed.
+> 2. `web/dist-ts/` (the `tsc -b` output) was added to `.gitignore`; only `web/dist/` was covered before.
+> 3. **Verified against the shipped Go DTOs, all matching:** `RecipeDTO`/`IngredientDTO`/`CategoryDTO`/`UnitDTO` JSON tags, the lookup endpoints returning bare arrays, the import status shape, and `q` as the free-text search parameter. Notably DELETE really does answer `204 No Content`, which is exactly why `request()`'s `status === 204` short-circuit is required — `res.json()` would otherwise throw on the empty body.
+> 4. A documentation note was added to `el()` in `dom.ts` about boolean attributes — see the bug recorded in [Task 20](20-recipe-list-page-search-filter-pagination.md).
 
 # Task 19: Vite Scaffold, API Client & Shared Types
 
@@ -35,7 +41,7 @@ export function importStatus(): Promise<ImportStatus>
 
 Task 20 (list page), Task 21 (detail page), and Task 22 (import page) consume every function in `api.ts` and the `el()` helper from `dom.ts` — do not rename any of them later.
 
-- [ ] **Step 1: Scaffold the Vite project**
+- [x] **Step 1: Scaffold the Vite project**
 
 ```bash
 mkdir -p web/src/pages
@@ -112,13 +118,13 @@ export default defineConfig({
 </html>
 ```
 
-- [ ] **Step 2: Install dependencies**
+- [x] **Step 2: Install dependencies**
 
 ```bash
 npm --prefix web install
 ```
 
-- [ ] **Step 3: Implement `types.ts`**
+- [x] **Step 3: Implement `types.ts`**
 
 ```ts
 // web/src/types.ts
@@ -162,7 +168,7 @@ export interface ImportStatus {
 }
 ```
 
-- [ ] **Step 4: Implement `dom.ts`**
+- [x] **Step 4: Implement `dom.ts`**
 
 ```ts
 // web/src/dom.ts
@@ -192,7 +198,7 @@ export function clear(node: Element): void {
 }
 ```
 
-- [ ] **Step 5: Implement `api.ts`**
+- [x] **Step 5: Implement `api.ts`**
 
 ```ts
 // web/src/api.ts
@@ -262,12 +268,12 @@ export function importStatus(): Promise<ImportStatus> {
 }
 ```
 
-- [ ] **Step 6: Verify it typechecks**
+- [x] **Step 6: Verify it typechecks**
 
 Run: `npm --prefix web run typecheck`
 Expected: no errors (there are no pages/main.ts yet, but `types.ts`, `dom.ts`, `api.ts` compile standalone).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add web/package.json web/vite.config.ts web/tsconfig.json web/index.html web/src/types.ts web/src/api.ts web/src/dom.ts

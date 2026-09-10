@@ -73,9 +73,16 @@ type RecipeDTO struct {
 // toRecipeDTO projects a domain recipe onto the wire shape, reading the
 // join-populated IngredientName/UnitName rather than the ID fields.
 func toRecipeDTO(r domain.Recipe) RecipeDTO {
+	// Both slices are allocated empty rather than left nil: a nil slice
+	// marshals as null, and a recipe with no categories or no ingredients is
+	// ordinary (the rule-based extractor frequently finds no categories). The
+	// frontend types these as arrays and calls .map on them directly, so null
+	// here throws and takes the whole page down.
 	dto := RecipeDTO{
 		ID: r.ID, Name: r.Name, Instructions: r.Instructions,
 		ImageURL: r.ImageURL, Source: r.Source, Status: string(r.Status),
+		Ingredients: make([]IngredientDTO, 0, len(r.Ingredients)),
+		Categories:  make([]CategoryDTO, 0, len(r.Categories)),
 	}
 	for _, ri := range r.Ingredients {
 		dto.Ingredients = append(dto.Ingredients, IngredientDTO{

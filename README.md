@@ -42,6 +42,24 @@ The two `/api/import/*` routes return `503 {"error":"import worker not configure
 Instagram credentials are set, since there is no worker to drive. Every other route works
 normally in that state, serving whatever is already in the database.
 
+## Frontend
+
+`web/` is a Vite + TypeScript app with no UI framework — pages build DOM nodes through a small
+`el()` helper in `src/dom.ts`, which also means Instagram caption text is never parsed as HTML.
+
+    npm --prefix web install
+    npm --prefix web run dev        # dev server on :5173, proxies /api to :8080
+    npm --prefix web run typecheck
+    npm --prefix web run build      # emits web/dist/
+    make frontend                   # build and copy into internal/webui/dist for embedding
+
+Routing is hash-based (`#/`, `#/recipes/:id`, `#/import`), so the Go binary can serve the whole
+app from one embedded directory with no server-side rewrite rules.
+
+`src/types.ts` mirrors the Go DTOs in `internal/api/dto.go` field-for-field. Nothing enforces
+that correspondence at compile time — if you change one side, change the other, or the drift
+surfaces as `undefined` values in the UI.
+
 ## Testing
 
     make check   # gofmt + go vet + golangci-lint + govulncheck + go test
