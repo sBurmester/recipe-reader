@@ -20,6 +20,7 @@ import (
 	"github.com/sBurmester/recipe-reader/internal/instagram"
 	"github.com/sBurmester/recipe-reader/internal/pipeline"
 	"github.com/sBurmester/recipe-reader/internal/repository"
+	"github.com/sBurmester/recipe-reader/internal/webui"
 )
 
 func main() {
@@ -85,8 +86,19 @@ func run() error {
 		worker.Start(ctx)
 	}
 
-	router := api.NewRouter(api.Deps{Recipes: recipes, Lookups: lookups, Worker: worker})
-	server := &http.Server{Addr: cfg.HTTPAddr, Handler: router}
+	// The embedded frontend takes everything the API does not claim. Go 1.22
+	// ServeMux prefers the more specific "/api/" pattern, and does not strip
+	// it, so the API router still sees the full path it registered.
+	apiRouter := api.NewRouter(api.Deps{Recipes: recipes, Lookups: lookups, Worker: worker})
+	frontend, err := webui.Handler()
+	if err != nil {
+		return err
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/api/", apiRouter)
+	mux.Handle("/", frontend)
+
+	server := &http.Server{Addr: cfg.HTTPAddr, Handler: mux}
 
 	// Shutdown runs on signal; run() waits for it to finish draining before
 	// returning, so the deferred pool.Close above cannot pull the database out
