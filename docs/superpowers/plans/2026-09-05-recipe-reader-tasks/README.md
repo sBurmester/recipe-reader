@@ -44,10 +44,10 @@ Check a task's own checkboxes as its steps complete, and flip its **Status** lin
 
 ## Phase 6: Frontend (Vanilla TS + Vite)
 
-- [ ] [Task 19: Vite Scaffold, API Client & Shared Types](19-vite-scaffold-api-client-shared-types.md)
-- [ ] [Task 20: Recipe List Page (Search, Filter, Pagination)](20-recipe-list-page-search-filter-pagination.md)
-- [ ] [Task 21: Recipe Detail/Edit Page](21-recipe-detail-edit-page.md)
-- [ ] [Task 22: Import Status Page, Router & Styling](22-import-status-page-router-styling.md)
+- [x] [Task 19: Vite Scaffold, API Client & Shared Types](19-vite-scaffold-api-client-shared-types.md)
+- [x] [Task 20: Recipe List Page (Search, Filter, Pagination)](20-recipe-list-page-search-filter-pagination.md)
+- [x] [Task 21: Recipe Detail/Edit Page](21-recipe-detail-edit-page.md)
+- [x] [Task 22: Import Status Page, Router & Styling](22-import-status-page-router-styling.md)
 
 ## Phase 7: Packaging & CI
 

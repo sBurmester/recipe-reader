@@ -1,6 +1,12 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 6: Frontend (Vanilla TS + Vite).
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
+>
+> **Corrections made during implementation:**
+> 1. **Delete had no error handling (real bug, fixed).** `await deleteRecipe(...)` sat in an async `onclick` with no `try`/`catch`, so a 404 or 500 became an unhandled rejection and the page simply looked as though the click did nothing. Now reports to the status line, with a progress message while in flight.
+> 2. **Stale local state after save (real bug, fixed).** The plan filters blank ingredient rows out of the *payload* but never out of the local array, so a row the server dropped kept displaying as if it had been saved; the delete confirmation likewise kept showing the pre-rename name. Fixed by adopting the `Recipe` that `updateRecipe` returns and re-rendering.
+> 3. **The plan's stated premise about validation is wrong, and the gap is real.** It assumes a cleared name would be rejected by the backend, but `handleUpdateRecipe` performs **no validation at all** — only `handleCreateRecipe` checks name/source. Since PUT is a full replace, a blank name would have been stored silently. A client-side guard now blocks the save. **The underlying API gap is unfixed and is worth a follow-up** — see the note in [Task 15](15-recipe-handlers-crud-search.md).
+> 4. Dropped the no-op `as HTMLInputElement`/`as HTMLSelectElement`/`as HTMLOptionElement` casts (`el` already returns the precise element type), switched bare `confirm(...)` to `window.confirm(...)`, and added the `aria-label`s the plan omitted — it nests an `<input>` inside `<h1>` with no labelling anywhere. All class names are unchanged, since Task 22's stylesheet keys off them.
 
 # Task 21: Recipe Detail/Edit Page
 
@@ -11,7 +17,7 @@
 - Consumes: `getRecipe`, `updateRecipe`, `deleteRecipe`, `listUnits` (Task 19 `api.ts`); `el`, `clear` (Task 19 `dom.ts`); `Recipe`, `Ingredient`, `Unit` (Task 19 `types.ts`).
 - Produces: `export function renderDetailPage(container: HTMLElement, id: number): void`. Task 22 calls this for the `#/recipes/:id` route.
 
-- [ ] **Step 1: Implement**
+- [x] **Step 1: Implement**
 
 ```ts
 // web/src/pages/detail.ts
@@ -125,12 +131,12 @@ function renderForm(container: HTMLElement, recipe: Recipe, units: Unit[]): void
 }
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `npm --prefix web run typecheck`
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add web/src/pages/detail.ts

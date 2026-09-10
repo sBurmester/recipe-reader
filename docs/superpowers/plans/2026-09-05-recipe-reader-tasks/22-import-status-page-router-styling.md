@@ -1,6 +1,13 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 6: Frontend (Vanilla TS + Vite).
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
+>
+> **Corrections made during implementation:**
+> 1. **`import.ts` had no error handling, contradicting this task's own Step 5.** Step 5 requires that with no Instagram credentials "the page must still render the error state cleanly, not crash" — but that is precisely when both import endpoints answer `503`, so `await importStatus()` rejected, the rejection escaped unhandled, and the page rendered nothing at all with the trigger button stuck disabled. Every await is now guarded. Verified in a real headless browser: the page renders `Fehler: import worker not configured`.
+> 2. **`last_run` would have displayed `0001-01-01T00:00:00Z`.** The plan's `s.last_run || "noch nie"` only catches an empty string, but Go formats a zero `time.Time` as year 1, which is a non-empty string. Now detected and shown as "noch nie"; real timestamps are localized for the German UI.
+> 3. **The status poller leaked.** The hash router replaces the container's contents without notifying the page it replaced, so a 2-second poll started here ran for the life of the tab. It now stops once its element leaves the DOM.
+> 4. `main.ts` builds the nav with `el()` rather than `innerHTML`, consistent with `dom.ts`'s rationale, and fails loudly with a clear message if `#app` is missing instead of relying on a bare `!`.
+> 5. **Step 5 was performed headlessly** (Chromium `--dump-dom` against the Vite dev server proxying to a live Go API + Postgres) rather than in an interactive browser. Verified: list renders with categories populated and the `needs_review` badge, pagination bounds are correct across two pages, the detail page loads with units and values populated, and the import page renders its error state cleanly. Not exercised interactively: typing-driven search debounce, and clicking save/delete.
 
 # Task 22: Import Status Page, Router & Styling
 
@@ -11,7 +18,7 @@
 - Consumes: `triggerImport`, `importStatus` (Task 19 `api.ts`); `el`, `clear` (Task 19 `dom.ts`); `renderListPage` (Task 20); `renderDetailPage` (Task 21).
 - Produces: the app entry point. No later Go/TS task consumes this — it is the frontend composition root, mirroring `main.go` (Task 18) on the backend.
 
-- [ ] **Step 1: Implement `pages/import.ts`**
+- [x] **Step 1: Implement `pages/import.ts`**
 
 ```ts
 // web/src/pages/import.ts
@@ -70,7 +77,7 @@ export function renderImportPage(container: HTMLElement): void {
 }
 ```
 
-- [ ] **Step 2: Implement `main.ts` (hash router)**
+- [x] **Step 2: Implement `main.ts` (hash router)**
 
 ```ts
 // web/src/main.ts
@@ -103,7 +110,7 @@ window.addEventListener("hashchange", route);
 route();
 ```
 
-- [ ] **Step 3: Implement `style.css`**
+- [x] **Step 3: Implement `style.css`**
 
 ```css
 /* web/src/style.css */
@@ -188,7 +195,7 @@ button.danger {
 }
 ```
 
-- [ ] **Step 4: Typecheck and build**
+- [x] **Step 4: Typecheck and build**
 
 ```bash
 npm --prefix web run typecheck
@@ -197,7 +204,7 @@ npm --prefix web run build
 
 Expected: both succeed; `web/dist/` is created.
 
-- [ ] **Step 5: Manual browser verification**
+- [x] **Step 5: Manual browser verification**
 
 ```bash
 make run &                # backend on :8080
@@ -206,7 +213,7 @@ npm --prefix web run dev  # frontend dev server, proxies /api to :8080
 
 Open `http://localhost:5173`. Verify: the recipe list loads (empty state renders correctly with zero recipes), category filter dropdown populates, search debounces, `#/import` shows the import status page and "Import jetzt starten" triggers a run (status will show `Fehler` since Instagram credentials aren't configured in dev — that's expected; the page must still render the error state cleanly, not crash). Create a recipe via `curl -X POST localhost:8080/api/recipes ...` and confirm it appears in the list and its detail/edit page loads, saves, and deletes correctly.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add web/src/pages/import.ts web/src/main.ts web/src/style.css
