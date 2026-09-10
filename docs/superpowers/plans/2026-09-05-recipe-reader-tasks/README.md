@@ -36,11 +36,11 @@ Check a task's own checkboxes as its steps complete, and flip its **Status** lin
 
 ## Phase 5: REST API
 
-- [ ] [Task 14: Router, Middleware & Health Check](14-router-middleware-health-check.md)
-- [ ] [Task 15: Recipe Handlers (CRUD + Search)](15-recipe-handlers-crud-search.md)
-- [ ] [Task 16: Lookup Handlers (Categories, Units, Ingredients)](16-lookup-handlers-categories-units-ingredients.md)
-- [ ] [Task 17: Import Trigger & Status Handlers](17-import-trigger-status-handlers.md)
-- [ ] [Task 18: `main.go` Wiring & Graceful Shutdown](18-main-go-wiring-graceful-shutdown.md)
+- [x] [Task 14: Router, Middleware & Health Check](14-router-middleware-health-check.md)
+- [x] [Task 15: Recipe Handlers (CRUD + Search)](15-recipe-handlers-crud-search.md)
+- [x] [Task 16: Lookup Handlers (Categories, Units, Ingredients)](16-lookup-handlers-categories-units-ingredients.md)
+- [x] [Task 17: Import Trigger & Status Handlers](17-import-trigger-status-handlers.md)
+- [x] [Task 18: `main.go` Wiring & Graceful Shutdown](18-main-go-wiring-graceful-shutdown.md)
 
 ## Phase 6: Frontend (Vanilla TS + Vite)
 

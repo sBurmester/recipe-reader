@@ -16,6 +16,32 @@ supplied as a command-line flag or an environment variable, with flags taking pr
 the environment and the environment over the built-in defaults. Run `recipe-reader --help` for
 the full list. See `.env.example` for the environment-variable names and their defaults.
 
+## HTTP API
+
+All routes are served under `/api`, return JSON, and carry permissive CORS headers so the
+Vite dev server can call them directly.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/healthz` | Liveness probe — `{"status":"ok"}`. |
+| `GET` | `/api/recipes` | Search and list recipes. Query params: `q` (free text), `category_id`, `status`, `page`, `page_size` — all optional; malformed numerics are ignored rather than rejected. Returns `{"recipes":[...],"total":N}`. |
+| `POST` | `/api/recipes` | Create a recipe. `name` and `source` are required. |
+| `GET` | `/api/recipes/{id}` | Fetch one recipe. |
+| `PUT` | `/api/recipes/{id}` | Replace a recipe. |
+| `DELETE` | `/api/recipes/{id}` | Delete a recipe. |
+| `GET` | `/api/categories` | List all categories. |
+| `GET` | `/api/units` | List all units. |
+| `GET` | `/api/ingredients` | List all known ingredients. |
+| `POST` | `/api/import/run` | Trigger an import. Returns `202` immediately; the run happens in the background. |
+| `GET` | `/api/import/status` | Last run's tally (`seen`/`imported`/`skipped`/`failed`), timestamp, and whether a run is in flight. |
+
+Recipe ingredients and categories are written by name — the API resolves them to lookup rows,
+creating any it hasn't seen before, so callers never deal in lookup IDs.
+
+The two `/api/import/*` routes return `503 {"error":"import worker not configured"}` when no
+Instagram credentials are set, since there is no worker to drive. Every other route works
+normally in that state, serving whatever is already in the database.
+
 ## Testing
 
     make check   # gofmt + go vet + golangci-lint + govulncheck + go test

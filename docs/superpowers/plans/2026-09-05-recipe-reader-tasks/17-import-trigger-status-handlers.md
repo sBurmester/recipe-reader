@@ -1,6 +1,11 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 5: REST API.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
+>
+> **Corrections made during implementation:**
+> 1. **`go d.Worker.RunOnce(r.Context())` aborts the import instantly in production (real bug, fixed).** `net/http` cancels `r.Context()` as soon as the handler returns, so the detached goroutine ran against an already-cancelled context. The plan's test cannot catch this — `httptest.NewRequest` + a direct `ServeHTTP` call never cancels. Now uses `context.WithoutCancel(r.Context())`, keeping request-scoped values while dropping the cancellation.
+> 2. **A nil `Deps.Worker` took down the whole process (fixed).** `RunOnce` on a nil `*pipeline.Worker` panics at `w.mu.Lock()` *inside the goroutine*, where `withRecovery` cannot reach it — an unrecovered goroutine panic kills the server rather than producing a 500. Both handlers now return `503 "import worker not configured"` when `Worker == nil`, which is the guard [Task 18](18-main-go-wiring-graceful-shutdown.md) Step 2 anticipated. Covered by `TestImportHandlers_NoWorker` and verified against a live server with no Instagram credentials.
+> 3. Replaced the literal `"2006-01-02T15:04:05Z07:00"` with the identical `time.RFC3339`.
 
 # Task 17: Import Trigger & Status Handlers
 
@@ -12,7 +17,7 @@
 - Consumes: `Deps`, `writeJSON` (Task 14/15); `pipeline.Worker`, `pipeline.ImportResult` (Task 13).
 - Produces: `Deps.handleImportRun`, `Deps.handleImportStatus` (already referenced by Task 14's router).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/api/handlers_import_test.go
@@ -73,12 +78,12 @@ func TestImportHandlers_RunAndStatus(t *testing.T) {
 
 `Extractor: (*extraction.HybridExtractor)(nil)` is safe here only because `noopFetcher.FetchNewPosts` returns zero posts, so the pipeline loop never reaches `Extract` — no nil-pointer call actually happens.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/api/... -run TestImportHandlers -v`
 Expected: FAIL — `handleImportRun` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/api/handlers_import.go
@@ -110,12 +115,12 @@ func (d Deps) handleImportStatus(w http.ResponseWriter, r *http.Request) {
 
 `handleImportRun` triggers the run in a background goroutine and returns immediately with 202 Accepted — matching PROJECT.md's requirement that extraction/storage need not be real-time, while the recipe-display API stays fast and unaffected by an in-flight import.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/api/... -v`
 Expected: PASS (full `internal/api` suite: router, recipe handlers, lookup handlers, import handlers)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/api/handlers_import.go internal/api/handlers_import_test.go

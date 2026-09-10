@@ -1,6 +1,12 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 5: REST API.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
+>
+> **Notes from implementation:**
+> 1. **Shutdown now waits for the drain.** As written, `run()` returned as soon as `ListenAndServe` reported `ErrServerClosed`, while `server.Shutdown` was still draining in its goroutine — so the deferred `pool.Close()` could pull the database out from under a request still being served. `run()` now blocks on a `shutdownDone` channel before returning, which is what makes the shutdown actually graceful. Also uses `errors.Is` for the `ErrServerClosed` check, matching the codebase's convention.
+> 2. **Step 4's `make db-up` does not work yet** — there is no `docker-compose.yml` until Task 23. The smoke test was run against a directly-started `postgres:17-alpine` matching the default DSN. All endpoints verified live: health, seeded categories/units, empty recipe list, a full create → get → search round trip, the `503` no-worker path, and a clean SIGTERM shutdown.
+> 3. **Open question — `EXTRACTION_MODE=llm` silently runs rules-only.** The wiring is `if cfg.ExtractionMode == "hybrid" && cfg.AnthropicAPIKey != ""`, so the `llm` mode advertised in the config help text never constructs an LLM extractor. Left as the plan specifies rather than silently redesigning the mode semantics — needs a decision.
+> 4. [Task 25](25-provider-agnostic-llm-extractor.md) is **not** merged (it lives on the unmerged local branch `feat/provider-agnostic-llm-extractor`), so the Anthropic-only `NewLLMExtractor(cfg.AnthropicAPIKey, cfg.AnthropicModel)` path in Step 2 was used, per this task's own conditional note.
 
 # Task 18: `main.go` Wiring & Graceful Shutdown
 
@@ -14,7 +20,7 @@
 
 > **If [Task 25](25-provider-agnostic-llm-extractor.md) is done first,** replace the `NewLLMExtractor(cfg.AnthropicAPIKey, cfg.AnthropicModel)` block in Step 2's `run()` with the config-driven `extraction.LLMConfig` construction from Task 25 Step 6 (handles `LLM_PROVIDER` / `LLM_BASE_URL`, returns an `error`). The `llm == nil ⇒ rules-only` behaviour is unchanged.
 
-- [ ] **Step 1: Implement the fetcher adapter**
+- [x] **Step 1: Implement the fetcher adapter**
 
 ```go
 // internal/instagram/fetcher_adapter.go
@@ -47,7 +53,7 @@ func (f *PipelineFetcher) FetchNewPosts(_ context.Context) ([]SavedPost, error) 
 }
 ```
 
-- [ ] **Step 2: Replace `cmd/recipe-reader/main.go`**
+- [x] **Step 2: Replace `cmd/recipe-reader/main.go`**
 
 ```go
 // cmd/recipe-reader/main.go
@@ -149,7 +155,7 @@ func run() error {
 
 `api.Deps.Worker` is `*pipeline.Worker`; when Instagram credentials are not configured, `worker` stays `nil` and `handleImportRun`/`handleImportStatus` (Task 17) will panic on the nil pointer — the recovery middleware (Task 14) turns that into a 500. If this shows up in practice, add a `d.Worker == nil` → `503 Service Unavailable` guard as the first line of both handlers.
 
-- [ ] **Step 3: Verify the full build and test suite**
+- [x] **Step 3: Verify the full build and test suite**
 
 ```bash
 go build ./...
@@ -158,7 +164,7 @@ go test ./...
 
 Expected: build succeeds, all tests from Tasks 2-17 pass (Docker must be running — `internal/db`, `internal/repository`, `internal/pipeline`, and `internal/api` tests all spin up ephemeral Postgres containers via `testdb.New`).
 
-- [ ] **Step 4: Manual smoke test**
+- [x] **Step 4: Manual smoke test**
 
 ```bash
 cp .env.example .env
@@ -171,7 +177,7 @@ curl -s localhost:8080/api/categories
 
 Expected: `{"status":"ok"}` and a JSON array of the seeded categories.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add cmd/recipe-reader/main.go internal/instagram/fetcher_adapter.go

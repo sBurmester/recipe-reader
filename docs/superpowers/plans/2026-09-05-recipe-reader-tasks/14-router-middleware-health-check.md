@@ -1,6 +1,11 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 5: REST API.
 >
-> **Status:** [ ] not started
+> **Status:** [x] done
+>
+> **Corrections made during implementation:**
+> 1. **Step 6's "Expected: PASS" is unreachable as written.** `router.go` registers handler methods created in Tasks 15–17, so `internal/api` does not compile at the end of this task. The build was run after each task (undefined-handler count 10 → 5 → 2 → 0) and the suite only after Task 17.
+> 2. **Step 1's `router_test.go` does not compile.** The bare type assertion `router.(interface{ ServeHTTP(...) })` is used as a statement; Go allows only calls and receives there. Removed (it was also redundant — `http.Handler` already has that method).
+> 3. **Step 1's health-body assertion is wrong.** `writeJSON` uses `json.Encoder.Encode`, which appends a newline, so the body is `"{\"status\":\"ok\"}\n"`.
 
 # Task 14: Router, Middleware & Health Check
 
@@ -23,7 +28,7 @@ func NewRouter(deps Deps) http.Handler   // wraps the ServeMux with logging + re
 
 Task 15-17 add handler methods on `Deps`; Task 18 (`main.go`) is the only caller of `NewRouter`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/api/router_test.go
@@ -83,12 +88,12 @@ func TestRouter_SetsCORSHeaders(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/api/... -v`
 Expected: FAIL — package doesn't exist.
 
-- [ ] **Step 3: Implement `middleware.go`**
+- [x] **Step 3: Implement `middleware.go`**
 
 ```go
 // internal/api/middleware.go
@@ -134,7 +139,7 @@ func withCORS(next http.Handler) http.Handler {
 }
 ```
 
-- [ ] **Step 4: Implement `router.go`**
+- [x] **Step 4: Implement `router.go`**
 
 ```go
 // internal/api/router.go
@@ -179,7 +184,7 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 ```
 
-- [ ] **Step 5: Add the shared JSON helpers**
+- [x] **Step 5: Add the shared JSON helpers**
 
 These are used by every handler task that follows (15-17); put them in `internal/api/dto.go`'s preamble now so Task 15 doesn't need to touch this file again.
 
@@ -203,12 +208,12 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `go test ./internal/api/... -v`
 Expected: PASS (`TestRouter_Health`, `TestRouter_RecoversFromPanic` — nil `Deps.Recipes` in `handleListRecipes` will panic until Task 15 adds real handlers, which the recovery middleware turns into a 500 — and `TestRouter_SetsCORSHeaders`).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add internal/api/router.go internal/api/middleware.go internal/api/dto.go internal/api/router_test.go
