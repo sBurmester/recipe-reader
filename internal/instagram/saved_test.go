@@ -188,3 +188,68 @@ func TestExtractMedia_MissingCode(t *testing.T) {
 		t.Error("expected ok = false when code is missing")
 	}
 }
+
+// The saved-posts endpoints are unofficial and undocumented, so a field rename
+// upstream turns every item into a silent no-op. Items returned and none of
+// them readable is the signature of that, and reporting it as an empty success
+// is how it would go unnoticed for as long as nobody wondered why imports
+// stopped.
+func TestPageMedia_UnreadableFeedIsAnErrorNotAnEmptySuccess(t *testing.T) {
+	req := func(context.Context, ig.PrivateRequestOpts) (map[string]any, error) {
+		return map[string]any{"items": []any{
+			map[string]any{"media": map[string]any{"renamed_code": "abc"}},
+			map[string]any{"media": map[string]any{"renamed_code": "def"}},
+		}}, nil
+	}
+
+	posts, err := pageMedia(context.Background(), req, "feed/saved/posts/", FetchOptions{MaxItems: 10})
+	if !errors.Is(err, ErrSchemaDrift) {
+		t.Fatalf("pageMedia() error = %v, want ErrSchemaDrift", err)
+	}
+	if posts != nil {
+		t.Errorf("posts = %v, want nil", posts)
+	}
+}
+
+// Some unreadable items alongside readable ones is ordinary — a saved video, a
+// deleted post — and must not fail the run.
+func TestPageMedia_PartiallyUnreadableFeedStillSucceeds(t *testing.T) {
+	req := func(context.Context, ig.PrivateRequestOpts) (map[string]any, error) {
+		return map[string]any{"items": []any{
+			map[string]any{"media": map[string]any{"renamed_code": "abc"}},
+			map[string]any{"media": map[string]any{"code": "good"}},
+		}}, nil
+	}
+
+	posts, err := pageMedia(context.Background(), req, "feed/saved/posts/", FetchOptions{MaxItems: 10})
+	if err != nil {
+		t.Fatalf("pageMedia() error = %v", err)
+	}
+	if len(posts) != 1 || posts[0].Source != source("good") {
+		t.Errorf("posts = %v, want just the readable one", codes(posts))
+	}
+}
+
+// A walk throttled part-way through hands back what it collected, so the
+// pipeline can import it rather than re-fetching it after the cooldown.
+func TestPageMedia_ReturnsCollectedPostsAlongsideAnError(t *testing.T) {
+	calls := 0
+	req := func(_ context.Context, opts ig.PrivateRequestOpts) (map[string]any, error) {
+		calls++
+		if calls > 1 {
+			return nil, ErrRateLimited
+		}
+		return map[string]any{
+			"items":       []any{map[string]any{"media": map[string]any{"code": "a"}}},
+			"next_max_id": "page-1",
+		}, nil
+	}
+
+	posts, err := pageMedia(context.Background(), req, "feed/saved/posts/", FetchOptions{MaxItems: 10})
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("pageMedia() error = %v, want ErrRateLimited", err)
+	}
+	if len(posts) != 1 || posts[0].Source != source("a") {
+		t.Errorf("posts = %v, want the page collected before the throttle", codes(posts))
+	}
+}

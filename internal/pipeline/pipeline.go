@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/sBurmester/recipe-reader/internal/domain"
 	"github.com/sBurmester/recipe-reader/internal/extraction"
@@ -32,8 +33,13 @@ type PostFetcher interface {
 // feed legitimately contains things that are not recipes, and folding them
 // into Failed would make a healthy run look broken while folding them into
 // Skipped would hide how much of the feed is noise.
+//
+// Degraded overlaps Imported rather than partitioning Seen: it counts how many
+// of the imported recipes came from the rules because the LLM call failed. A
+// run where it equals Imported is a run where the LLM never worked at all.
 type ImportResult struct {
 	Seen, Imported, Skipped, NoRecipe, Failed int
+	Degraded                                  int
 }
 
 // Pipeline runs one import pass over the fetcher's posts.
@@ -61,23 +67,39 @@ type Pipeline struct {
 }
 
 // Run fetches posts and imports the new ones. A failure on any single post
-// is counted in ImportResult.Failed and does not abort the run — only a
-// failure to fetch at all returns an error, since that yields no work to do.
+// is counted in ImportResult.Failed and does not abort the run.
+//
+// A fetch that fails part-way still hands back what it collected, and those
+// posts are imported before the error is returned. That matters most for a
+// rate limit: the posts already in hand are the only work this run will get,
+// and discarding them would mean re-fetching them after the cooldown — more
+// requests against the endpoint that just asked for fewer.
 func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
-	posts, err := p.Fetcher.FetchNewPosts(ctx)
-	if err != nil {
-		return ImportResult{}, fmt.Errorf("pipeline: fetch posts: %w", err)
+	posts, fetchErr := p.Fetcher.FetchNewPosts(ctx)
+	if fetchErr != nil && len(posts) == 0 {
+		return ImportResult{}, fmt.Errorf("pipeline: fetch posts: %w", fetchErr)
 	}
 
 	var result ImportResult
 	for _, post := range posts {
+		// Checked per post rather than only before the loop: extraction can
+		// make a network call per item, so a run over 50 posts is where a
+		// shutdown actually needs to take effect.
+		if err := ctx.Err(); err != nil {
+			slog.Warn("import: cancelled mid-run", "error", err, "result", result)
+			return result, fmt.Errorf("pipeline: %w", err)
+		}
 		result.Seen++
 
 		if _, err := p.Recipes.GetBySource(ctx, post.Source); err == nil {
 			result.Skipped++
 			continue
 		} else if !errors.Is(err, repository.ErrNotFound) {
+			// Every Failed branch below names its stage. The tally alone says
+			// a post failed; it never said where, and these four failures need
+			// four different responses from whoever reads the log.
 			result.Failed++
+			slog.Warn("import: post failed", "stage", "dedupe-lookup", "source", post.Source, "error", err)
 			continue
 		}
 
@@ -88,6 +110,7 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 		}
 		if err != nil {
 			result.Failed++
+			slog.Warn("import: post failed", "stage", "extract", "source", post.Source, "error", err)
 			continue
 		}
 		// The rules-only path has no sentinel of its own: a caption without
@@ -105,14 +128,23 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 		recipe, err := p.toRecipe(ctx, post, extracted)
 		if err != nil {
 			result.Failed++
+			slog.Warn("import: post failed", "stage", "resolve-lookups", "source", post.Source, "error", err)
 			continue
 		}
 
 		if err := p.Recipes.Create(ctx, recipe); err != nil {
 			result.Failed++
+			slog.Warn("import: post failed", "stage", "store", "source", post.Source, "error", err)
 			continue
 		}
 		result.Imported++
+		if extracted.Degraded {
+			result.Degraded++
+		}
+	}
+
+	if fetchErr != nil {
+		return result, fmt.Errorf("pipeline: fetch posts: %w", fetchErr)
 	}
 	return result, nil
 }

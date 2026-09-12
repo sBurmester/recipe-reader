@@ -47,10 +47,19 @@ export function renderImportPage(container: HTMLElement): void {
     triggerBtn.removeAttribute("disabled");
   }
 
+  function stateLine(s: ImportStatus): string {
+    if (s.running) return "Läuft…";
+    // A cooldown is not "Bereit": a trigger during one is refused with 429.
+    if (s.cooldown_seconds) {
+      return `Pausiert (Instagram-Ratelimit), weiter in ${Math.ceil(s.cooldown_seconds / 60)} Min.`;
+    }
+    return "Bereit.";
+  }
+
   function renderStatus(s: ImportStatus): void {
     clear(statusEl);
     statusEl.append(
-      el("p", {}, [s.running ? "Läuft…" : "Bereit."]),
+      el("p", {}, [stateLine(s)]),
       el("p", {}, [`Letzter Lauf: ${formatLastRun(s.last_run)}`]),
       el("ul", {}, [
         el("li", {}, [`Gesehen: ${s.seen}`]),
@@ -59,6 +68,11 @@ export function renderImportPage(container: HTMLElement): void {
         el("li", {}, [`Kein Rezept erkannt: ${s.no_recipe}`]),
         el("li", {}, [`Fehlgeschlagen: ${s.failed}`]),
       ]),
+      // Only shown when it happened: a permanent "Degraded: 0" would be noise,
+      // where a non-zero count is the signal that the LLM is not working.
+      ...(s.degraded
+        ? [el("p", { class: "error" }, [`${s.degraded} Rezept(e) nur regelbasiert extrahiert — LLM nicht erreichbar.`])]
+        : []),
       ...(s.error ? [el("p", { class: "error" }, [`Fehler: ${s.error}`])] : []),
     );
     if (!s.running) triggerBtn.removeAttribute("disabled");

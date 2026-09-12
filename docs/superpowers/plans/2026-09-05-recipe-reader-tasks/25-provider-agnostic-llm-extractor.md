@@ -1,6 +1,18 @@
 > Part of the [Recipe Reader Implementation Plan](../2026-09-05-recipe-reader-implementation.md) — Phase 2: Recipe Extraction Engine (follow-up, added after Tasks 6–9 shipped).
 >
-> **Status:** [ ] not started
+> **Status:** [x] done — merged from the unmerged branch
+> `feat/provider-agnostic-llm-extractor` (commit `4bbe23e`) on 2026-09-12 as part
+> of review task T-18, with the composition root rewired (the original commit
+> left `cmd/recipe-reader/main.go` on the two-argument constructor, so the
+> branch never compiled against `main`).
+>
+> **One requirement below is deliberately superseded.** This task specified that
+> "the fixed `Confidence` values (0.9 / 0 on `NO_RECIPE_FOUND`) … stay
+> **exactly** as defined". Review finding `extraction` E2 (rated 7.8) established
+> that the fixed 0.9 made `needs_review` unreachable for every LLM result
+> containing a recipe, so review task T-04 replaced it with a derived score and a
+> typed `ErrNoRecipe`. The `record_recipe` schema therefore carries an extra
+> required `confidence` field, shared by both transports.
 
 # Task 25: Provider-Agnostic LLM Extractor (OpenAI-compatible + Anthropic)
 

@@ -3,7 +3,7 @@
 **Derived from:** the six-reviewer panel of 2026-09-11 ([index](README.md)),
 as adjudicated in the [consensus record](2026-09-11-consensus.md)
 **Source findings:** 66 post-round (72 entering, 1 withdrawn, 5 merged), **62 tasks**
-**Status:** in progress — bands ≥ 7.0 being worked
+**Status:** in progress — bands ≥ 6.0 done (11 of 62)
 
 Mark a task `[x]` when it is done. Each task cites the finding IDs it closes.
 
@@ -169,7 +169,7 @@ Strict rating order is still not the best execution order:
 
 ## Band 6.0 – 6.9 (4 tasks)
 
-- [ ] **T-23 · 6.4 · S** — Make `--extraction-mode` mean what it says
+- [x] **T-23 · 6.4 · S** — Make `--extraction-mode` mean what it says
       *Closes:* `go` #6 — **RAISED in round 2** (chair ruling R6), the only
       finding both reporting reviewers independently nominated as under-rated.
       `EXTRACTION_MODE=llm` with a valid API key does not merely skip the LLM —
@@ -180,17 +180,28 @@ Strict rating order is still not the best execution order:
       `run()`; for `llm`, pass the LLM extractor as the sole extractor. Log the
       selected mode at startup.
       `internal/config/config.go:26`, `cmd/recipe-reader/main.go:61`
+      **DONE.** `enum:"rule,llm,hybrid"` on the kong tag, all three branches in
+      `newExtractor`, and the selected mode logged at startup. `llm` with no API
+      key is now a **startup refusal**, not a silent downgrade — and extractor
+      construction moved ahead of `db.Migrate` so a misconfiguration is not
+      buried under a migration error. Verified in the built image.
       **This is a recorded, undecided defect that shipped.** Task 18's note 3
       says *"Open question — `EXTRACTION_MODE=llm` silently runs rules-only …
       needs a decision"*, and the task is marked `[x] done`. Make the decision.
       → Shares an edit site with T-18; do them together.
 
-- [ ] **T-12 · 6.2 · M** — Handle HTTP 429 as a rate limit, not a generic 4xx
+- [x] **T-12 · 6.2 · M** — Handle HTTP 429 as a rate limit, not a generic 4xx
       *Closes:* `integration` I4 — return collected posts with a typed
       `ErrRateLimited`, add a `Worker` cooldown, make `handleImportRun` refuse
       during it. `internal/instagram/saved.go:85-88`, `internal/pipeline/pipeline.go:49-52`
+      **DONE.** `instagram.ErrRateLimited` covers all three throttle shapes
+      (`ClientThrottled`, `RateLimitError`, `PleaseWaitFewMinutes`). `pageMedia`
+      returns what it collected alongside any error and `Pipeline.Run` imports
+      it before returning the error, so a throttled walk is not re-fetched after
+      the cooldown. `Worker` stands down for 30 minutes; `POST /api/import/run`
+      answers 429 with `Retry-After`; `Worker.Status()` became a struct.
 
-- [ ] **T-15 · 6.0 · M** — Add structured logging inside `internal/`
+- [x] **T-15 · 6.0 · M** — Add structured logging inside `internal/`
       *Closes:* `extraction` E8 (6.0), `go` #5 (5.8), `integration` I10 (3.6)
       One theme, three sites, three signals — the chair preserved the split
       because each needs a different one. **Order re-ranked:** the hybrid's
@@ -202,8 +213,15 @@ Strict rating order is still not the best execution order:
       `Failed` branches, plus a `ctx.Err()` check at the top of the loop;
       (3) `internal/instagram/saved.go:93-105` — a dropped-item counter, where
       `dropped > 0 && len(out) == 0` should be an error, not an empty success.
+      **DONE, all three.** (1) `slog.Warn` plus a new `ExtractedRecipe.Degraded`
+      flag, counted into `ImportResult.Degraded` and reported by the status
+      endpoint and the import page — the "invisible in both directions" part of
+      E8 needed a product-visible signal, not just a log line. (2) Four
+      stage-tagged warns (`dedupe-lookup`, `extract`, `resolve-lookups`,
+      `store`) plus a per-post `ctx.Err()` check. (3) `ErrSchemaDrift` when a
+      page returns items and none are readable; a warn when only some are.
 
-- [ ] **T-18 · 6.0 · L** — Test the riskiest untested code
+- [x] **T-18 · 6.0 · L** — Test the riskiest untested code
       *Closes:* `delivery` D5 (6.0), `extraction` E7 (5.5)
       **RESHAPED in round 2 — step 1 is already written.** The seam E7 asks for
       exists on the unmerged local branch `feat/provider-agnostic-llm-extractor`
@@ -221,6 +239,23 @@ Strict rating order is still not the best execution order:
       (2) cover `pageMedia` against a fake (needs T-11's seam); (3) extract
       `run()`'s wiring into a testable `newServer(cfg)`.
       → The `WithRequestTimeout` seam T-20 needs comes with the merge.
+      **DONE — ported rather than merged, and one round-2 claim is wrong.**
+      · Step 1: `llm_provider.go` and `llm_provider_test.go` were taken from
+        `4bbe23e` and `main.go` rewired, but not via `git merge`. The branch
+        keeps `Confidence: 0.9` and the `NO_RECIPE_FOUND` string deliberately,
+        and merging it as-is would have **reverted T-04 and T-03**. The seam is
+        in; the confidence work sits on top; the shared `record_recipe` schema
+        now carries the required `confidence` field for *both* transports,
+        built from one property set so they cannot drift.
+      · Step 2 was already closed by T-11's `requester` seam.
+      · Step 3: `newExtractor(cfg)` and `newServer(cfg, deps)` are split out of
+        `run()` and covered in `cmd/recipe-reader/main_test.go`.
+      · **CORRECTION to round 2:** "the `WithRequestTimeout` seam T-20 needs
+        comes with the merge" is false. `4bbe23e` adds no timeout option —
+        `LLMConfig` is `{Provider, APIKey, Model, BaseURL}` and nothing on the
+        branch bounds the model call. **T-20 still has to build its own seam.**
+      · `docs/superpowers/plans/…/25-provider-agnostic-llm-extractor.md` is
+        marked done, with the superseded Confidence requirement recorded.
 
 ## Band 5.0 – 5.9 (12 tasks)
 
@@ -312,10 +347,10 @@ a finding. The GO-2026-5932 provenance note lives in the security review's
 | --- | --- | --- |
 | ≥ 8.0 | 1 | 1 |
 | 7.0 – 7.9 | 6 | 6 |
-| 6.0 – 6.9 | 4 | 0 |
+| 6.0 – 6.9 | 4 | 4 |
 | 5.0 – 5.9 | 12 | 0 |
 | 4.0 – 4.9 | 10 | 0 |
 | 3.0 – 3.9 | 12 | 0 |
 | 2.0 – 2.9 | 15 | 0 |
 | < 2.0 | 2 | 0 |
-| **Total** | **62** | **7** |
+| **Total** | **62** | **11** |

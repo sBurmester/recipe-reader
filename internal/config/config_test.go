@@ -163,3 +163,62 @@ func TestLoad_CORSOriginsSplitOnComma(t *testing.T) {
 		t.Errorf("CORSOrigins = %v, want both origins", cfg.CORSOrigins)
 	}
 }
+
+// EXTRACTION_MODE used to accept anything, and only "hybrid" was ever
+// inspected — so a typo silently selected the weakest extractor rather than
+// failing. The enum is what makes a wrong value loud.
+func TestLoad_RejectsUnknownExtractionMode(t *testing.T) {
+	if _, err := load([]string{"--extraction-mode", "banana"}); err == nil {
+		t.Error("load() error = nil, want a refusal for an unknown extraction mode")
+	}
+	for _, mode := range []string{"rule", "llm", "hybrid"} {
+		if _, err := load([]string{"--extraction-mode", mode}); err != nil {
+			t.Errorf("load(--extraction-mode %s) error = %v", mode, err)
+		}
+	}
+}
+
+func TestLoad_RejectsUnknownLLMProvider(t *testing.T) {
+	if _, err := load([]string{"--llm-provider", "gemini"}); err == nil {
+		t.Error("load() error = nil, want a refusal for an unsupported provider")
+	}
+}
+
+func TestLoad_PublishThresholdDefaultsAboveTheFallbackThreshold(t *testing.T) {
+	clearEnv(t, "EXTRACTION_CONFIDENCE_THRESHOLD", "EXTRACTION_PUBLISH_THRESHOLD")
+
+	cfg, err := load(nil)
+	if err != nil {
+		t.Fatalf("load() error = %v", err)
+	}
+	// Publishing without review must be the stricter of the two questions;
+	// they were one number, which is what made needs_review unreachable.
+	if cfg.ExtractionPublishThreshold <= cfg.ExtractionThreshold {
+		t.Errorf("publish threshold %v is not stricter than the fallback threshold %v",
+			cfg.ExtractionPublishThreshold, cfg.ExtractionThreshold)
+	}
+}
+
+// LLM_* wins where set, and the older ANTHROPIC_* names stay authoritative for
+// the provider they were named after.
+func TestLLMSettings_Precedence(t *testing.T) {
+	cfg := Config{
+		LLMProvider: "anthropic", LLMAPIKey: "sk-llm", LLMModel: "claude-new",
+		AnthropicAPIKey: "sk-ant", AnthropicModel: "claude-old",
+	}
+	settings, ok := cfg.LLMSettings()
+	if !ok || settings.APIKey != "sk-llm" || settings.Model != "claude-new" {
+		t.Errorf("settings = %+v, ok = %v, want the LLM_* values to win", settings, ok)
+	}
+
+	fallback := Config{LLMProvider: "", AnthropicAPIKey: "sk-ant", AnthropicModel: "claude-old"}
+	settings, ok = fallback.LLMSettings()
+	if !ok || settings.Provider != "anthropic" || settings.APIKey != "sk-ant" || settings.Model != "claude-old" {
+		t.Errorf("settings = %+v, ok = %v, want the ANTHROPIC_* fallbacks", settings, ok)
+	}
+
+	none := Config{LLMProvider: "anthropic"}
+	if _, ok := none.LLMSettings(); ok {
+		t.Error("LLMSettings() ok = true with no key configured anywhere")
+	}
+}

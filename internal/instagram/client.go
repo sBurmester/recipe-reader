@@ -33,6 +33,15 @@ const (
 // where a transport error is something to wait out.
 var ErrReauthRequired = errors.New("instagram: re-authentication required")
 
+// ErrRateLimited reports that Instagram is throttling this account.
+//
+// The dependency already distinguishes a 429 from any other 4xx, but nothing
+// upstream of it did: a throttle arrived as an ordinary fetch failure, the run
+// ended, and the next scheduled run walked straight back into it. Naming it is
+// what lets the worker back off instead — and backing off is the whole defence
+// an unofficial client has against being flagged.
+var ErrRateLimited = errors.New("instagram: rate limited")
+
 // Client wraps the unofficial instago Instagram client with the subset of
 // behaviour the import pipeline needs: a login that transparently reuses a
 // persisted session and re-establishes an expired one, plus the saved-post /
@@ -126,6 +135,8 @@ func (c *Client) do(ctx context.Context, opts ig.PrivateRequestOpts) (map[string
 	switch {
 	case err == nil:
 		return body, nil
+	case isRateLimited(err):
+		return nil, fmt.Errorf("%w: %w", ErrRateLimited, err)
 	case isTerminalAuthError(err):
 		return nil, fmt.Errorf("%w: %w", ErrReauthRequired, err)
 	case !isSessionExpired(err):
@@ -136,10 +147,16 @@ func (c *Client) do(ctx context.Context, opts ig.PrivateRequestOpts) (map[string
 		return nil, fmt.Errorf("%w: %w", ErrReauthRequired, reauthErr)
 	}
 	body, err = c.request(ctx, opts)
-	if err != nil && (isSessionExpired(err) || isTerminalAuthError(err)) {
+	switch {
+	case err == nil:
+		return body, nil
+	case isRateLimited(err):
+		return nil, fmt.Errorf("%w: %w", ErrRateLimited, err)
+	case isSessionExpired(err), isTerminalAuthError(err):
 		return nil, fmt.Errorf("%w: %w", ErrReauthRequired, err)
+	default:
+		return nil, err
 	}
-	return body, err
 }
 
 // request is do without the re-authentication, so that the retry cannot
@@ -218,6 +235,19 @@ func (c *Client) reauthenticate(ctx context.Context) error {
 func isSessionExpired(err error) bool {
 	var loginRequired *igerrors.LoginRequired
 	return errors.As(err, &loginRequired)
+}
+
+// isRateLimited reports whether err says Instagram is throttling this account.
+// All three cases mean the same thing operationally — stop sending requests for
+// a while — even though the API expresses them as a 429, a structured
+// rate_limit_error body, and a "Please wait a few minutes" message.
+func isRateLimited(err error) bool {
+	var (
+		throttled  *igerrors.ClientThrottled
+		rateLimit  *igerrors.RateLimitError
+		pleaseWait *igerrors.PleaseWaitFewMinutes
+	)
+	return errors.As(err, &throttled) || errors.As(err, &rateLimit) || errors.As(err, &pleaseWait)
 }
 
 // isTerminalAuthError reports whether err says the account needs human

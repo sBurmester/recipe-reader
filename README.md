@@ -74,11 +74,16 @@ require `Content-Type: application/json` and, when `API_TOKEN` is configured, an
 | `GET` | `/api/categories` | List all categories. |
 | `GET` | `/api/units` | List all units. |
 | `GET` | `/api/ingredients` | List all known ingredients. |
-| `POST` | `/api/import/run` | Trigger an import. Returns `202` immediately; the run happens in the background. |
-| `GET` | `/api/import/status` | Last run's tally (`seen`/`imported`/`skipped`/`no_recipe`/`failed`), timestamp, and whether a run is in flight. |
+| `POST` | `/api/import/run` | Trigger an import. Returns `202` immediately; the run happens in the background. Answers `429` with `Retry-After` while an Instagram rate-limit cooldown is in effect. |
+| `GET` | `/api/import/status` | Last run's tally (`seen`/`imported`/`skipped`/`no_recipe`/`degraded`/`failed`), timestamp, whether a run is in flight, and `cooldown_until`/`cooldown_seconds` while rate-limited. |
 
 Recipe ingredients and categories are written by name — the API resolves them to lookup rows,
 creating any it hasn't seen before, so callers never deal in lookup IDs.
+
+`degraded` counts imported recipes the rules produced after the LLM call failed. It overlaps `imported`
+rather than partitioning `seen`: a run where the two are equal is a run where the LLM never worked at
+all. Before this existed, that failure was invisible in both directions — the tally reported success
+while quality dropped, so an expired API key read as a healthy run over weak captions.
 
 `no_recipe` counts captions that carried no recipe. They are reported apart from `skipped` and
 `failed` because a saved-posts feed legitimately contains things that are not recipes: folding
@@ -89,7 +94,37 @@ The two `/api/import/*` routes return `503 {"error":"import worker not configure
 Instagram credentials are set, since there is no worker to drive. Every other route works
 normally in that state, serving whatever is already in the database.
 
-## Extraction and confidence
+## Extraction
+
+`EXTRACTION_MODE` selects the engine, and each value now does what its name says:
+
+| Mode | Behaviour |
+| --- | --- |
+| `rule` | The rule-based parser only. No API key needed, no LLM calls. |
+| `llm` | The LLM extractor only. **Refuses to start without an API key** — asking for the LLM and configuring no key is a broken deployment, not a rules-only one. |
+| `hybrid` (default) | Rules first, LLM only when the rules fall short. With no API key it runs rules-only and says so at startup. |
+
+Until this was fixed, only `hybrid` was ever inspected: `EXTRACTION_MODE=llm` fell through to exactly the
+same nil-LLM hybrid as `EXTRACTION_MODE=rule`, so asking for the LLM selected the *weakest* extractor, on
+every post of every run, with a paid key sitting unused. The mode is now an enum (a typo is rejected at
+startup) and the selected mode is logged at boot.
+
+### Providers
+
+The LLM extractor speaks two transports, selected with `LLM_PROVIDER`:
+
+- **`anthropic`** (default) — the native Messages API with a forced `record_recipe` tool call.
+- **`openai`** — any OpenAI-compatible `/chat/completions` endpoint. Point `LLM_BASE_URL` at OpenAI, Groq,
+  Together, OpenRouter, Fireworks, a local Ollama on `/v1`, vLLM or LM Studio. `LLM_MODEL` is required here.
+
+`LLM_API_KEY` / `LLM_MODEL` / `LLM_BASE_URL` configure whichever provider is selected. The older
+`ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` still work and remain authoritative for the `anthropic`
+provider; they are not borrowed by the `openai` one.
+
+Both transports build their `record_recipe` schema from the same shared property set, so the two cannot
+drift into asking the model for different fields.
+
+### Confidence
 
 Every extraction carries a confidence between 0 and 1, and two separate thresholds act on it:
 
@@ -117,6 +152,16 @@ per-run cap counts only *new* posts. An account with more saved posts than the c
 drains across successive runs. Before this, the cap counted every post the feed returned, so the
 window stayed pinned to the newest 50 for the life of the account: everything older was
 unreachable, and each run reported `Seen: 50, Skipped: 50, Imported: 0`, which reads as healthy.
+
+When Instagram throttles a run, the error is recognised as a rate limit rather than an ordinary 4xx:
+the posts already collected are still imported, and the worker then stands down for 30 minutes.
+`POST /api/import/run` answers `429` with `Retry-After` during that window rather than accepting a run
+it would silently skip. Backing off is the only defence an unofficial client has against being flagged,
+and before this the next scheduled tick walked straight back into the throttle.
+
+If the feed returns items and none of them can be read, that is reported as an error rather than an
+empty success — these endpoints are undocumented, so a field rename upstream would otherwise arrive as
+a run that imported nothing for no stated reason.
 
 Each run is bounded by a page cap as well, and every call into the Instagram client is bounded in
 time — the library exposes no context, no settable HTTP timeout and no transport hook, so the call

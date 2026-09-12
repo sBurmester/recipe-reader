@@ -3,7 +3,9 @@ package instagram
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 
 	ig "github.com/felipeinf/instago"
@@ -148,13 +150,19 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 	opts = opts.withDefaults()
 
 	var out []SavedPost
+	// dropped counts items the feed returned that this code could not read.
+	// The endpoint is unofficial and undocumented, so a field rename upstream
+	// turns every item into a silent no-op: without this counter the run
+	// reports an ordinary empty success and nothing distinguishes "nothing new
+	// was saved" from "the response shape changed".
+	dropped := 0
 	maxID := ""
 	for page := 0; len(out) < opts.MaxItems && page < opts.MaxPages; page++ {
 		// Checked between pages rather than only at the top: this is the one
 		// place cancellation can take effect, since a request already in
 		// flight cannot be interrupted (see Client.run).
 		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("instagram: fetch %s: %w", endpoint, err)
+			return out, fmt.Errorf("instagram: fetch %s: %w", endpoint, err)
 		}
 
 		params := url.Values{}
@@ -163,7 +171,11 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 		}
 		res, err := req(ctx, ig.PrivateRequestOpts{Endpoint: endpoint, Params: params})
 		if err != nil {
-			return nil, fmt.Errorf("instagram: fetch %s: %w", endpoint, err)
+			// The posts collected so far come back alongside the error rather
+			// than being thrown away. On a rate limit especially, they are the
+			// only work this run will get, and the caller can import them
+			// while it waits out the cooldown.
+			return out, fmt.Errorf("instagram: fetch %s: %w", endpoint, err)
 		}
 
 		items, _ := res["items"].([]any)
@@ -173,6 +185,7 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 		for _, raw := range items {
 			item, ok := raw.(map[string]any)
 			if !ok {
+				dropped++
 				continue
 			}
 			media, ok := item["media"].(map[string]any)
@@ -180,7 +193,11 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 				media = item // some endpoints return the media object directly
 			}
 			post, ok := extractMedia(media)
-			if !ok || opts.isKnown(ctx, post.Source) {
+			if !ok {
+				dropped++
+				continue
+			}
+			if opts.isKnown(ctx, post.Source) {
 				continue
 			}
 			out = append(out, post)
@@ -195,8 +212,27 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 		}
 		maxID = next
 	}
+
+	if dropped > 0 {
+		// Unreadable items alongside readable ones is ordinary — a saved video
+		// or a deleted post. Unreadable items and *nothing* readable is the
+		// signature of a changed response shape, and an empty success is the
+		// wrong way to report it.
+		if len(out) == 0 {
+			return nil, fmt.Errorf("instagram: fetch %s: %w: %d items returned, none readable",
+				endpoint, ErrSchemaDrift, dropped)
+		}
+		slog.Warn("instagram: some feed items could not be read",
+			"endpoint", endpoint, "dropped", dropped, "collected", len(out))
+	}
 	return out, nil
 }
+
+// ErrSchemaDrift reports that the feed returned items none of which this code
+// could read. The saved-posts endpoints are unofficial and undocumented, so
+// this is the expected shape of an upstream change — and the one failure mode
+// that otherwise arrives as a successful run that imported nothing.
+var ErrSchemaDrift = errors.New("instagram: unrecognised response shape")
 
 func extractMedia(media map[string]any) (SavedPost, bool) {
 	code, _ := media["code"].(string)

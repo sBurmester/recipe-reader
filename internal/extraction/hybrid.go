@@ -3,6 +3,7 @@ package extraction
 import (
 	"context"
 	"errors"
+	"log/slog"
 )
 
 // HybridExtractor runs the rule-based extractor first and only falls back to the
@@ -44,7 +45,16 @@ func (h *HybridExtractor) Extract(ctx context.Context, caption string) (*Extract
 		return nil, err
 	}
 	if err != nil {
-		return result, nil
+		// Say so, and mark the result. This was the worst of the three silent
+		// sites: the fallback is invisible in both directions, because the
+		// import tally reports success while quality degrades — so an expired
+		// API key, a wrong model id or a throttled provider all look exactly
+		// like a healthy run that happened to find weak captions.
+		slog.Warn("extraction: LLM fallback failed; returning the weaker rules result",
+			"error", err, "rules_confidence", result.Confidence)
+		degraded := *result
+		degraded.Degraded = true
+		return &degraded, nil
 	}
 	return llmResult, nil
 }

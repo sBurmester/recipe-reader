@@ -41,6 +41,11 @@ export interface ImportStatus {
   skipped: number;
   /** Captions that carried no recipe — not a failure, and not a duplicate. */
   no_recipe: number;
+  /** Of `imported`, how many fell back to the rules because the LLM failed. */
+  degraded: number;
   failed: number;
   error?: string;
+  /** Present only while an Instagram rate limit is being waited out. */
+  cooldown_until?: string;
+  cooldown_seconds?: number;
 }
