@@ -24,22 +24,40 @@ type PostFetcher interface {
 }
 
 // ImportResult is the per-run tally. Seen counts every post the fetcher
-// returned; the other three partition it — Imported (stored), Skipped
-// (already present, matched by source), Failed (extraction or storage
-// error on that one post).
+// returned; the other four partition it — Imported (stored), Skipped (already
+// present, matched by source), NoRecipe (the caption carried no recipe, so
+// nothing was stored), Failed (extraction or storage error on that one post).
+//
+// NoRecipe is counted apart from Skipped and Failed on purpose: a saved-posts
+// feed legitimately contains things that are not recipes, and folding them
+// into Failed would make a healthy run look broken while folding them into
+// Skipped would hide how much of the feed is noise.
 type ImportResult struct {
-	Seen, Imported, Skipped, Failed int
+	Seen, Imported, Skipped, NoRecipe, Failed int
 }
 
-// Pipeline runs one import pass over the fetcher's posts. Threshold is the
-// confidence below which an extracted recipe is stored as needs_review
-// instead of published.
+// Pipeline runs one import pass over the fetcher's posts.
+//
+// Two different questions used to share one configured number: "were the rules
+// good enough to skip the LLM" and "is this good enough to publish without a
+// human looking at it". The first belongs to the hybrid extractor and the
+// second belongs here; the second should be the stricter of the two, and
+// conflating them is half of why every LLM result published unreviewed.
 type Pipeline struct {
 	Fetcher   PostFetcher
 	Extractor extraction.Extractor
 	Recipes   repository.RecipeRepository
 	Lookups   repository.LookupRepository
+
+	// Threshold is the original single knob, kept so an existing Pipeline
+	// literal behaves as it did. Prefer PublishThreshold.
 	Threshold float64
+
+	// PublishThreshold is the confidence at or above which an extraction is
+	// stored as published rather than needs_review. Zero falls back to
+	// Threshold rather than to zero, so a partially-configured Pipeline
+	// degrades to the old behaviour instead of publishing everything.
+	PublishThreshold float64
 }
 
 // Run fetches posts and imports the new ones. A failure on any single post
@@ -64,8 +82,23 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 		}
 
 		extracted, err := p.Extractor.Extract(ctx, post.Caption)
+		if errors.Is(err, extraction.ErrNoRecipe) {
+			result.NoRecipe++
+			continue
+		}
 		if err != nil {
 			result.Failed++
+			continue
+		}
+		// The rules-only path has no sentinel of its own: a caption without
+		// the German section headers yields empty ingredients, empty
+		// instructions and a name scraped off the first line, scoring zero.
+		// Storing that produced one row per post regardless of whether any of
+		// them were recipes — and because source is UNIQUE and the pipeline
+		// skips anything already present, each junk row permanently blocked
+		// its post from ever being re-imported by a better extractor.
+		if extracted.Confidence <= 0 {
+			result.NoRecipe++
 			continue
 		}
 
@@ -89,7 +122,7 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 // (creating them on first sight) so Create only has to write IDs.
 func (p *Pipeline) toRecipe(ctx context.Context, post instagram.SavedPost, ex *extraction.ExtractedRecipe) (*domain.Recipe, error) {
 	status := domain.StatusPublished
-	if ex.Confidence < p.Threshold {
+	if ex.Confidence < p.publishThreshold() {
 		status = domain.StatusNeedsReview
 	}
 
@@ -126,4 +159,12 @@ func (p *Pipeline) toRecipe(ctx context.Context, post instagram.SavedPost, ex *e
 	}
 
 	return recipe, nil
+}
+
+// publishThreshold is PublishThreshold, or Threshold when it is unset.
+func (p *Pipeline) publishThreshold() float64 {
+	if p.PublishThreshold > 0 {
+		return p.PublishThreshold
+	}
+	return p.Threshold
 }

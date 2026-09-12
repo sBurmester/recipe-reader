@@ -25,8 +25,7 @@ and serves a searchable web UI. Single Go binary with the frontend embedded; Pos
     # extraction falls back to rules only.
 
     make db-up      # starts Postgres via docker compose
-    make frontend   # builds web/ and copies it into internal/webui/dist for embedding
-    make run        # serves on 127.0.0.1:8080
+    make run        # builds the frontend, then serves on 127.0.0.1:8080
 
 ## Configuration
 
@@ -76,14 +75,57 @@ require `Content-Type: application/json` and, when `API_TOKEN` is configured, an
 | `GET` | `/api/units` | List all units. |
 | `GET` | `/api/ingredients` | List all known ingredients. |
 | `POST` | `/api/import/run` | Trigger an import. Returns `202` immediately; the run happens in the background. |
-| `GET` | `/api/import/status` | Last run's tally (`seen`/`imported`/`skipped`/`failed`), timestamp, and whether a run is in flight. |
+| `GET` | `/api/import/status` | Last run's tally (`seen`/`imported`/`skipped`/`no_recipe`/`failed`), timestamp, and whether a run is in flight. |
 
 Recipe ingredients and categories are written by name — the API resolves them to lookup rows,
 creating any it hasn't seen before, so callers never deal in lookup IDs.
 
+`no_recipe` counts captions that carried no recipe. They are reported apart from `skipped` and
+`failed` because a saved-posts feed legitimately contains things that are not recipes: folding
+them into `failed` would make a healthy run look broken, and folding them into `skipped` would
+hide how much of the feed is noise. Nothing is stored for them.
+
 The two `/api/import/*` routes return `503 {"error":"import worker not configured"}` when no
 Instagram credentials are set, since there is no worker to drive. Every other route works
 normally in that state, serving whatever is already in the database.
+
+## Extraction and confidence
+
+Every extraction carries a confidence between 0 and 1, and two separate thresholds act on it:
+
+- **`EXTRACTION_CONFIDENCE_THRESHOLD`** (default `0.6`) — below this, the rule-based result is
+  considered too weak and the LLM extractor is tried.
+- **`EXTRACTION_PUBLISH_THRESHOLD`** (default `0.8`) — below this, a recipe is stored as
+  `needs_review` rather than `published`.
+
+They used to be one number, which made `needs_review` unreachable for any LLM result that
+contained a recipe at all. The LLM's confidence is now the minimum of two signals: the model's own
+estimate, reported through the `record_recipe` tool schema, and a structural score computed from
+what actually came back — how many ingredients, how long the instructions are, and how many
+ingredients got an amount. A confident model cannot publish a threadbare result, and a rich result
+cannot talk an uncertain model up.
+
+A caption with no recipe in it produces `extraction.ErrNoRecipe` and stores nothing. Previously
+such a post became a recipe row whose instructions were the literal string `NO_RECIPE_FOUND` —
+and since `source` is `UNIQUE` and the pipeline skips anything already present, that row
+permanently blocked the post from being re-imported by a better extractor.
+
+## Importing a backlog
+
+The fetcher pages from the head of the saved feed and skips posts already in the database, so the
+per-run cap counts only *new* posts. An account with more saved posts than the cap therefore
+drains across successive runs. Before this, the cap counted every post the feed returned, so the
+window stayed pinned to the newest 50 for the life of the account: everything older was
+unreachable, and each run reported `Seen: 50, Skipped: 50, Imported: 0`, which reads as healthy.
+
+Each run is bounded by a page cap as well, and every call into the Instagram client is bounded in
+time — the library exposes no context, no settable HTTP timeout and no transport hook, so the call
+runs in a goroutine the client stops waiting for. One call is admitted at a time; a call that
+arrives while an abandoned one is still outstanding fails with a clear error rather than racing
+it, and recovers by itself once the abandoned call returns. An expired Instagram session is
+re-established once, in place, at most once every 15 minutes — repeated logins are what Instagram
+flags — and a challenge or two-factor prompt is reported as `ErrReauthRequired` without spending a
+login attempt on it.
 
 ## Frontend
 
@@ -95,6 +137,13 @@ normally in that state, serving whatever is already in the database.
     npm --prefix web run typecheck
     npm --prefix web run build      # emits web/dist/
     make frontend                   # build and copy into internal/webui/dist for embedding
+
+`make build` and `make run` depend on `frontend`, so they cannot produce a binary that silently
+serves the placeholder page. `npm ci` inside that target only reruns when `web/package-lock.json`
+changes. The build paths that bypass the Makefile — `go build ./...`, `go install`, an IDE build —
+still can produce one, so the binary logs a warning at startup when it is carrying the
+placeholder. The placeholder itself lives in `internal/webui/placeholder/`, outside the directory
+the frontend build overwrites, so a build cannot quietly replace it and turn that warning off.
 
 Routing is hash-based (`#/`, `#/recipes/:id`, `#/import`), so the Go binary can serve the whole
 app from one embedded directory with no server-side rewrite rules.

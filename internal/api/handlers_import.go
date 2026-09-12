@@ -42,7 +42,12 @@ func (d Deps) handleImportStatus(w http.ResponseWriter, _ *http.Request) {
 		"seen":     lastResult.Seen,
 		"imported": lastResult.Imported,
 		"skipped":  lastResult.Skipped,
-		"failed":   lastResult.Failed,
+		// Reported apart from skipped and failed: a saved-posts feed
+		// legitimately contains things that are not recipes, and how many is
+		// the difference between "the importer is broken" and "most of what
+		// you saved is not a recipe".
+		"no_recipe": lastResult.NoRecipe,
+		"failed":    lastResult.Failed,
 	}
 	if lastErr != nil {
 		resp["error"] = lastErr.Error()

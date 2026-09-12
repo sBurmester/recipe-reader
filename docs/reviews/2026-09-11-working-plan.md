@@ -74,7 +74,7 @@ Strict rating order is still not the best execution order:
 
 ## Band 7.0 – 7.9 (6 tasks)
 
-- [ ] **T-04 · 7.8 · M** — Derive a real confidence value instead of asserting 0.9
+- [x] **T-04 · 7.8 · M** — Derive a real confidence value instead of asserting 0.9
       *Closes:* `extraction` E2
       Add a `confidence` field to the `record_recipe` tool schema; combine the
       model's self-report with structural checks (ingredient count, instruction
@@ -85,7 +85,7 @@ Strict rating order is still not the best execution order:
       actually contains a recipe — it remains reachable via the zero-confidence
       sentinel and the non-LLM paths.
 
-- [ ] **T-01 · 7.6 · L** — Import the backlog: page until overlap, not until a fixed count
+- [x] **T-01 · 7.6 · L** — Import the backlog: page until overlap, not until a fixed count
       *Closes:* `integration` I1
       Persist a cursor (or stop paging on the first fully-`Skipped` page) so an
       account with more than 50 saved posts imports its history. Keep the per-run
@@ -98,15 +98,24 @@ Strict rating order is still not the best execution order:
       newest-first server ordering — unverified. **Do T-43 to settle it.** The
       fix is correct either way; only the urgency is provisional.
       → Do T-11 first; this rewrites the same loop.
+      **DONE — no cursor persisted; overlap handled by skipping.** `MaxItems`
+      now counts only *new* posts: `FetchOptions.Known` (wired in `main.go` to
+      `RecipeRepository.GetBySource`) makes the loop page past what is already
+      imported, so a backlog drains across runs. A persisted cursor was
+      rejected deliberately — there is no settings table to put one in, and
+      resuming mid-feed would stop newly saved posts at the head from being
+      seen. The cost is that a steady-state run re-walks known pages up to
+      `MaxPages`, at the dependency's flat 1s pacing. **T-43 still settles the
+      magnitude**; nothing in the fix depends on it.
 
-- [ ] **T-06 · 7.6 · M** — Re-authenticate when the Instagram session expires
+- [x] **T-06 · 7.6 · M** — Re-authenticate when the Instagram session expires
       *Closes:* `integration` I2
       Detect the auth-failure class from `igerrors` and re-run `LoginOrRestore`
       **once** before failing the run, re-persisting the session. Not a retry
       loop — repeated logins are what Instagram flags.
       `internal/instagram/client.go:28-39`, `cmd/recipe-reader/main.go:71-77`
 
-- [ ] **T-11 · 7.4 · L** — Bound every Instagram call: timeout, cancellation, page cap
+- [x] **T-11 · 7.4 · L** — Bound every Instagram call: timeout, cancellation, page cap
       *Closes:* `integration` I3, `go` #3, `integration` I5 (as a constraint)
       **CORRECTED — the obvious fix does not exist.** Revision 1 said to thread
       `ctx` into `PrivateRequest` or wrap with `http.NewRequestWithContext`.
@@ -125,8 +134,18 @@ Strict rating order is still not the best execution order:
       Note the compounding: `worker.go:53-60` only clears `running` when `Run`
       returns, so one hung fetch wedges every future import until restart.
       → **Unblocks T-01, T-12, T-14, T-19.**
+      **DONE — watchdog chosen.** `Client.run` (`internal/instagram/client.go`)
+      runs each call in a goroutine and stops waiting at a 2-minute deadline,
+      above I5's 60s floor. The abandoned goroutine still writes to instago's
+      shared state when it returns, so a one-slot channel admits a single call
+      at a time: a caller that cannot get the slot fails with a diagnosable
+      error rather than racing it, and the slot comes back on its own if the
+      abandoned call finishes. `ctx` is threaded through `pageMedia`,
+      `FetchSavedPosts`, `FetchCollectionPosts`, `ListCollections` and
+      `ResolveCollectionID`, checked between pages, and `MaxPages` (default
+      100) caps a run — which also closes **T-19**'s page cap.
 
-- [ ] **T-05 · 7.2 · S** — Make `make build` depend on the frontend
+- [x] **T-05 · 7.2 · S** — Make `make build` depend on the frontend
       *Closes:* `delivery` D1
       `build: frontend`, so a fresh clone cannot silently ship the placeholder.
       If `npm ci` on every build is too slow, add a loud guard instead — a marker
@@ -136,7 +155,7 @@ Strict rating order is still not the best execution order:
       *Reproduced:* clean clone → `make build` → exit 0 → `strings` finds the
       placeholder in the binary.
 
-- [ ] **T-03 · 7.0 · S** — Stop importing captions that contain no recipe
+- [x] **T-03 · 7.0 · S** — Stop importing captions that contain no recipe
       *Closes:* `extraction` E1
       Gate on confidence before `toRecipe`, and count the skip distinctly.
       Prefer a typed outcome (`ErrNoRecipe`) over the `NO_RECIPE_FOUND` string.
@@ -292,11 +311,11 @@ a finding. The GO-2026-5932 provenance note lives in the security review's
 | Band | Tasks | Done |
 | --- | --- | --- |
 | ≥ 8.0 | 1 | 1 |
-| 7.0 – 7.9 | 6 | 0 |
+| 7.0 – 7.9 | 6 | 6 |
 | 6.0 – 6.9 | 4 | 0 |
 | 5.0 – 5.9 | 12 | 0 |
 | 4.0 – 4.9 | 10 | 0 |
 | 3.0 – 3.9 | 12 | 0 |
 | 2.0 – 2.9 | 15 | 0 |
 | < 2.0 | 2 | 0 |
-| **Total** | **62** | **1** |
+| **Total** | **62** | **7** |

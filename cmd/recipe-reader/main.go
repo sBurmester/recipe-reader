@@ -69,10 +69,14 @@ func run() error {
 	igClient := instagram.NewClient()
 	var fetcher pipeline.PostFetcher
 	if cfg.InstagramUsername != "" {
-		if err := igClient.LoginOrRestore(cfg.InstagramUsername, cfg.InstagramPassword, cfg.InstagramSessionPath); err != nil {
+		if err := igClient.LoginOrRestore(ctx, cfg.InstagramUsername, cfg.InstagramPassword, cfg.InstagramSessionPath); err != nil {
 			slog.Warn("instagram login failed; import worker will not run", "error", err)
 		} else {
-			fetcher = &instagram.PipelineFetcher{Client: igClient, CollectionName: cfg.InstagramCollection}
+			fetcher = &instagram.PipelineFetcher{
+				Client:         igClient,
+				CollectionName: cfg.InstagramCollection,
+				Options:        instagram.FetchOptions{Known: alreadyImported(recipes)},
+			}
 		}
 	}
 
@@ -80,7 +84,9 @@ func run() error {
 	if fetcher != nil {
 		p := &pipeline.Pipeline{
 			Fetcher: fetcher, Extractor: extractor,
-			Recipes: recipes, Lookups: lookups, Threshold: cfg.ExtractionThreshold,
+			Recipes: recipes, Lookups: lookups,
+			Threshold:        cfg.ExtractionThreshold,
+			PublishThreshold: cfg.ExtractionPublishThreshold,
 		}
 		worker = pipeline.NewWorker(p, cfg.ImportInterval)
 		worker.Start(ctx)
@@ -103,6 +109,9 @@ func run() error {
 	frontend, err := webui.Handler()
 	if err != nil {
 		return err
+	}
+	if webui.IsPlaceholder() {
+		slog.Warn("serving the placeholder frontend, not a real build — run `make frontend` (or `make build`, which now depends on it) and rebuild")
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiRouter)
@@ -130,4 +139,27 @@ func run() error {
 	}
 	<-shutdownDone
 	return nil
+}
+
+// alreadyImported adapts the recipe repository to instagram.FetchOptions.Known,
+// which is what lets the fetcher page past posts it has already imported and
+// reach the backlog behind them.
+//
+// A lookup failure answers "not known" rather than aborting the fetch: the
+// pipeline re-checks authoritatively before writing, so the cost of being
+// wrong here is one redundant extraction, where the cost of failing the run is
+// the whole import. The error is logged, because a repository that is failing
+// every lookup would otherwise show up only as an import that quietly does
+// more work than it needs to.
+func alreadyImported(recipes repository.RecipeRepository) func(context.Context, string) bool {
+	return func(ctx context.Context, source string) bool {
+		_, err := recipes.GetBySource(ctx, source)
+		if err == nil {
+			return true
+		}
+		if !errors.Is(err, repository.ErrNotFound) {
+			slog.Warn("import: dedupe lookup failed; treating post as new", "source", source, "error", err)
+		}
+		return false
+	}
 }

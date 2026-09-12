@@ -39,6 +39,8 @@ export interface ImportStatus {
   seen: number;
   imported: number;
   skipped: number;
+  /** Captions that carried no recipe — not a failure, and not a duplicate. */
+  no_recipe: number;
   failed: number;
   error?: string;
 }

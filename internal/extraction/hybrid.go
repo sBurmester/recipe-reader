@@ -1,6 +1,9 @@
 package extraction
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 // HybridExtractor runs the rule-based extractor first and only falls back to the
 // LLM extractor when the rules result's Confidence is below Threshold. It is the
@@ -23,6 +26,11 @@ func NewHybridExtractor(rules, llm Extractor, threshold float64) *HybridExtracto
 // is returned as-is. Otherwise the LLM extractor is tried; a low-confidence
 // rules result is still returned if the LLM call fails, so an LLM hiccup never
 // fails the whole import (the pipeline flags the weak result as needs_review).
+//
+// ErrNoRecipe is the exception to that fallback. It is not a hiccup — it is the
+// LLM having read the caption and found no recipe, which is a better-informed
+// answer than a rules pass that scraped a couple of lines out of a gym selfie.
+// Returning the rules result there is precisely how junk rows got imported.
 func (h *HybridExtractor) Extract(ctx context.Context, caption string) (*ExtractedRecipe, error) {
 	result, err := h.Rules.Extract(ctx, caption)
 	if err != nil {
@@ -32,6 +40,9 @@ func (h *HybridExtractor) Extract(ctx context.Context, caption string) (*Extract
 		return result, nil
 	}
 	llmResult, err := h.LLM.Extract(ctx, caption)
+	if errors.Is(err, ErrNoRecipe) {
+		return nil, err
+	}
 	if err != nil {
 		return result, nil
 	}

@@ -77,3 +77,21 @@ func TestHybridExtractor_LLMErrorFallsBackToRulesResult(t *testing.T) {
 		t.Errorf("Name = %q, want A (fell back to rules result on LLM error)", result.Name)
 	}
 }
+
+// ErrNoRecipe is not a hiccup to fall back from. The LLM has read the caption
+// and found no recipe, which beats a rules pass that scraped two lines out of
+// a gym selfie — returning the rules result here is exactly how junk rows got
+// imported.
+func TestHybridExtractor_NoRecipeIsNotSwallowedAsAnLLMFailure(t *testing.T) {
+	rules := &stubExtractor{result: &ExtractedRecipe{Name: "Erste Zeile der Bildunterschrift", Confidence: 0.5}}
+	llm := &stubExtractor{err: ErrNoRecipe}
+	h := NewHybridExtractor(rules, llm, 0.6)
+
+	result, err := h.Extract(context.Background(), "caption")
+	if !errors.Is(err, ErrNoRecipe) {
+		t.Fatalf("Extract() error = %v, want ErrNoRecipe", err)
+	}
+	if result != nil {
+		t.Errorf("result = %+v, want nil", result)
+	}
+}

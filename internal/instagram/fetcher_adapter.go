@@ -14,25 +14,29 @@ import "context"
 type PipelineFetcher struct {
 	Client         *Client
 	CollectionName string
-	MaxItemsPerRun int
+
+	// Options bounds one run. Its Known hook is what makes the fetcher skip
+	// past already-imported posts instead of re-collecting the newest page
+	// every time; main.go supplies it from the recipe repository.
+	Options FetchOptions
 }
 
-// FetchNewPosts returns up to MaxItemsPerRun saved posts (defaulting to 50
-// when unset), drawn from CollectionName when one is configured and from the
-// account's full saved feed otherwise. It returns every post it finds — the
-// "new" in the name is the pipeline's job, which dedupes by source before
-// importing.
-func (f *PipelineFetcher) FetchNewPosts(_ context.Context) ([]SavedPost, error) {
-	maxItems := f.MaxItemsPerRun
-	if maxItems <= 0 {
-		maxItems = 50
-	}
+// FetchNewPosts returns up to Options.MaxItems saved posts the importer has
+// not seen before, drawn from CollectionName when one is configured and from
+// the account's full saved feed otherwise.
+//
+// The "new" in the name used to be aspirational — the fetcher returned
+// whatever was at the head of the feed and left deduplication entirely to the
+// pipeline, which is why a backlog past the first page never imported. With
+// Options.Known wired up it is now accurate, though the pipeline still dedupes
+// authoritatively before writing.
+func (f *PipelineFetcher) FetchNewPosts(ctx context.Context) ([]SavedPost, error) {
 	if f.CollectionName == "" {
-		return f.Client.FetchSavedPosts(maxItems)
+		return f.Client.FetchSavedPosts(ctx, f.Options)
 	}
-	collectionID, err := f.Client.ResolveCollectionID(f.CollectionName)
+	collectionID, err := f.Client.ResolveCollectionID(ctx, f.CollectionName)
 	if err != nil {
 		return nil, err
 	}
-	return f.Client.FetchCollectionPosts(collectionID, maxItems)
+	return f.Client.FetchCollectionPosts(ctx, collectionID, f.Options)
 }

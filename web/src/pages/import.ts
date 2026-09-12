@@ -56,6 +56,7 @@ export function renderImportPage(container: HTMLElement): void {
         el("li", {}, [`Gesehen: ${s.seen}`]),
         el("li", {}, [`Importiert: ${s.imported}`]),
         el("li", {}, [`Übersprungen (bereits vorhanden): ${s.skipped}`]),
+        el("li", {}, [`Kein Rezept erkannt: ${s.no_recipe}`]),
         el("li", {}, [`Fehlgeschlagen: ${s.failed}`]),
       ]),
       ...(s.error ? [el("p", { class: "error" }, [`Fehler: ${s.error}`])] : []),

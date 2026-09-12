@@ -1,7 +1,159 @@
 // internal/instagram/saved_test.go
 package instagram
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"testing"
+
+	ig "github.com/felipeinf/instago"
+)
+
+// feed builds a stub requester over a fixed list of pages, so the paging loop
+// can be driven without a live account. Each page is a slice of post codes;
+// the cursor is the page index.
+func feed(pages [][]string) (requester, *int) {
+	calls := 0
+	return func(_ context.Context, opts ig.PrivateRequestOpts) (map[string]any, error) {
+		calls++
+		index := 0
+		if cursor := opts.Params.Get("max_id"); cursor != "" {
+			if _, err := fmt.Sscanf(cursor, "page-%d", &index); err != nil {
+				return nil, err
+			}
+		}
+		if index >= len(pages) {
+			return map[string]any{"items": []any{}}, nil
+		}
+		items := make([]any, 0, len(pages[index]))
+		for _, code := range pages[index] {
+			items = append(items, map[string]any{"media": map[string]any{"code": code}})
+		}
+		res := map[string]any{"items": items}
+		if index+1 < len(pages) {
+			res["next_max_id"] = fmt.Sprintf("page-%d", index+1)
+		}
+		return res, nil
+	}, &calls
+}
+
+func source(code string) string { return "https://www.instagram.com/p/" + code + "/" }
+
+func codes(posts []SavedPost) []string {
+	out := make([]string, 0, len(posts))
+	for _, p := range posts {
+		out = append(out, p.Source)
+	}
+	return out
+}
+
+// This is the backlog defect. With the newest 50 posts already imported, the
+// old loop counted them against maxItems, stopped at the end of the first
+// page, and reported a healthy run that imported nothing — leaving everything
+// older permanently unreachable. Paging past the known ones is the fix.
+func TestPageMedia_PagesPastAlreadyImportedPosts(t *testing.T) {
+	req, calls := feed([][]string{{"a", "b"}, {"c", "d"}, {"e", "f"}})
+	imported := map[string]bool{source("a"): true, source("b"): true, source("c"): true}
+
+	posts, err := pageMedia(context.Background(), req, "feed/saved/posts/", FetchOptions{
+		MaxItems: 2,
+		Known:    func(_ context.Context, s string) bool { return imported[s] },
+	})
+	if err != nil {
+		t.Fatalf("pageMedia() error = %v", err)
+	}
+
+	want := []string{source("d"), source("e")}
+	if got := codes(posts); len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("posts = %v, want the first two unimported ones %v", got, want)
+	}
+	if *calls < 3 {
+		t.Errorf("requests = %d, want at least 3 — the known posts must not end the walk", *calls)
+	}
+}
+
+// MaxItems still bounds a run: the backlog drains a slice at a time rather
+// than in one unbounded fetch.
+func TestPageMedia_StopsAtMaxItems(t *testing.T) {
+	req, _ := feed([][]string{{"a", "b", "c"}, {"d", "e", "f"}})
+
+	posts, err := pageMedia(context.Background(), req, "feed/saved/posts/", FetchOptions{MaxItems: 4})
+	if err != nil {
+		t.Fatalf("pageMedia() error = %v", err)
+	}
+	if len(posts) != 4 {
+		t.Errorf("len(posts) = %d, want 4", len(posts))
+	}
+}
+
+// A feed that keeps handing back a cursor — a server-side loop, or simply an
+// account with more history than one run should walk — must not page forever.
+func TestPageMedia_StopsAtMaxPages(t *testing.T) {
+	// Every page is already imported, so nothing ever fills MaxItems and only
+	// the page cap can end the walk.
+	pages := make([][]string, 50)
+	for i := range pages {
+		pages[i] = []string{fmt.Sprintf("code-%d", i)}
+	}
+	req, calls := feed(pages)
+
+	posts, err := pageMedia(context.Background(), req, "feed/saved/posts/", FetchOptions{
+		MaxItems: 100,
+		MaxPages: 3,
+		Known:    func(context.Context, string) bool { return true },
+	})
+	if err != nil {
+		t.Fatalf("pageMedia() error = %v", err)
+	}
+	if len(posts) != 0 {
+		t.Errorf("len(posts) = %d, want 0", len(posts))
+	}
+	if *calls != 3 {
+		t.Errorf("requests = %d, want exactly MaxPages (3)", *calls)
+	}
+}
+
+// A request already in flight cannot be interrupted, so between pages is the
+// one place cancellation can take effect. Without this check a shutdown waits
+// out the entire walk.
+func TestPageMedia_StopsOnCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	req, calls := feed([][]string{{"a"}, {"b"}, {"c"}})
+
+	cancelling := func(c context.Context, opts ig.PrivateRequestOpts) (map[string]any, error) {
+		cancel()
+		return req(c, opts)
+	}
+
+	if _, err := pageMedia(ctx, cancelling, "feed/saved/posts/", FetchOptions{MaxItems: 10}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("pageMedia() error = %v, want context.Canceled", err)
+	}
+	if *calls != 1 {
+		t.Errorf("requests = %d, want 1 — the loop should stop before the next page", *calls)
+	}
+}
+
+func TestPageMedia_EmptyFeed(t *testing.T) {
+	req, _ := feed(nil)
+	posts, err := pageMedia(context.Background(), req, "feed/saved/posts/", FetchOptions{})
+	if err != nil {
+		t.Fatalf("pageMedia() error = %v", err)
+	}
+	if len(posts) != 0 {
+		t.Errorf("len(posts) = %d, want 0", len(posts))
+	}
+}
+
+func TestFetchOptions_Defaults(t *testing.T) {
+	opts := FetchOptions{}.withDefaults()
+	if opts.MaxItems != defaultMaxItems || opts.MaxPages != defaultMaxPages {
+		t.Errorf("withDefaults() = %+v, want the documented bounds", opts)
+	}
+	if opts.isKnown(context.Background(), "anything") {
+		t.Error("a nil Known must report nothing as known")
+	}
+}
 
 func TestExtractMedia(t *testing.T) {
 	media := map[string]any{

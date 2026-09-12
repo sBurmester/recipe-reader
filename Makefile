@@ -1,11 +1,21 @@
 .PHONY: build test lint vuln check run docker frontend sqlc-generate db-up
 
-frontend:
+# npm writes this file itself, so it is a real dependency target rather than a
+# stamp we invent: `npm ci` reruns only when the lockfile actually changes.
+# Without that, making `build` depend on `frontend` would reinstall the whole
+# tree on every build.
+NODE_MODULES := web/node_modules/.package-lock.json
+
+$(NODE_MODULES): web/package-lock.json
 	npm --prefix web ci
+	@touch $@
+
+frontend: $(NODE_MODULES)
 	npm --prefix web run build
 	rm -rf internal/webui/dist
 	mkdir -p internal/webui/dist
 	cp -r web/dist/. internal/webui/dist/
+	@touch internal/webui/dist/.gitkeep
 
 sqlc-generate:
 	sqlc generate
@@ -13,7 +23,12 @@ sqlc-generate:
 db-up:
 	docker compose up -d db
 
-build:
+# Depends on frontend: a fresh clone could otherwise `make build`, exit 0, and
+# produce a binary serving the placeholder page instead of the application —
+# with no warning and no difference in exit code. The binary also says so at
+# startup now (webui.IsPlaceholder), for the build paths that bypass this
+# Makefile entirely.
+build: frontend
 	CGO_ENABLED=0 go build -o bin/recipe-reader ./cmd/recipe-reader
 
 test:
@@ -33,7 +48,7 @@ vuln:
 
 check: lint vuln test
 
-run:
+run: frontend
 	go run ./cmd/recipe-reader
 
 docker:

@@ -37,6 +37,12 @@ type Config struct {
 	ExtractionMode      string  `name:"extraction-mode" env:"EXTRACTION_MODE" default:"hybrid" help:"Recipe extraction strategy: rule, llm, or hybrid."`
 	ExtractionThreshold float64 `name:"extraction-confidence-threshold" env:"EXTRACTION_CONFIDENCE_THRESHOLD" default:"0.6" help:"Minimum rule-based confidence before falling back to the LLM extractor."`
 
+	// ExtractionPublishThreshold is a separate, stricter knob from
+	// ExtractionThreshold. "Good enough to skip the LLM" and "good enough to
+	// publish without a human reading it" are different questions, and one
+	// number answering both is what made needs_review unreachable.
+	ExtractionPublishThreshold float64 `name:"extraction-publish-threshold" env:"EXTRACTION_PUBLISH_THRESHOLD" default:"0.8" help:"Minimum extraction confidence to publish without review; below it a recipe is stored as needs_review."`
+
 	AnthropicAPIKey string `name:"anthropic-api-key" env:"ANTHROPIC_API_KEY" help:"API key for the Anthropic LLM extractor."`
 	AnthropicModel  string `name:"anthropic-model" env:"ANTHROPIC_MODEL" default:"claude-opus-5" help:"Anthropic model id for the LLM extractor."`
 
