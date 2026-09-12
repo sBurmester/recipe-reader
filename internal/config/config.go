@@ -4,6 +4,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -15,8 +16,18 @@ import (
 // Each field is resolved with the precedence: command-line flag, then
 // environment variable, then the built-in default.
 type Config struct {
-	HTTPAddr string `name:"http-addr" env:"HTTP_ADDR" default:":8080" help:"Address the HTTP server listens on."`
+	// HTTPAddr defaults to loopback rather than all interfaces: the insecure
+	// combination (no token, network-reachable) is then something an operator
+	// has to ask for, not something they get by leaving a field unset.
+	HTTPAddr string `name:"http-addr" env:"HTTP_ADDR" default:"127.0.0.1:8080" help:"Address the HTTP server listens on. Binding beyond loopback requires API_TOKEN."`
 	DBDSN    string `name:"db-dsn" env:"DB_DSN" default:"postgres://recipes:recipes@localhost:5432/recipes?sslmode=disable" help:"PostgreSQL connection string."`
+
+	// APIToken guards the mutating routes; see Config.validate for when it is
+	// mandatory. CORSOrigins is the browser-origin allowlist — the bundled
+	// frontend is same-origin and needs no entry, so the default covers only
+	// the Vite dev server.
+	APIToken    string   `name:"api-token" env:"API_TOKEN" help:"Bearer token required on POST/PUT/PATCH/DELETE. Empty leaves writes unauthenticated, which is only allowed on a loopback bind."`
+	CORSOrigins []string `name:"cors-origin" env:"CORS_ORIGINS" default:"http://localhost:5173" help:"Comma-separated browser origins allowed to read API responses."`
 
 	InstagramUsername    string `name:"instagram-username" env:"INSTAGRAM_USERNAME" help:"Instagram account username used to fetch saved posts."`
 	InstagramPassword    string `name:"instagram-password" env:"INSTAGRAM_PASSWORD" help:"Instagram account password."`
@@ -51,5 +62,37 @@ func load(args []string) (Config, error) {
 	if _, err := parser.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("config: %w", err)
 	}
+	if err := cfg.validate(); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// validate rejects the one combination that is insecure by construction: a
+// listener reachable from the network with nothing in front of the mutating
+// routes. Loopback without a token stays allowed, because that is the
+// single-user desktop case this project is built for.
+func (c Config) validate() error {
+	if c.APIToken == "" && !isLoopbackAddr(c.HTTPAddr) {
+		return fmt.Errorf(
+			"config: API_TOKEN is required when HTTP_ADDR (%q) is not loopback — "+
+				"otherwise anyone who can route to the port can create, edit and delete recipes",
+			c.HTTPAddr)
+	}
+	return nil
+}
+
+// isLoopbackAddr reports whether addr binds the loopback interface only. A
+// bare port (":8080") or an empty host means every interface, so it is not
+// loopback — which is exactly the case that needs a token.
+func isLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

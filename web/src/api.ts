@@ -4,13 +4,45 @@
 // Vite proxy forwards /api to localhost:8080 and in production the same
 // origin serves both the embedded UI and the API.
 
+import { getApiToken, setApiToken } from "./auth";
 import type { Category, ImportStatus, Recipe, Unit } from "./types";
 
+/**
+ * headers builds the request headers.
+ *
+ * Content-Type is always application/json, and the backend now requires it on
+ * every write: it is not a CORS-"simple" value, so demanding it forces a
+ * preflight the server can refuse by origin. Dropping it would make writes
+ * from this app fail with 415.
+ */
+function headers(): HeadersInit {
+  const token = getApiToken();
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+async function send(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(path, { headers: headers(), ...init });
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+  let res = await send(path, init);
+
+  // A 401 means the deployment has API_TOKEN set and this browser does not
+  // have it yet (or has a stale one). Asking once and retrying keeps the token
+  // out of the bundle — it is the operator's credential, entered here rather
+  // than compiled in. window.prompt is blunt, but this app has no modal layer
+  // and the alternative is a write that silently fails.
+  if (res.status === 401) {
+    const entered = window.prompt("API-Token erforderlich:", "");
+    if (entered) {
+      setApiToken(entered);
+      res = await send(path, init);
+    }
+  }
+
   if (!res.ok) {
     // The API reports failures as {"error": "..."}; fall back to the status
     // text when the body is missing or not JSON.

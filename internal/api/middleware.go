@@ -1,10 +1,26 @@
 package api
 
 import (
+	"crypto/subtle"
 	"log/slog"
+	"mime"
 	"net/http"
+	"strings"
 	"time"
 )
+
+// Security carries the API's access controls.
+//
+// Token is the bearer token every state-changing request must present; an
+// empty Token disables the check, which config.Load only permits on a loopback
+// bind. AllowedOrigins is the set of browser origins allowed to read this
+// API's responses — the bundled frontend is same-origin and needs none of
+// them, so this exists for the Vite dev server and for any separately hosted
+// UI.
+type Security struct {
+	Token          string
+	AllowedOrigins []string
+}
 
 // withLogging records one line per request after the handler has run, so the
 // logged duration covers the whole handler chain below it.
@@ -35,19 +51,123 @@ func withRecovery(next http.Handler) http.Handler {
 	})
 }
 
-// withCORS allows any origin: the API serves its own bundled frontend in
-// production and a Vite dev server on another port in development, and it
-// exposes no cookies or credentials that a permissive origin could leak.
-// Preflight requests are answered here and never reach the mux.
-func withCORS(next http.Handler) http.Handler {
+// withCORS answers preflight requests and echoes the request Origin back only
+// when it appears in allowed.
+//
+// The previous `Access-Control-Allow-Origin: *` was reasoned about as safe
+// because the API carries no cookies. That premise is true and the conclusion
+// does not follow: this service's authorization model is "you can reach it",
+// and a browser reaches it on the victim's behalf. With `*`, any page the user
+// visited could read the whole collection, and its preflight for DELETE was
+// answered 204 from any origin.
+//
+// A request with no Origin header — the bundled same-origin frontend, curl, a
+// health probe — passes through untouched. CORS is a browser mechanism and has
+// nothing to say about those; withAuth is what guards them.
+func withCORS(allowed []string, next http.Handler) http.Handler {
+	index := make(map[string]struct{}, len(allowed))
+	for _, origin := range allowed {
+		if origin = strings.TrimSpace(origin); origin != "" {
+			index[origin] = struct{}{}
+		}
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		// Vary is set whether or not the origin matched: a cache that served
+		// one origin's response to another would undo the allowlist.
+		w.Header().Add("Vary", "Origin")
+
+		origin := r.Header.Get("Origin")
+		if _, ok := index[origin]; ok && origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			w.Header().Set("Access-Control-Max-Age", "600")
+		}
+
+		// Preflight is answered here either way. Without the headers above the
+		// browser reads the 204 as a refusal, which is the intended answer for
+		// an origin that is not on the list.
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// withAuth requires a bearer token on every state-changing request when one is
+// configured, and lets reads through unauthenticated.
+//
+// Splitting it that way is deliberate: the collection is one person's recipes
+// rather than a secret, and the exposure worth closing is a page the user
+// happens to visit issuing writes — enumerating ids and deleting the lot —
+// using the user's own network position as the credential.
+//
+// An empty token disables the check entirely. That combination is confined to
+// a loopback bind by Config.validate, so it cannot be the accidental state of
+// a network-reachable deployment.
+func withAuth(token string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token == "" || !isMutating(r.Method) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		// ConstantTimeCompare also returns 0 for a length mismatch, so neither
+		// the token's contents nor its length leak through response timing.
+		if subtle.ConstantTimeCompare([]byte(bearerToken(r)), []byte(token)) != 1 {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="recipe-reader"`)
+			writeError(w, http.StatusUnauthorized, "missing or invalid bearer token")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// withJSONWrites rejects a state-changing request that does not declare a JSON
+// body.
+//
+// This is not about parsing — it is what makes the allowlist above reach the
+// write path at all. `application/json` is not one of the three CORS-"simple"
+// content types, so requiring it forces a preflight that withCORS then answers
+// against the allowlist. Without it, a page on any origin can POST here with
+// `Content-Type: text/plain` and never be preflighted: handleCreateRecipe
+// never inspected the header, and handleImportRun reads no body at all.
+func withJSONWrites(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isMutating(r.Method) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil || mediaType != "application/json" {
+			writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// isMutating reports whether the method changes server state. OPTIONS is not
+// in the list and never reaches these checks anyway — withCORS answers
+// preflight above them, which is what keeps preflight from needing a token.
+func isMutating(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+// bearerToken extracts the credential from an Authorization header, or returns
+// "" when the header is absent or uses another scheme. The scheme name is
+// matched case-insensitively, as RFC 7235 requires.
+func bearerToken(r *http.Request) string {
+	const scheme = "bearer "
+	header := r.Header.Get("Authorization")
+	if len(header) < len(scheme) || !strings.EqualFold(header[:len(scheme)], scheme) {
+		return ""
+	}
+	return strings.TrimSpace(header[len(scheme):])
 }

@@ -31,9 +31,9 @@ func TestImportHandlers_RunAndStatus(t *testing.T) {
 		Lookups:   deps.Lookups,
 		Threshold: 0.6,
 	}, time.Hour)
-	router := NewRouter(deps)
+	router := NewRouter(deps, testSecurity)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/import/run", nil)
+	req := jsonRequest(http.MethodPost, "/api/import/run", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusAccepted {
@@ -60,7 +60,7 @@ func TestImportHandlers_RunAndStatus(t *testing.T) {
 // a background goroutine, where the recovery middleware cannot reach it and
 // the whole process would go down.
 func TestImportHandlers_NoWorker(t *testing.T) {
-	router := NewRouter(Deps{})
+	router := NewRouter(Deps{}, testSecurity)
 
 	for _, tc := range []struct {
 		method, path string
@@ -68,7 +68,7 @@ func TestImportHandlers_NoWorker(t *testing.T) {
 		{http.MethodPost, "/api/import/run"},
 		{http.MethodGet, "/api/import/status"},
 	} {
-		req := httptest.NewRequest(tc.method, tc.path, nil)
+		req := jsonRequest(tc.method, tc.path, nil)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		if rec.Code != http.StatusServiceUnavailable {

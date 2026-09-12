@@ -26,7 +26,7 @@ and serves a searchable web UI. Single Go binary with the frontend embedded; Pos
 
     make db-up      # starts Postgres via docker compose
     make frontend   # builds web/ and copies it into internal/webui/dist for embedding
-    make run        # serves on :8080
+    make run        # serves on 127.0.0.1:8080
 
 ## Configuration
 
@@ -35,10 +35,34 @@ supplied as a command-line flag or an environment variable, with flags taking pr
 the environment and the environment over the built-in defaults. Run `recipe-reader --help` for
 the full list. See `.env.example` for the environment-variable names and their defaults.
 
+### Access control
+
+The API's authorization model is "you can reach it", so what the server binds to and who may
+reach it are one decision:
+
+- **`HTTP_ADDR`** defaults to `127.0.0.1:8080` — loopback only. On that address the writes are
+  left unauthenticated, which is the single-user desktop case this project is built for.
+- **`API_TOKEN`** is the bearer token required on `POST`, `PUT`, `PATCH` and `DELETE`. Reads stay
+  open. **The server refuses to start on a non-loopback address without one**, so a
+  network-reachable deployment cannot accidentally ship with open write endpoints.
+- **`CORS_ORIGINS`** is a comma-separated browser-origin allowlist, defaulting to
+  `http://localhost:5173` for the Vite dev server. Only a listed origin gets an
+  `Access-Control-Allow-Origin` header back; everything else is refused at preflight. The bundled
+  frontend is same-origin and needs no entry — set this to empty in production unless a separately
+  hosted UI calls the API.
+
+Every write must also send `Content-Type: application/json`. That is not a body-parsing
+requirement: `application/json` is not one of the CORS-"simple" content types, so requiring it is
+what forces a cross-origin write to be preflighted and brought under the allowlist above.
+
+When `API_TOKEN` is set, the bundled UI asks for the token on the first write that returns `401`
+and keeps it in `localStorage`. It is never compiled into the bundle.
+
 ## HTTP API
 
-All routes are served under `/api`, return JSON, and carry permissive CORS headers so the
-Vite dev server can call them directly.
+All routes are served under `/api` and return JSON. Reads are open; the four mutating methods
+require `Content-Type: application/json` and, when `API_TOKEN` is configured, an
+`Authorization: Bearer <token>` header. See [Access control](#access-control).
 
 | Method | Path | Description |
 | --- | --- | --- |
@@ -85,8 +109,12 @@ The frontend build is embedded into the binary with `go:embed`, so the applicati
 single file with no assets to deploy beside it. Anything not under `/api/` is served from that
 embedded directory, falling back to the app shell rather than a 404.
 
-    docker compose up --build   # app on :8080, Postgres on :5432
+    API_TOKEN=$(openssl rand -hex 32) docker compose up --build   # app on :8080, Postgres on :5432
     docker compose down
+
+The compose stack publishes port 8080, so the container binds every interface — the case the
+server refuses without a token. `API_TOKEN` is therefore mandatory here, and compose fails with
+that message if it is unset rather than starting something open to the network.
 
 The image builds the frontend and the Go binary in separate stages and ships only the binary on
 Alpine — about 20 MB, running as a non-root user. Credentials come from the environment (see

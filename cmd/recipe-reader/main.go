@@ -89,7 +89,17 @@ func run() error {
 	// The embedded frontend takes everything the API does not claim. Go 1.22
 	// ServeMux prefers the more specific "/api/" pattern, and does not strip
 	// it, so the API router still sees the full path it registered.
-	apiRouter := api.NewRouter(api.Deps{Recipes: recipes, Lookups: lookups, Worker: worker})
+	// An unauthenticated deployment is reachable only from loopback —
+	// config.Load refuses any other bind without a token — but it is still
+	// worth naming at boot, because "it works without one" is how it stays
+	// that way when the address later changes.
+	if cfg.APIToken == "" {
+		slog.Warn("no API_TOKEN configured; writes are unauthenticated and the server is bound to loopback only", "addr", cfg.HTTPAddr)
+	}
+	apiRouter := api.NewRouter(
+		api.Deps{Recipes: recipes, Lookups: lookups, Worker: worker},
+		api.Security{Token: cfg.APIToken, AllowedOrigins: cfg.CORSOrigins},
+	)
 	frontend, err := webui.Handler()
 	if err != nil {
 		return err

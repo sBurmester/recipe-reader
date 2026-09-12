@@ -20,7 +20,7 @@ func TestLookupHandlers_ListCategoriesUnitsIngredients(t *testing.T) {
 	if _, err := deps.Lookups.FindOrCreateIngredient(ctx, "Mehl"); err != nil {
 		t.Fatalf("seed ingredient: %v", err)
 	}
-	router := NewRouter(deps)
+	router := NewRouter(deps, testSecurity)
 
 	for path, want := range map[string]int{
 		"/api/categories":  1,
