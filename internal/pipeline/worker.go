@@ -145,3 +145,13 @@ func (w *Worker) Status() Status {
 		CooldownUntil: w.cooldownUntil,
 	}
 }
+
+// RecordFailure sets err as the error Status reports, without a run. It is for
+// failures that happen before the first run — a startup login, above all —
+// which would otherwise stay invisible until the first scheduled import, hours
+// later. The next run's outcome replaces it.
+func (w *Worker) RecordFailure(err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.lastErr = err
+}

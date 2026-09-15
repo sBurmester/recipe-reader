@@ -491,7 +491,25 @@ re-opens a settled one or assumes a live one is settled:
       before any remediation, so the corrected 18 was itself an undercount; and
       **27** when this task started, because the ≥ 6.0 work added database
       tests at a container apiece — exactly D3's prediction.
-- [ ] **T-14 · 5.4 · S** — Let a failed Instagram login recover without a restart — `integration` I8 — `cmd/recipe-reader/main.go:71-87`
+- [x] **T-14 · 5.4 · S** — Let a failed Instagram login recover without a restart — `integration` I8 — `cmd/recipe-reader/main.go:71-87`
+      **DONE — the worker is built whenever an account is configured.** A
+      failed startup login used to leave the fetcher nil, so no worker existed
+      and both import routes answered 503 until a restart. `newFetcher`
+      (`cmd/recipe-reader/fetcher.go`) now returns the fetcher *and* the login
+      error. `run()` builds the worker regardless and records the error with
+      `Worker.RecordFailure`, so `/api/import/status` shows it at once rather
+      than after the first scheduled run, hours later. A 503 now means only "no
+      account configured", which makes I8's two states distinguishable.
+      **How the retry happens.** T-06's re-login path was not enough on its
+      own. `LoginOrRestore` already kept the credentials, but a client with no
+      session would have sent an unauthenticated request and relied on this
+      unofficial endpoint answering `login_required` to reach the re-login —
+      which nobody has verified. `Client` now tracks whether it holds a session,
+      and `do` logs in *first* when it does not, under the same 15-minute floor
+      that rations every login. The tests run offline: instago refuses an empty
+      password before building a request, so a failed startup login needs no
+      network. Both paths are asserted: refused by the floor, and a login
+      attempted before any request.
 - [x] **T-27 · 5.2 · S** — `-race` in `make test` — `delivery` D4 — `Makefile:20-21`. Nearly free after T-10.
       **DONE, and it was.** `make test` runs `go test -race ./...`, matching
       CI. With T-10 in, the race-instrumented suite takes 46s wall including

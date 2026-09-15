@@ -63,22 +63,11 @@ func run() error {
 	recipes := repository.NewRecipeRepository(pool)
 	lookups := repository.NewLookupRepository(pool)
 
-	// Instagram is optional: without credentials, or when login fails, the
-	// server still serves the API over whatever is already in the database —
-	// only the import worker is withheld.
-	igClient := instagram.NewClient()
-	var fetcher pipeline.PostFetcher
-	if cfg.InstagramUsername != "" {
-		if err := igClient.LoginOrRestore(ctx, cfg.InstagramUsername, cfg.InstagramPassword, cfg.InstagramSessionPath); err != nil {
-			slog.Warn("instagram login failed; import worker will not run", "error", err)
-		} else {
-			fetcher = &instagram.PipelineFetcher{
-				Client:         igClient,
-				CollectionName: cfg.InstagramCollection,
-				Options:        instagram.FetchOptions{Known: alreadyImported(recipes)},
-			}
-		}
-	}
+	// Instagram is optional: without an account configured the server still
+	// serves the API over whatever is already in the database, and only the
+	// import worker is withheld. A failed login no longer withholds it — see
+	// newFetcher.
+	fetcher, loginErr := newFetcher(ctx, cfg, instagram.NewClient(), recipes)
 
 	var worker *pipeline.Worker
 	if fetcher != nil {
@@ -89,6 +78,11 @@ func run() error {
 			PublishThreshold: cfg.ExtractionPublishThreshold,
 		}
 		worker = pipeline.NewWorker(p, cfg.ImportInterval)
+		if loginErr != nil {
+			// Reported now rather than after the first scheduled run, which
+			// is hours away: the import page shows it as the last error.
+			worker.RecordFailure(fmt.Errorf("instagram login failed at startup; the next import retries it: %w", loginErr))
+		}
 		worker.Start(ctx)
 	}
 

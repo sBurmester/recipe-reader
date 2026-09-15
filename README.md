@@ -101,8 +101,13 @@ them into `failed` would make a healthy run look broken, and folding them into `
 hide how much of the feed is noise. Nothing is stored for them.
 
 The two `/api/import/*` routes return `503 {"error":"import worker not configured"}` when no
-Instagram credentials are set, since there is no worker to drive. Every other route works
-normally in that state, serving whatever is already in the database.
+Instagram account is configured (`INSTAGRAM_USERNAME` unset), since there is no worker to drive.
+Every other route works normally in that state, serving whatever is already in the database.
+
+A login that fails at startup does not disable imports. The server logs it, the import status
+reports it as the last error straight away, and the next import — scheduled or triggered — logs in
+before it fetches. Login attempts are rationed to one every 15 minutes, because repeated logins are
+what Instagram flags; a run triggered sooner than that reports the floor instead of trying.
 
 ## Extraction
 
