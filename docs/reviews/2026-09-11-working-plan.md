@@ -423,12 +423,22 @@ re-opens a settled one or assumes a live one is settled:
       failed, and the run moves on either way. Tested against a client that
       never answers, with an outer 5s guard so a regression fails the test
       rather than hanging it.
-- [ ] **T-21 · 5.6 · S** — Credentials environment-only, not CLI flags — `security` S2 — `internal/config/config.go`
+- [x] **T-21 · 5.6 · S** — Credentials environment-only, not CLI flags — `security` S2 — `internal/config/config.go`
       **SCOPE GREW: four flags now, not two.** S2 named
       `--instagram-password` and `--anthropic-api-key`. Since then T-02 added
       `--api-token` and T-18 added `--llm-api-key`, both as flag *and*
       environment, consistent with the rest of the file — which means both are
       visible in `ps aux` exactly as S2 describes. Sweep all four together.
+      **DONE — and S2's proposed mechanism would not have worked.** S2 said to
+      *"drop `name:` on both so they become environment-only — kong supports
+      this"*. It does not: kong v1.16.1 names an untagged field's flag after the
+      field (`build.go:162-164`), so dropping the tag leaves
+      `--instagram-password` exactly where it was. The four fields are now
+      `kong:"-"`, and `load` reads them from the environment in
+      `readCredentials`. `--help`'s description names them, because kong has no
+      flag entry to list them under. Tests: all four flags are refused as
+      unknown, all four arrive from the environment, and the description names
+      each one. Nothing in the repository used the flag form.
 - [ ] **T-22 · 5.6 · M** — Smoke-test the built image in CI — `delivery` D7 — `.github/workflows/ci.yml`
       **Now guards T-05 rather than covering it.** T-05 shipped, so the
       placeholder can no longer reach a `make build` artifact — but nothing in
