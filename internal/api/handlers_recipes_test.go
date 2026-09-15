@@ -174,3 +174,52 @@ func TestRecipeHandlers_CreateValidation(t *testing.T) {
 		t.Errorf("status = %d, want 400 for missing name/source", rec.Code)
 	}
 }
+
+// recipeBodyOfSize returns valid recipe JSON of exactly n bytes, padded out
+// through the instructions field and carrying no name or source.
+func recipeBodyOfSize(n int) []byte {
+	const prefix, suffix = `{"instructions":"`, `"}`
+	body := make([]byte, 0, n)
+	body = append(body, prefix...)
+	body = append(body, bytes.Repeat([]byte("x"), n-len(prefix)-len(suffix))...)
+	return append(body, suffix...)
+}
+
+// A body one byte over the cap is refused as too large, not as malformed — it
+// is valid JSON, just more of it than a recipe needs. These run against empty
+// Deps with no database: the cap is enforced before any repository is touched,
+// and a request that slipped past it would panic on a nil repository and come
+// back 500, not 413.
+func TestRecipeHandlers_OversizedBodyIs413(t *testing.T) {
+	router := NewRouter(Deps{}, testSecurity)
+	body := recipeBodyOfSize(maxRecipeBodyBytes + 1)
+
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodPost, "/api/recipes"},
+		{http.MethodPut, "/api/recipes/1"},
+	} {
+		t.Run(tc.method, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, jsonRequest(tc.method, tc.path, body))
+			if rec.Code != http.StatusRequestEntityTooLarge {
+				t.Errorf("status = %d, want 413; body = %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// The cap is inclusive: a body of exactly maxRecipeBodyBytes still decodes and
+// reaches the handler's own validation, which rejects it for the missing name
+// and source — a 400 that proves the decoder accepted it.
+func TestRecipeHandlers_BodyAtTheLimitIsDecoded(t *testing.T) {
+	router := NewRouter(Deps{}, testSecurity)
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/api/recipes", recipeBodyOfSize(maxRecipeBodyBytes)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 from validation; body = %s", rec.Code, rec.Body.String())
+	}
+	if want := "name and source are required"; !bytes.Contains(rec.Body.Bytes(), []byte(want)) {
+		t.Errorf("body = %s, want the validation error %q rather than a decode error", rec.Body.String(), want)
+	}
+}

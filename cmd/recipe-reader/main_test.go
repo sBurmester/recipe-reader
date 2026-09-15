@@ -181,3 +181,34 @@ func TestNewServer_AppliesTheConfiguredToken(t *testing.T) {
 		t.Errorf("unauthenticated DELETE status = %d, want 401", rec.Code)
 	}
 }
+
+// A server with no timeouts holds a connection open for as long as a client
+// cares to trickle bytes into it. Beyond being set, two orderings matter:
+// headers must be due before the whole request is, and WriteTimeout — which
+// starts counting once the headers are read — must outlast the body read that
+// ReadTimeout allows, or a slow legal upload loses its response.
+func TestNewServer_SetsTimeouts(t *testing.T) {
+	server, err := newServer(baseConfig("rule"), api.Deps{})
+	if err != nil {
+		t.Fatalf("newServer() error = %v", err)
+	}
+
+	if server.ReadHeaderTimeout <= 0 {
+		t.Errorf("ReadHeaderTimeout = %v, want > 0", server.ReadHeaderTimeout)
+	}
+	if server.ReadTimeout <= 0 {
+		t.Errorf("ReadTimeout = %v, want > 0", server.ReadTimeout)
+	}
+	if server.WriteTimeout <= 0 {
+		t.Errorf("WriteTimeout = %v, want > 0", server.WriteTimeout)
+	}
+	if server.IdleTimeout <= 0 {
+		t.Errorf("IdleTimeout = %v, want > 0 (zero falls back to ReadTimeout)", server.IdleTimeout)
+	}
+	if server.ReadHeaderTimeout > server.ReadTimeout {
+		t.Errorf("ReadHeaderTimeout %v > ReadTimeout %v", server.ReadHeaderTimeout, server.ReadTimeout)
+	}
+	if server.WriteTimeout < server.ReadTimeout {
+		t.Errorf("WriteTimeout %v < ReadTimeout %v", server.WriteTimeout, server.ReadTimeout)
+	}
+}

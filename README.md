@@ -63,6 +63,11 @@ All routes are served under `/api` and return JSON. Reads are open; the four mut
 require `Content-Type: application/json` and, when `API_TOKEN` is configured, an
 `Authorization: Bearer <token>` header. See [Access control](#access-control).
 
+Request bodies on `POST /api/recipes` and `PUT /api/recipes/{id}` are capped at **1 MiB**; a
+larger one is answered `413` and the connection is closed. The server also bounds slow clients: the
+headers must arrive within 10s and the whole request within 30s, a response must be written within
+60s of the headers, and idle keep-alive connections are closed after 120s.
+
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/api/healthz` | Liveness probe — `{"status":"ok"}`. |

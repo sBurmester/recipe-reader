@@ -192,6 +192,29 @@ func newExtractor(cfg config.Config) (extraction.Extractor, error) {
 	}
 }
 
+// Server timeouts. Without them a client that trickles a request in a byte at a
+// time holds its connection — and a goroutine — for as long as it cares to, and
+// enough of them exhaust the process. None of these bounds constrains a
+// legitimate request: every handler answers from a handful of database round
+// trips, and POST /api/import/run returns 202 before the import begins.
+const (
+	// readHeaderTimeout is the slowloris bound: the request line and headers
+	// must arrive within it.
+	readHeaderTimeout = 10 * time.Second
+	// readTimeout bounds the whole request, headers and body together. Recipe
+	// bodies are capped at 1 MiB in the api package, which arrives in well under
+	// this on any link that can use the UI at all.
+	readTimeout = 30 * time.Second
+	// writeTimeout starts counting when the headers have been read, not when
+	// the handler starts writing, so it covers the body read as well. Set below
+	// readTimeout, a slow but legal upload would be cut off mid-response.
+	writeTimeout = 60 * time.Second
+	// idleTimeout closes keep-alive connections nobody is using. Left at zero
+	// it silently inherits readTimeout; it is set on its own so the keep-alive
+	// window is a decision rather than a side effect of the request bound.
+	idleTimeout = 120 * time.Second
+)
+
 // newServer assembles the HTTP server: the API router under /api/ and the
 // embedded frontend beneath it.
 //
@@ -224,7 +247,14 @@ func newServer(cfg config.Config, deps api.Deps) (*http.Server, error) {
 	mux.Handle("/api/", apiRouter)
 	mux.Handle("/", frontend)
 
-	return &http.Server{Addr: cfg.HTTPAddr, Handler: mux}, nil
+	return &http.Server{
+		Addr:              cfg.HTTPAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+	}, nil
 }
 
 // alreadyImported adapts the recipe repository to instagram.FetchOptions.Known,
