@@ -3,7 +3,7 @@
 **Derived from:** the six-reviewer panel of 2026-09-11 ([index](README.md)),
 as adjudicated in the [consensus record](2026-09-11-consensus.md)
 **Source findings:** 66 post-round (72 entering, 1 withdrawn, 5 merged), **62 tasks**
-**Status:** in progress — bands ≥ 6.0 done, plus T-25 from Stage 5 (12 of 62)
+**Status:** in progress — bands ≥ 5.0 done, plus T-25 and T-61 (25 of 62)
 
 Mark a task `[x]` when it is done. Each task cites the finding IDs it closes.
 
@@ -85,6 +85,16 @@ code lives and how much of each task is left.
 Rating order is not execution order. The consensus record says why in four
 places, and those four rulings — not the decimals — are what orders the 51
 remaining tasks.
+
+> **Since revision 4 (2026-09-15): every task rated ≥ 5.0 is done.** That is
+> T-10 and T-27 (Stage 1), T-16 and T-08 (Stage 3), T-20 and T-29 (Stage 4),
+> T-21, T-28, T-14, T-17 and T-25 (Stage 5), T-22 (Stage 8) and T-19
+> (Stage 9), plus T-61 (Stage 6), which T-08 closed in passing. The order
+> below is unchanged and still governs the 37 tasks that remain. Two
+> consequences: **T-54 is unblocked** — `0002` exists, and T-16's migration
+> test already runs it down once — and **Stage 2's T-43 is rated below 5.0
+> and was not done**, so T-19 is verified only against a synthetic feed and
+> I1's magnitude is still open.
 
 **The constraints, quoted from the record:**
 
@@ -181,9 +191,9 @@ re-opens a settled one or assumes a live one is settled:
 | --- | --- | --- |
 | `security` | Should S1 rise above 9.0? *"Does the panel rate the shipped default or the cautious one?"* | **Dissolved.** T-02 made the shipped default the cautious one: a loopback bind, and a refusal to start on any other address without a token. The two readings no longer differ. |
 | `integration` | I2 (7.6) has never been challenged in either round | **Dissolved.** T-06 fixed it regardless of what a challenge would have concluded. |
-| `delivery` | Ratify or reject R3 at 2.5; defend D3's count rising 8→18 while its rating fell 7.0→5.5; whether D5 is a legitimate finding or an aggregate needing a split | **Partly answered — by the work, not by the panel.** D5 *was* an aggregate: T-18 closed it as three independent pieces, two of which other tasks had already covered. R3 is moot for remediation (T-13 is Low either way). **D3's count is still undefended, and T-10 will settle it empirically.** |
+| `delivery` | Ratify or reject R3 at 2.5; defend D3's count rising 8→18 while its rating fell 7.0→5.5; whether D5 is a legitimate finding or an aggregate needing a split | **Partly answered — by the work, not by the panel.** D5 *was* an aggregate: T-18 closed it as three independent pieces, two of which other tasks had already covered. R3 is moot for remediation (T-13 is Low either way). **D3's count is now settled by measurement (T-10):** 21 container boots at `4ce206e`, the last commit before remediation, so the corrected 18 was itself low — and 27 by the time T-10 started. The rating's fall stands on category, not on the count. |
 | `integration` | Settle I1's magnitude — hold 7.6 provisional, split it, or drop to the confirmed-only rating | **OPEN.** Only T-43 can close it. The 7.6 stays provisional; the fix shipped anyway, because nothing in it depended on the magnitude. |
-| `persistence` | Ratify or reject R1 at 5.5; over-correction check on P1 (7.2→4.0); P3-vs-S4 calibration at 4.8 | **OPEN.** R1 stands ratified by one party of two. T-16 is written to its condition regardless, and Stage 3 is where all three get tested in practice rather than in argument. |
+| `persistence` | Ratify or reject R1 at 5.5; over-correction check on P1 (7.2→4.0); P3-vs-S4 calibration at 4.8 | **OPEN.** R1 stands ratified by one party of two. T-16 has shipped to its condition — both halves — so the remediation no longer waits on the ratification, though the rating itself still does. P1 (T-07) and P3-vs-S4 (T-31 against T-30) remain untested. |
 | `integration` | Lane bias: it owns 3 of 7 findings ≥ 7.0, all in one package. Untested | **OPEN, and now harder to test.** All three — I1, I2 and I3, shipped as T-01, T-06 and T-11 — are fixed. Whether that lane was over-weighted is no longer observable from the code; only from whether the fixes turn out to have mattered. |
 
 ---
@@ -727,9 +737,9 @@ a finding. The GO-2026-5932 provenance note lives in the security review's
 | ≥ 8.0 | 1 | 1 |
 | 7.0 – 7.9 | 6 | 6 |
 | 6.0 – 6.9 | 4 | 4 |
-| 5.0 – 5.9 | 12 | 0 |
+| 5.0 – 5.9 | 12 | 12 |
 | 4.0 – 4.9 | 10 | 1 |
 | 3.0 – 3.9 | 12 | 0 |
-| 2.0 – 2.9 | 15 | 0 |
+| 2.0 – 2.9 | 15 | 1 |
 | < 2.0 | 2 | 0 |
-| **Total** | **62** | **12** |
+| **Total** | **62** | **25** |
