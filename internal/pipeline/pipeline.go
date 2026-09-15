@@ -53,7 +53,6 @@ type Pipeline struct {
 	Fetcher   PostFetcher
 	Extractor extraction.Extractor
 	Recipes   repository.RecipeRepository
-	Lookups   repository.LookupRepository
 
 	// Threshold is the original single knob, kept so an existing Pipeline
 	// literal behaves as it did. Prefer PublishThreshold.
@@ -96,8 +95,8 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 			continue
 		} else if !errors.Is(err, repository.ErrNotFound) {
 			// Every Failed branch below names its stage. The tally alone says
-			// a post failed; it never said where, and these four failures need
-			// four different responses from whoever reads the log.
+			// a post failed; it never said where, and these three failures need
+			// three different responses from whoever reads the log.
 			result.Failed++
 			slog.Warn("import: post failed", "stage", "dedupe-lookup", "source", post.Source, "error", err)
 			continue
@@ -125,14 +124,10 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 			continue
 		}
 
-		recipe, err := p.toRecipe(ctx, post, extracted)
-		if err != nil {
-			result.Failed++
-			slog.Warn("import: post failed", "stage", "resolve-lookups", "source", post.Source, "error", err)
-			continue
-		}
-
-		if err := p.Recipes.Create(ctx, recipe); err != nil {
+		// Create resolves the category, ingredient and unit names inside its
+		// own transaction, so a lookup failure is a store failure too — and
+		// either way the post leaves no lookup rows behind.
+		if err := p.Recipes.Create(ctx, p.toRecipe(post, extracted)); err != nil {
 			result.Failed++
 			slog.Warn("import: post failed", "stage", "store", "source", post.Source, "error", err)
 			continue
@@ -149,10 +144,12 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 	return result, nil
 }
 
-// toRecipe maps an extraction result onto a domain.Recipe, resolving the
-// free-text category, ingredient, and unit names to lookup-table rows
-// (creating them on first sight) so Create only has to write IDs.
-func (p *Pipeline) toRecipe(ctx context.Context, post instagram.SavedPost, ex *extraction.ExtractedRecipe) (*domain.Recipe, error) {
+// toRecipe maps an extraction result onto a domain.Recipe, carrying the
+// free-text category, ingredient and unit names as names. They are resolved to
+// lookup-table rows by RecipeRepository.Create, inside the transaction that
+// stores the recipe — resolving them here, before the write began, committed
+// them even when the write then failed.
+func (p *Pipeline) toRecipe(post instagram.SavedPost, ex *extraction.ExtractedRecipe) *domain.Recipe {
 	status := domain.StatusPublished
 	if ex.Confidence < p.publishThreshold() {
 		status = domain.StatusNeedsReview
@@ -165,32 +162,15 @@ func (p *Pipeline) toRecipe(ctx context.Context, post instagram.SavedPost, ex *e
 		Source:       post.Source,
 		Status:       status,
 	}
-
-	for _, catName := range ex.Categories {
-		cat, err := p.Lookups.FindOrCreateCategory(ctx, catName)
-		if err != nil {
-			return nil, err
-		}
-		recipe.Categories = append(recipe.Categories, *cat)
+	for _, name := range ex.Categories {
+		recipe.Categories = append(recipe.Categories, domain.Category{Name: name})
 	}
-
 	for _, ing := range ex.Ingredients {
-		ingredient, err := p.Lookups.FindOrCreateIngredient(ctx, ing.Name)
-		if err != nil {
-			return nil, err
-		}
-		ri := domain.RecipeIngredient{IngredientID: ingredient.ID, Amount: ing.Amount}
-		if ing.Unit != "" {
-			unit, err := p.Lookups.FindOrCreateUnit(ctx, ing.Unit)
-			if err != nil {
-				return nil, err
-			}
-			ri.UnitID = &unit.ID
-		}
-		recipe.Ingredients = append(recipe.Ingredients, ri)
+		recipe.Ingredients = append(recipe.Ingredients, domain.RecipeIngredient{
+			IngredientName: ing.Name, Amount: ing.Amount, UnitName: ing.Unit,
+		})
 	}
-
-	return recipe, nil
+	return recipe
 }
 
 // publishThreshold is PublishThreshold, or Threshold when it is unset.

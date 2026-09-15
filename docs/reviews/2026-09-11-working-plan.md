@@ -460,7 +460,25 @@ re-opens a settled one or assumes a live one is settled:
       CI. With T-10 in, the race-instrumented suite takes 46s wall including
       the instrumented compile — against 43s for the uninstrumented suite
       before T-10.
-- [ ] **T-08 · 5.0 · M** — Resolve lookups inside the recipe transaction — `persistence` P2 — `internal/repository/lookup_repository.go:28`. Note the T-03 link is withdrawn; this stands on its own.
+- [x] **T-08 · 5.0 · M** — Resolve lookups inside the recipe transaction — `persistence` P2 — `internal/repository/lookup_repository.go:28`. Note the T-03 link is withdrawn; this stands on its own.
+      **DONE — by moving resolution into the write, not by `WithTx`.** P2
+      proposed a `LookupRepository.WithTx(pgx.Tx)` with the transaction opened
+      in the handler and the pipeline. That would have put a `pgx.Tx` in both
+      upper layers to fix one repository's boundary. Instead
+      `RecipeRepository.Create` and `Update` resolve any category, ingredient or
+      unit given **by name with no id** on the queries of the transaction they
+      already open; an id still wins, so a recipe loaded through `GetByID`
+      round-trips unchanged. The handler's `dtoToRecipe` and the pipeline's
+      `toRecipe` now map names only, and `Pipeline.Lookups` is gone. The
+      caller's recipe is updated **only on commit** — before, `Create` set
+      `recipe.ID` ahead of a commit that could still fail.
+      *Side effect on T-15:* the pipeline's `resolve-lookups` log stage folds
+      into `store`, since both now fail inside one call.
+      *Tests:* `TestRecipeHandlers_FailedCreateLeavesNoOrphanLookups` is P2's
+      duplicate-source scenario through the API. The repository test places the
+      failure *after* resolution, a foreign-key violation on a missing unit id,
+      so only the transaction can take the new rows back; it also checks the
+      caller's value is left as passed.
 - [ ] **T-28 · 5.0 · S** — Wire the per-run fetch bounds to flags — `integration` I6
       **RE-CITED, and there are two knobs now.** `MaxItemsPerRun` became
       `instagram.FetchOptions.MaxItems`, and T-11 added `MaxPages` beside it.
@@ -587,7 +605,10 @@ re-opens a settled one or assumes a live one is settled:
 - [ ] **T-58 · 2.2 · S** — Re-panic on `http.ErrAbortHandler` — `go` #11
 - [ ] **T-59 · 2.2 · S** — Drop the fixed `/tmp` path from `make lint` — `delivery` D10
 - [ ] **T-60 · 2.0 · S** — Optional: read-then-insert for `FindOrCreate*` — `persistence` P6
-- [ ] **T-61 · 2.0 · S** — `dtoToRecipe` should take `context.Context` — `go` #9
+- [x] **T-61 · 2.0 · S** — `dtoToRecipe` should take `context.Context` — `go` #9
+      **Closed by T-08, not worked on its own.** `dtoToRecipe` no longer
+      resolves lookups, so it needs neither the request nor a context — it
+      takes only the DTO.
 
 ## Band < 2.0 (2 tasks)
 

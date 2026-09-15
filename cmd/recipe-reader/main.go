@@ -84,7 +84,7 @@ func run() error {
 	if fetcher != nil {
 		p := &pipeline.Pipeline{
 			Fetcher: fetcher, Extractor: extractor,
-			Recipes: recipes, Lookups: lookups,
+			Recipes:          recipes,
 			Threshold:        cfg.ExtractionThreshold,
 			PublishThreshold: cfg.ExtractionPublishThreshold,
 		}

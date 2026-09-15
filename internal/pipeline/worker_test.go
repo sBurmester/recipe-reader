@@ -117,7 +117,6 @@ func TestWorker_RunOnce_SkipsConcurrentOverlap(t *testing.T) {
 		Fetcher:   fetcher,
 		Extractor: &fakeExtractor{byCaption: map[string]*extraction.ExtractedRecipe{}},
 		Recipes:   newTestPipeline(t, &fakeFetcher{}, nil).Recipes,
-		Lookups:   newTestPipeline(t, &fakeFetcher{}, nil).Lookups,
 		Threshold: 0.6,
 	}
 	w := NewWorker(p, time.Hour)

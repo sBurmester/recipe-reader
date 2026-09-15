@@ -276,3 +276,53 @@ func TestRecipeHandlers_CreateDefaultsOmittedStatusToPublished(t *testing.T) {
 		t.Errorf("status = %q, want %q", created.Status, domain.StatusPublished)
 	}
 }
+
+// persistence P2's scenario end to end. The second POST fails on the duplicate
+// source, and the ingredient, unit and category it named must not outlive it.
+// They used to: the handler resolved them on the pool before the write began,
+// so they were committed before the insert could fail.
+func TestRecipeHandlers_FailedCreateLeavesNoOrphanLookups(t *testing.T) {
+	deps := newTestDeps(t)
+	router := NewRouter(deps, testSecurity)
+
+	post := func(dto RecipeDTO) int {
+		t.Helper()
+		body, err := json.Marshal(dto)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/api/recipes", body))
+		return rec.Code
+	}
+
+	if code := post(RecipeDTO{Name: "Erstes", Source: "src-dup"}); code != http.StatusCreated {
+		t.Fatalf("first create status = %d, want 201", code)
+	}
+	code := post(RecipeDTO{
+		Name: "Zweites", Source: "src-dup",
+		Categories:  []CategoryDTO{{Name: "Orphan-Kategorie"}},
+		Ingredients: []IngredientDTO{{Name: "Orphan-Zutat", Amount: 1, Unit: "Orphan-Einheit"}},
+	})
+	if code != http.StatusInternalServerError {
+		t.Fatalf("duplicate-source create status = %d, want 500", code)
+	}
+
+	ctx := t.Context()
+	categories, err := deps.Lookups.ListCategories(ctx)
+	if err != nil {
+		t.Fatalf("ListCategories() error = %v", err)
+	}
+	ingredients, err := deps.Lookups.ListIngredients(ctx)
+	if err != nil {
+		t.Fatalf("ListIngredients() error = %v", err)
+	}
+	units, err := deps.Lookups.ListUnits(ctx)
+	if err != nil {
+		t.Fatalf("ListUnits() error = %v", err)
+	}
+	if len(categories) != 0 || len(ingredients) != 0 || len(units) != 0 {
+		t.Errorf("lookup rows left behind by the failed create: categories=%+v ingredients=%+v units=%+v",
+			categories, ingredients, units)
+	}
+}
