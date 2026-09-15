@@ -33,3 +33,21 @@ func TestNewFetcher_FailedLoginStillReturnsAFetcher(t *testing.T) {
 		t.Fatal("fetcher = nil after a failed login; imports would stay disabled until a restart")
 	}
 }
+
+// integration I6: the per-run bounds reach the fetcher from configuration
+// rather than stopping at the package defaults.
+func TestNewFetcher_PassesTheConfiguredRunBounds(t *testing.T) {
+	cfg := baseConfig("rule")
+	cfg.InstagramUsername = "someone"
+	cfg.InstagramSessionPath = filepath.Join(t.TempDir(), "session.json")
+	cfg.ImportMaxItems, cfg.ImportMaxPages = 500, 400
+
+	fetcher, _ := newFetcher(context.Background(), cfg, instagram.NewClient(), nil)
+	pf, ok := fetcher.(*instagram.PipelineFetcher)
+	if !ok {
+		t.Fatalf("fetcher = %T, want *instagram.PipelineFetcher", fetcher)
+	}
+	if pf.Options.MaxItems != 500 || pf.Options.MaxPages != 400 {
+		t.Errorf("Options = %d items / %d pages, want 500 / 400", pf.Options.MaxItems, pf.Options.MaxPages)
+	}
+}

@@ -64,6 +64,14 @@ type Config struct {
 	LLMTimeout time.Duration `name:"llm-timeout" env:"LLM_TIMEOUT" default:"60s" help:"Upper bound on one LLM extraction call, retries included. Raise it for a local model running on CPU."`
 
 	ImportInterval time.Duration `name:"import-interval" env:"IMPORT_INTERVAL" default:"6h" help:"How often the background worker imports new saved posts."`
+
+	// ImportMaxItems and ImportMaxPages bound one import run. They existed only
+	// as package defaults in internal/instagram, reachable by recompiling; a
+	// backfill of a large saved-posts history is exactly when an operator wants
+	// to raise them, and a flagged account is when they want to lower them.
+	// The defaults here match the package's own.
+	ImportMaxItems int `name:"import-max-items" env:"IMPORT_MAX_ITEMS" default:"50" help:"Most new posts one import run collects. Posts already imported do not count against it."`
+	ImportMaxPages int `name:"import-max-pages" env:"IMPORT_MAX_PAGES" default:"100" help:"Most feed pages one import run walks, whether or not they held anything new."`
 }
 
 // description is the --help preamble. It names the credentials because kong
@@ -153,16 +161,29 @@ func (c *Config) readCredentials() {
 	c.LLMAPIKey = os.Getenv("LLM_API_KEY")
 }
 
-// validate rejects the one combination that is insecure by construction: a
-// listener reachable from the network with nothing in front of the mutating
-// routes. Loopback without a token stays allowed, because that is the
-// single-user desktop case this project is built for.
+// validate rejects configurations that parse but cannot be what the operator
+// meant.
+//
+// The first is insecure by construction: a listener reachable from the network
+// with nothing in front of the mutating routes. Loopback without a token stays
+// allowed, because that is the single-user desktop case this project is built
+// for.
+//
+// The second is a run bound below one. The fetcher would quietly replace it
+// with its own default, so IMPORT_MAX_ITEMS=0 — plausibly meant as "pause
+// imports" — would import fifty posts instead, which is the opposite.
 func (c Config) validate() error {
 	if c.APIToken == "" && !isLoopbackAddr(c.HTTPAddr) {
 		return fmt.Errorf(
 			"config: API_TOKEN is required when HTTP_ADDR (%q) is not loopback — "+
 				"otherwise anyone who can route to the port can create, edit and delete recipes",
 			c.HTTPAddr)
+	}
+	if c.ImportMaxItems < 1 {
+		return fmt.Errorf("config: IMPORT_MAX_ITEMS must be at least 1, got %d", c.ImportMaxItems)
+	}
+	if c.ImportMaxPages < 1 {
+		return fmt.Errorf("config: IMPORT_MAX_PAGES must be at least 1, got %d", c.ImportMaxPages)
 	}
 	return nil
 }

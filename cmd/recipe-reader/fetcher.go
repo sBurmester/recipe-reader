@@ -32,6 +32,10 @@ func newFetcher(ctx context.Context, cfg config.Config, client *instagram.Client
 	return &instagram.PipelineFetcher{
 		Client:         client,
 		CollectionName: cfg.InstagramCollection,
-		Options:        instagram.FetchOptions{Known: alreadyImported(recipes)},
+		Options: instagram.FetchOptions{
+			MaxItems: cfg.ImportMaxItems,
+			MaxPages: cfg.ImportMaxPages,
+			Known:    alreadyImported(recipes),
+		},
 	}, loginErr
 }

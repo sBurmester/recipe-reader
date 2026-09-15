@@ -109,6 +109,11 @@ reports it as the last error straight away, and the next import — scheduled or
 before it fetches. Login attempts are rationed to one every 15 minutes, because repeated logins are
 what Instagram flags; a run triggered sooner than that reports the floor instead of trying.
 
+Each run is bounded. `IMPORT_MAX_ITEMS` (default `50`) caps how many new posts it collects — posts
+already imported do not count against it — and `IMPORT_MAX_PAGES` (default `100`) caps how many
+feed pages it walks. Raise them for a one-off backfill of a long saved-posts history; both must be
+at least 1.
+
 ## Extraction
 
 `EXTRACTION_MODE` selects the engine, and each value now does what its name says:

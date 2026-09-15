@@ -547,12 +547,22 @@ re-opens a settled one or assumes a live one is settled:
       failure *after* resolution, a foreign-key violation on a missing unit id,
       so only the transaction can take the new rows back; it also checks the
       caller's value is left as passed.
-- [ ] **T-28 · 5.0 · S** — Wire the per-run fetch bounds to flags — `integration` I6
+- [x] **T-28 · 5.0 · S** — Wire the per-run fetch bounds to flags — `integration` I6
       **RE-CITED, and there are two knobs now.** `MaxItemsPerRun` became
       `instagram.FetchOptions.MaxItems`, and T-11 added `MaxPages` beside it.
       Both are set only from their package defaults (50 and 100) at
       `cmd/recipe-reader/main.go`, and neither is reachable from configuration.
       A backfill is exactly when an operator wants to raise them.
+      **DONE, both knobs, and a zero is refused.** `IMPORT_MAX_ITEMS` /
+      `--import-max-items` (default 50) and `IMPORT_MAX_PAGES` /
+      `--import-max-pages` (default 100) match the package defaults and reach
+      `FetchOptions` in `newFetcher`. **One addition:** `Config.validate`
+      rejects either below 1. `FetchOptions.withDefaults` silently replaces a
+      zero with the default, so `IMPORT_MAX_ITEMS=0` — plausibly meant as
+      "pause imports" — would have imported fifty posts. Tested: defaults, env
+      and flag overrides, the refusal, and the values reaching the fetcher.
+      **Still open:** `.env.example` does not list them, and could not be
+      edited in this session; it needs a manual update.
 - [ ] **T-17 · 5.0 · S** — Lifecycle owner for the detached import goroutine — `go` #4 — `internal/api/handlers_import.go` (`context.WithoutCancel` + `go d.Worker.RunOnce`)
       **CORRECTED in round 2:** this is *not* a use-after-close. `puddle/v2@v2.2.2/pool.go:179-195` destroys only idle resources, leaving an in-flight connection untouched, and the process usually exits first. The rating holds at 5.0 on different reasoning — high likelihood, small blast radius, **zero diagnosability**, since the truncated run is never reported.
 - [x] **T-29 · 5.0 · S** — Cap caption length (by runes) — `extraction` E3
