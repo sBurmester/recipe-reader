@@ -142,6 +142,7 @@ func newExtractor(cfg config.Config) (extraction.Extractor, error) {
 			APIKey:   settings.APIKey,
 			Model:    settings.Model,
 			BaseURL:  settings.BaseURL,
+			Timeout:  settings.Timeout,
 		})
 	}
 

@@ -7,7 +7,14 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 )
+
+// defaultLLMTimeout bounds one Extract call when LLMConfig.Timeout is unset —
+// the round trip and the SDK's own retries together. A forced tool call with a
+// 2048-token output cap finishes well inside it on a hosted API; a local model
+// on CPU may not, which is why it is configurable (LLM_TIMEOUT).
+const defaultLLMTimeout = 60 * time.Second
 
 // ErrNoRecipe reports that a caption carried no recipe. It is an outcome, not
 // a failure: the extractor did its job and the answer was "there is nothing
@@ -32,25 +39,45 @@ const systemPrompt = `You extract cooking recipes from Instagram captions (often
 // call through a provider-specific transport (llm_provider.go). It is safe for
 // concurrent use.
 type LLMExtractor struct {
-	client llmClient
+	client  llmClient
+	timeout time.Duration
 }
 
 // NewLLMExtractor builds an LLMExtractor for cfg.Provider ("" => anthropic). It
 // returns an error for an unsupported provider, or for the openai provider with
 // no model id. The record_recipe schema and parseToolInput are the same
-// regardless of provider.
+// regardless of provider. A non-positive cfg.Timeout means defaultLLMTimeout.
 func NewLLMExtractor(cfg LLMConfig) (*LLMExtractor, error) {
 	c, err := newLLMClient(cfg)
 	if err != nil {
 		return nil, err
 	}
-	return &LLMExtractor{client: c}, nil
+	timeout := cfg.Timeout
+	if timeout <= 0 {
+		timeout = defaultLLMTimeout
+	}
+	return &LLMExtractor{client: c, timeout: timeout}, nil
 }
 
 // Extract obtains the raw record_recipe arguments from the configured provider
 // and maps them to an ExtractedRecipe. A caption with no recipe in it comes
 // back as ErrNoRecipe.
+//
+// Each call is bounded by the extractor's timeout, applied here once because
+// every transport passes through this point. Nothing else bounds it: the
+// pipeline's context is the process's signal context, or for an API-triggered
+// run a context.WithoutCancel with no deadline at all, and the SDKs' retries
+// only cover a server that answers. One stalled request used to stall the
+// whole import — and behind Worker's single-flight guard, every import after
+// it. A timed-out call returns an error wrapping context.DeadlineExceeded; the
+// hybrid extractor then falls back to the rules for that post and the run
+// moves on.
 func (e *LLMExtractor) Extract(ctx context.Context, caption string) (*ExtractedRecipe, error) {
+	if e.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, e.timeout)
+		defer cancel()
+	}
 	raw, err := e.client.recordRecipe(ctx, caption)
 	if err != nil {
 		return nil, err

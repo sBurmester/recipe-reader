@@ -54,6 +54,11 @@ type Config struct {
 	LLMModel    string `name:"llm-model" env:"LLM_MODEL" help:"Model id for the LLM extractor; falls back to ANTHROPIC_MODEL when the provider is anthropic."`
 	LLMBaseURL  string `name:"llm-base-url" env:"LLM_BASE_URL" help:"Override the LLM endpoint base URL, e.g. https://api.groq.com/openai/v1 or http://localhost:11434/v1."`
 
+	// LLMTimeout exists because a single stalled model call used to hold the
+	// import worker indefinitely. 60s suits a hosted API; a local model on CPU
+	// can need more, which is why it is a setting and not a constant.
+	LLMTimeout time.Duration `name:"llm-timeout" env:"LLM_TIMEOUT" default:"60s" help:"Upper bound on one LLM extraction call, retries included. Raise it for a local model running on CPU."`
+
 	ImportInterval time.Duration `name:"import-interval" env:"IMPORT_INTERVAL" default:"6h" help:"How often the background worker imports new saved posts."`
 }
 
@@ -64,6 +69,7 @@ type LLMSettings struct {
 	APIKey   string
 	Model    string
 	BaseURL  string
+	Timeout  time.Duration
 }
 
 // LLMSettings resolves the effective LLM extractor settings. The bool is false
@@ -76,6 +82,7 @@ func (c Config) LLMSettings() (LLMSettings, bool) {
 		APIKey:   c.LLMAPIKey,
 		Model:    c.LLMModel,
 		BaseURL:  c.LLMBaseURL,
+		Timeout:  c.LLMTimeout,
 	}
 	if s.Provider == "" {
 		s.Provider = "anthropic"

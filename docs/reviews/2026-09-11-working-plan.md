@@ -402,7 +402,7 @@ re-opens a settled one or assumes a live one is settled:
       corruption — the pipeline dedupes on `source`, so the repeats land as
       `Skipped` — but it inflates `Seen` and spends a paid LLM call per
       duplicate. Fix: stop when `next == maxID`. Verify against T-43's fixture.
-- [ ] **T-20 · 5.8 · S** — Timeout on the model call — `extraction` E6
+- [x] **T-20 · 5.8 · S** — Timeout on the model call — `extraction` E6
       **RE-CITED, and round 2 was wrong about this one.** The claim that *"the
       `WithRequestTimeout` seam T-20 needs comes with the merge"* is false:
       `4bbe23e` added no timeout option, and the ported code has none either.
@@ -412,6 +412,17 @@ re-opens a settled one or assumes a live one is settled:
       add a `Timeout` field to `LLMConfig` and apply it in
       `LLMExtractor.Extract` (`internal/extraction/llm.go`), which is the single
       point both transports pass through.
+      **DONE, as described, plus one addition.** `LLMConfig.Timeout` is applied
+      once in `Extract` with `context.WithTimeout`, so it bounds the SDKs'
+      retries too; E6's 60s is the default. **The addition: it is configurable**
+      (`LLM_TIMEOUT` / `--llm-timeout`). A fixed 60s would break the supported
+      local-model case on the `openai` transport, since an Ollama on CPU can
+      legitimately take longer. A timed-out call wraps
+      `context.DeadlineExceeded`: in `hybrid` mode the post falls back to the
+      rules and counts as degraded (`hybrid.go`), in `llm` mode it counts as
+      failed, and the run moves on either way. Tested against a client that
+      never answers, with an outer 5s guard so a regression fails the test
+      rather than hanging it.
 - [ ] **T-21 · 5.6 · S** — Credentials environment-only, not CLI flags — `security` S2 — `internal/config/config.go`
       **SCOPE GREW: four flags now, not two.** S2 named
       `--instagram-password` and `--anthropic-api-key`. Since then T-02 added

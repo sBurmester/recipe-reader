@@ -129,6 +129,11 @@ provider; they are not borrowed by the `openai` one.
 Both transports build their `record_recipe` schema from the same shared property set, so the two cannot
 drift into asking the model for different fields.
 
+`LLM_TIMEOUT` (default `60s`) bounds each extraction call, the SDK's own retries included. A call that
+runs past it fails that one post — in `hybrid` mode the post falls back to the rules and is counted as
+degraded — and the import moves on instead of waiting indefinitely. Raise it for a local model running
+on CPU.
+
 ### Confidence
 
 Every extraction carries a confidence between 0 and 1, and two separate thresholds act on it:
