@@ -390,7 +390,7 @@ re-opens a settled one or assumes a live one is settled:
 
 ## Band 5.0 – 5.9 (12 tasks)
 
-- [ ] **T-19 · 5.8 · S** — Page cap and no-progress guard in the paging loop — `integration` I7
+- [x] **T-19 · 5.8 · S** — Page cap and no-progress guard in the paging loop — `integration` I7
       **HALF DONE by T-11, and the remaining half has a named consequence.**
       The page cap shipped: `FetchOptions.MaxPages` (default 100) bounds every
       walk. The **no-progress guard did not**, and `pageMedia`
@@ -402,6 +402,22 @@ re-opens a settled one or assumes a live one is settled:
       corruption — the pipeline dedupes on `source`, so the repeats land as
       `Skipped` — but it inflates `Seen` and spends a paid LLM call per
       duplicate. Fix: stop when `next == maxID`. Verify against T-43's fixture.
+      **DONE, slightly wider than written — and the cost claim above corrected.**
+      (1) The walk ends on any cursor **already seen in this run**, not only
+      `next == maxID`. A cycle back to an older cursor is the same fault one
+      step removed, and a last-cursor check would page through it until
+      `MaxPages`. It logs a warning, because only a misbehaving server trips it.
+      (2) A post already collected in this run is skipped, so overlapping pages
+      — ordinary on a feed that shifts while it is walked — do not hand the
+      pipeline the same post twice. **Correction:** a repeat does *not*
+      generally spend an LLM call. The pipeline runs `GetBySource` per post
+      before extracting, sequentially, so the first copy is stored before the
+      second is checked and the repeat is `Skipped` for free. The exceptions
+      are posts that store nothing — no recipe, or a failed store — which were
+      extracted again on every repeat. What every repeat did cost was a slot in
+      `MaxItems`. Tested against a synthetic feed with a stuck cursor, a cycle
+      and an overlap — **not yet against T-43's fixture**, which does not exist
+      until T-43 runs.
 - [x] **T-20 · 5.8 · S** — Timeout on the model call — `extraction` E6
       **RE-CITED, and round 2 was wrong about this one.** The claim that *"the
       `WithRequestTimeout` seam T-20 needs comes with the merge"* is false:

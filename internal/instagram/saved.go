@@ -157,6 +157,11 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 	// was saved" from "the response shape changed".
 	dropped := 0
 	maxID := ""
+	// cursors and collected are the walk's own record of where it has been:
+	// every cursor followed, and every post already taken. See the progress
+	// guard at the bottom of the loop.
+	cursors := map[string]bool{}
+	collected := map[string]bool{}
 	for page := 0; len(out) < opts.MaxItems && page < opts.MaxPages; page++ {
 		// Checked between pages rather than only at the top: this is the one
 		// place cancellation can take effect, since a request already in
@@ -197,9 +202,12 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 				dropped++
 				continue
 			}
-			if opts.isKnown(ctx, post.Source) {
+			// collected is checked first: it is free, where Known is a
+			// database lookup.
+			if collected[post.Source] || opts.isKnown(ctx, post.Source) {
 				continue
 			}
+			collected[post.Source] = true
 			out = append(out, post)
 			if len(out) >= opts.MaxItems {
 				break
@@ -210,6 +218,19 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 		if next == "" {
 			break
 		}
+		// The progress guard. Every other exit from this loop is decided by
+		// the remote — an empty page, an empty cursor — or by the page cap. A
+		// server that hands back a cursor it has already given, the one just
+		// sent or an older one, would have the walk re-request the same pages
+		// until MaxPages; and since those posts are not in the database yet,
+		// Known calls them new every time. Checking every cursor seen, not just
+		// the last, also catches a cycle.
+		if cursors[next] {
+			slog.Warn("instagram: feed repeated a pagination cursor; ending the walk",
+				"endpoint", endpoint, "page", page, "collected", len(out))
+			break
+		}
+		cursors[next] = true
 		maxID = next
 	}
 
