@@ -72,9 +72,9 @@ headers must arrive within 10s and the whole request within 30s, a response must
 | --- | --- | --- |
 | `GET` | `/api/healthz` | Liveness probe — `{"status":"ok"}`. |
 | `GET` | `/api/recipes` | Search and list recipes. Query params: `q` (free text), `category_id`, `status`, `page`, `page_size` — all optional; malformed numerics are ignored rather than rejected. Returns `{"recipes":[...],"total":N}`. |
-| `POST` | `/api/recipes` | Create a recipe. `name` and `source` are required. |
+| `POST` | `/api/recipes` | Create a recipe. `name` and `source` are required; `status` defaults to `published` and otherwise must be `needs_review` or `published`. |
 | `GET` | `/api/recipes/{id}` | Fetch one recipe. |
-| `PUT` | `/api/recipes/{id}` | Replace a recipe. |
+| `PUT` | `/api/recipes/{id}` | Replace a recipe. `name` is required and `status` must be `needs_review` or `published` — a replacement has no defaults. |
 | `DELETE` | `/api/recipes/{id}` | Delete a recipe. |
 | `GET` | `/api/categories` | List all categories. |
 | `GET` | `/api/units` | List all units. |

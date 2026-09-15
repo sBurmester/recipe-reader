@@ -109,8 +109,8 @@ function renderForm(container: HTMLElement, recipe: Recipe, units: Unit[]): void
     type: "button",
     class: "primary",
     onclick: async () => {
-      // The API rejects a nameless recipe on create and would happily store an
-      // empty name on update; catching it here keeps the list page readable.
+      // The API rejects a nameless recipe on create and update alike; checking
+      // here as well saves the round trip and keeps the message in German.
       const name = nameInput.value.trim();
       if (name === "") {
         statusEl.textContent = "Fehler: Der Name darf nicht leer sein.";

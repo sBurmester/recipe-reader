@@ -424,9 +424,20 @@ re-opens a settled one or assumes a live one is settled:
       CI would catch it regressing, and `webui.IsPlaceholder()`'s startup
       warning is only visible to someone reading the log. Run the image and
       assert `/api/healthz` plus a `/` body that is not the placeholder.
-- [ ] **T-16 · 5.5 · S** — Validate `status`, in the handler **and** the schema — `go` #2 + `persistence` P7 (chair ruling R1)
+- [x] **T-16 · 5.5 · S** — Validate `status`, in the handler **and** the schema — `go` #2 + `persistence` P7 (chair ruling R1)
       **Both halves or it is not done:** validate against the two domain values on POST *and* PUT (a non-empty bogus status like `"banana"` persists today on both paths), plus a `0002` migration adding `CHECK (status IN ('needs_review','published'))` preceded by a backfill. Validation alone leaves existing bad rows and leaves the invariant unenforced against psql and future writers.
       **CORRECTED:** a `status=''` row is *not* invisible in the list view — `web/src/pages/list.ts:54-58` sends no status filter, so it appears and silently reads as published.
+      **DONE, both halves.** (1) `domain.RecipeStatus.Valid()`. POST validates
+      *after* its existing default to `published`, so an omitted status still
+      creates; PUT requires a legal status **and a non-empty name** — go #2's
+      other half. PUT is a replacement, so an omitted field there meant "store
+      empty", which is how `''` got in. (2) `0002_recipe_status_check`
+      backfills out-of-domain rows to `needs_review` — P7's choice, the state
+      that puts a person in front of them — and adds the CHECK in one
+      transaction. `TestMigration0002_BackfillsThenEnforcesStatus` stops a
+      separate database at `0001`, writes `'banana'` and `''` rows, migrates
+      over them, checks the backfill and the `23514` refusal, then migrates
+      back down, so the down file is exercised ahead of T-54.
 - [x] **T-10 · 5.5 · M** — One Postgres container per package, not per test — `delivery` D3
       `TestMain` per package + `TRUNCATE ... RESTART IDENTITY CASCADE` between tests. **CORRECTED: 18 containers, not 8** — five `testdb.New` call sites sit inside `t.Helper()` wrappers that several tests each invoke. Rating fell (it fails loudly and hits only developers) while the payoff rose.
       **DONE — 27 container boots to 4, and 43s of wall time to 5s.**

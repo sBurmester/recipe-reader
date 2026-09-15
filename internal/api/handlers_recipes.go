@@ -91,6 +91,10 @@ func (d Deps) handleCreateRecipe(w http.ResponseWriter, r *http.Request) {
 	if dto.Status == "" {
 		dto.Status = string(domain.StatusPublished)
 	}
+	if !domain.RecipeStatus(dto.Status).Valid() {
+		writeError(w, http.StatusBadRequest, errInvalidStatus)
+		return
+	}
 
 	recipe, err := d.dtoToRecipe(r, dto)
 	if err != nil {
@@ -104,8 +108,18 @@ func (d Deps) handleCreateRecipe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, toRecipeDTO(*recipe))
 }
 
+// errInvalidStatus is the 400 message for a status outside the domain's two
+// values. Migration 0002 enforces the same rule in the schema; checking here
+// as well turns a constraint violation into a message the client can act on.
+const errInvalidStatus = `status must be "needs_review" or "published"`
+
 // handleUpdateRecipe replaces a recipe wholesale — the body is the new state,
 // not a patch, which is also how the repository writes associations.
+//
+// Being a replacement is why it requires a name and a legal status rather than
+// defaulting them the way create does: an omitted field here means "set it to
+// empty", and a PUT without a status used to persist exactly that. Source is
+// not required — UpdateRecipe never writes it.
 func (d Deps) handleUpdateRecipe(w http.ResponseWriter, r *http.Request) {
 	id, err := parseIDParam(r)
 	if err != nil {
@@ -114,6 +128,14 @@ func (d Deps) handleUpdateRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 	var dto RecipeDTO
 	if !decodeRecipeBody(w, r, &dto) {
+		return
+	}
+	if dto.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if !domain.RecipeStatus(dto.Status).Valid() {
+		writeError(w, http.StatusBadRequest, errInvalidStatus)
 		return
 	}
 

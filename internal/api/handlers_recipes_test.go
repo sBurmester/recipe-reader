@@ -223,3 +223,56 @@ func TestRecipeHandlers_BodyAtTheLimitIsDecoded(t *testing.T) {
 		t.Errorf("body = %s, want the validation error %q rather than a decode error", rec.Body.String(), want)
 	}
 }
+
+// A status outside the domain's two values used to persist on both write
+// paths, and a PUT without a name or status stored empty strings. Validation
+// runs before any repository call, so these need no database: a request that
+// slipped past it would panic on a nil repository and come back 500.
+func TestRecipeHandlers_RejectOutOfDomainWrites(t *testing.T) {
+	router := NewRouter(Deps{}, testSecurity)
+
+	for _, tc := range []struct {
+		name, method, path string
+		dto                RecipeDTO
+	}{
+		{"POST bogus status", http.MethodPost, "/api/recipes", RecipeDTO{Name: "x", Source: "s", Status: "banana"}},
+		{"PUT bogus status", http.MethodPut, "/api/recipes/1", RecipeDTO{Name: "x", Status: "banana"}},
+		{"PUT empty status", http.MethodPut, "/api/recipes/1", RecipeDTO{Name: "x"}},
+		{"PUT empty name", http.MethodPut, "/api/recipes/1", RecipeDTO{Status: string(domain.StatusPublished)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := json.Marshal(tc.dto)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, jsonRequest(tc.method, tc.path, body))
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400; body = %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// Create still defaults an omitted status rather than rejecting it — the
+// validation above runs on the defaulted value, not on the raw field.
+func TestRecipeHandlers_CreateDefaultsOmittedStatusToPublished(t *testing.T) {
+	router := NewRouter(newTestDeps(t), testSecurity)
+
+	body, err := json.Marshal(RecipeDTO{Name: "Brot", Source: "src-default-status"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/api/recipes", body))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body = %s", rec.Code, rec.Body.String())
+	}
+	var created RecipeDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if created.Status != string(domain.StatusPublished) {
+		t.Errorf("status = %q, want %q", created.Status, domain.StatusPublished)
+	}
+}

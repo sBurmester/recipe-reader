@@ -17,6 +17,13 @@ const (
 	StatusPublished RecipeStatus = "published"
 )
 
+// Valid reports whether s is one of the two statuses above. The schema holds
+// the same rule as a CHECK constraint (migration 0002); this is the copy a
+// handler can answer with before a write reaches it.
+func (s RecipeStatus) Valid() bool {
+	return s == StatusNeedsReview || s == StatusPublished
+}
+
 // Unit is a measurement unit (e.g. "g", "EL").
 type Unit struct {
 	ID   int64
