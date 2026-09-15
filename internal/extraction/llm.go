@@ -78,7 +78,9 @@ func (e *LLMExtractor) Extract(ctx context.Context, caption string) (*ExtractedR
 		ctx, cancel = context.WithTimeout(ctx, e.timeout)
 		defer cancel()
 	}
-	raw, err := e.client.recordRecipe(ctx, caption)
+	// Capped here, for the same reason the timeout is: every transport passes
+	// through this line, so one edit covers them all.
+	raw, err := e.client.recordRecipe(ctx, capCaption(caption))
 	if err != nil {
 		return nil, err
 	}

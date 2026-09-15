@@ -498,12 +498,18 @@ re-opens a settled one or assumes a live one is settled:
       A backfill is exactly when an operator wants to raise them.
 - [ ] **T-17 · 5.0 · S** — Lifecycle owner for the detached import goroutine — `go` #4 — `internal/api/handlers_import.go` (`context.WithoutCancel` + `go d.Worker.RunOnce`)
       **CORRECTED in round 2:** this is *not* a use-after-close. `puddle/v2@v2.2.2/pool.go:179-195` destroys only idle resources, leaving an in-flight connection untouched, and the process usually exits first. The rating holds at 5.0 on different reasoning — high likelihood, small blast radius, **zero diagnosability**, since the truncated run is never reported.
-- [ ] **T-29 · 5.0 · S** — Cap caption length (by runes) — `extraction` E3
+- [x] **T-29 · 5.0 · S** — Cap caption length (by runes) — `extraction` E3
       **RE-CITED, and simpler than it was.** The caption no longer reaches the
       API at `llm.go:83`; it enters at `LLMExtractor.Extract`
       (`internal/extraction/llm.go`) and is handed to whichever transport is
       configured. Cap it there — **one edit, not one per provider**. Shares a
       sitting with T-20, which wants the same function.
+      **DONE.** `capCaption` (`internal/extraction/caption.go`) cuts to
+      `maxCaptionRunes` = 8000 (E3's figure), by runes, and logs a warning when
+      it cuts — a caption that long is not a real Instagram caption. It is
+      tested on four-byte emoji for exact rune count and valid UTF-8. `Extract`
+      applies it on the line every transport passes through, which a
+      capturing fake confirms.
 
 ## Band 4.0 – 4.9 (10 tasks)
 

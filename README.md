@@ -134,6 +134,10 @@ runs past it fails that one post — in `hybrid` mode the post falls back to the
 degraded — and the import moves on instead of waiting indefinitely. Raise it for a local model running
 on CPU.
 
+A caption longer than 8,000 characters is cut to that length before it is sent. A real Instagram caption
+is at most 2,200, so this only ever trims input that did not come from an ordinary post, and it keeps
+any one post from running up an unbounded input-token bill.
+
 ### Confidence
 
 Every extraction carries a confidence between 0 and 1, and two separate thresholds act on it:
