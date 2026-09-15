@@ -427,8 +427,22 @@ re-opens a settled one or assumes a live one is settled:
 - [ ] **T-16 · 5.5 · S** — Validate `status`, in the handler **and** the schema — `go` #2 + `persistence` P7 (chair ruling R1)
       **Both halves or it is not done:** validate against the two domain values on POST *and* PUT (a non-empty bogus status like `"banana"` persists today on both paths), plus a `0002` migration adding `CHECK (status IN ('needs_review','published'))` preceded by a backfill. Validation alone leaves existing bad rows and leaves the invariant unenforced against psql and future writers.
       **CORRECTED:** a `status=''` row is *not* invisible in the list view — `web/src/pages/list.ts:54-58` sends no status filter, so it appears and silently reads as published.
-- [ ] **T-10 · 5.5 · M** — One Postgres container per package, not per test — `delivery` D3
+- [x] **T-10 · 5.5 · M** — One Postgres container per package, not per test — `delivery` D3
       `TestMain` per package + `TRUNCATE ... RESTART IDENTITY CASCADE` between tests. **CORRECTED: 18 containers, not 8** — five `testdb.New` call sites sit inside `t.Helper()` wrappers that several tests each invoke. Rating fell (it fails loudly and hits only developers) while the payoff rose.
+      **DONE — 27 container boots to 4, and 43s of wall time to 5s.**
+      `testdb.New` now starts one container per test binary, lazily on first
+      use, and on every call truncates each application table with
+      `RESTART IDENTITY`. The table list is read from `pg_tables`, so a table a
+      later migration adds is covered without editing the helper. A `TestMain`
+      in each of the four database packages calls `testdb.Main`, which
+      terminates the container. **No call site changed.**
+      `TestTestDBNew_ResetsRowsAndSequences` guards the reset.
+      **D3's count, settled by measurement.** Counted with a live
+      `docker events` stream — `--since` replays from a bounded buffer and
+      under-read the same run as 17: **21** boots at `4ce206e`, the last commit
+      before any remediation, so the corrected 18 was itself an undercount; and
+      **27** when this task started, because the ≥ 6.0 work added database
+      tests at a container apiece — exactly D3's prediction.
 - [ ] **T-14 · 5.4 · S** — Let a failed Instagram login recover without a restart — `integration` I8 — `cmd/recipe-reader/main.go:71-87`
 - [ ] **T-27 · 5.2 · S** — `-race` in `make test` — `delivery` D4 — `Makefile:20-21`. Nearly free after T-10.
 - [ ] **T-08 · 5.0 · M** — Resolve lookups inside the recipe transaction — `persistence` P2 — `internal/repository/lookup_repository.go:28`. Note the T-03 link is withdrawn; this stands on its own.

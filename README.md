@@ -226,8 +226,8 @@ database the container would use.
 ## Testing & linting
 
     make check   # gofmt + go vet + golangci-lint + govulncheck + go test
-                 # go test spins up ephemeral Postgres containers via testcontainers-go —
-                 # Docker must be running.
+                 # go test starts one ephemeral Postgres container per database package
+                 # via testcontainers-go — Docker must be running.
 
     npm --prefix web run typecheck
     npm --prefix web run build

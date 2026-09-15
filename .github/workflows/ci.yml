@@ -55,9 +55,10 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       # internal/db, internal/repository, internal/pipeline and internal/api
-      # each start ephemeral Postgres containers via testcontainers-go.
+      # each start one ephemeral Postgres container via testcontainers-go,
+      # shared across the package's tests (see internal/db/testdb).
       # ubuntu-latest runners have Docker natively, so no services: block is
-      # needed - but it does make this the slowest job by a wide margin.
+      # needed.
       - name: go test
         run: go test ./... -race
 
