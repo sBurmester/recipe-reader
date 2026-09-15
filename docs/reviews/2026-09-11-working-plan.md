@@ -455,12 +455,25 @@ re-opens a settled one or assumes a live one is settled:
       flag entry to list them under. Tests: all four flags are refused as
       unknown, all four arrive from the environment, and the description names
       each one. Nothing in the repository used the flag form.
-- [ ] **T-22 · 5.6 · M** — Smoke-test the built image in CI — `delivery` D7 — `.github/workflows/ci.yml`
+- [x] **T-22 · 5.6 · M** — Smoke-test the built image in CI — `delivery` D7 — `.github/workflows/ci.yml`
       **Now guards T-05 rather than covering it.** T-05 shipped, so the
       placeholder can no longer reach a `make build` artifact — but nothing in
       CI would catch it regressing, and `webui.IsPlaceholder()`'s startup
       warning is only visible to someone reading the log. Run the image and
       assert `/api/healthz` plus a `/` body that is not the placeholder.
+      **DONE, and shown to fail when it should.** `scripts/smoke-test-image.sh`
+      starts the image on a private network against a throwaway Postgres. It
+      requires `/api/healthz` to answer ok; `/api/recipes` to answer, because
+      liveness touches no dependency and this is what proves the migrations
+      ran; and `/` to differ from `internal/webui/placeholder/index.html`. It
+      compares against that file rather than a marker string, so rewording the
+      placeholder cannot quietly disable the check. CI runs it after the build,
+      and it runs identically locally. **Verified both ways:** the real image
+      passes, and an image built without the frontend fails with "the image
+      serves the placeholder frontend, not a real build". **Not done:** D7's
+      second half, pushing the image to a registry on `main`. That needs
+      registry credentials and `packages: write`, and the plan scoped this
+      task to the smoke test.
 - [x] **T-16 · 5.5 · S** — Validate `status`, in the handler **and** the schema — `go` #2 + `persistence` P7 (chair ruling R1)
       **Both halves or it is not done:** validate against the two domain values on POST *and* PUT (a non-empty bogus status like `"banana"` persists today on both paths), plus a `0002` migration adding `CHECK (status IN ('needs_review','published'))` preceded by a backfill. Validation alone leaves existing bad rows and leaves the invariant unenforced against psql and future writers.
       **CORRECTED:** a `status=''` row is *not* invisible in the list view — `web/src/pages/list.ts:54-58` sends no status filter, so it appears and silently reads as published.

@@ -251,9 +251,16 @@ database the container would use.
     npm --prefix web run typecheck
     npm --prefix web run build
 
-CI (`.github/workflows/ci.yml`) runs the same checks on every pull request, plus a `docker build`
-and a guard that fails if the committed `internal/db/sqlc/` has drifted from the queries and
-migrations it was generated from.
+CI (`.github/workflows/ci.yml`) runs the same checks on every pull request, a guard that fails if
+the committed `internal/db/sqlc/` has drifted from the queries and migrations it was generated
+from, and a `docker build` followed by a smoke test of the image:
+
+    docker build -t recipe-reader:ci .
+    scripts/smoke-test-image.sh recipe-reader:ci
+
+The script starts the image against a throwaway Postgres and fails unless `/api/healthz` answers,
+`/api/recipes` answers (so the migrations ran against a real database), and `/` serves the built
+frontend rather than the placeholder page. It runs the same way locally as in CI.
 
 ## Changing the database schema
 
