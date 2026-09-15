@@ -563,8 +563,22 @@ re-opens a settled one or assumes a live one is settled:
       and flag overrides, the refusal, and the values reaching the fetcher.
       **Still open:** `.env.example` does not list them, and could not be
       edited in this session; it needs a manual update.
-- [ ] **T-17 · 5.0 · S** — Lifecycle owner for the detached import goroutine — `go` #4 — `internal/api/handlers_import.go` (`context.WithoutCancel` + `go d.Worker.RunOnce`)
+- [x] **T-17 · 5.0 · S** — Lifecycle owner for the detached import goroutine — `go` #4 — `internal/api/handlers_import.go` (`context.WithoutCancel` + `go d.Worker.RunOnce`)
       **CORRECTED in round 2:** this is *not* a use-after-close. `puddle/v2@v2.2.2/pool.go:179-195` destroys only idle resources, leaving an in-flight connection untouched, and the process usually exits first. The rating holds at 5.0 on different reasoning — high likelihood, small blast radius, **zero diagnosability**, since the truncated run is never reported.
+      **DONE — the worker owns its runs, and shutdown stops them and waits.**
+      `Worker.Trigger` replaces the handler's `go RunOnce(WithoutCancel(...))`.
+      The run executes under the context `Start` was given — the signal
+      context — so shutdown *cancels* it instead of letting it run on, and a
+      `sync.WaitGroup` counts it together with the schedule loop, which go #4
+      noted had the same gap. `run()` calls `worker.Wait(shutdownCtx)` after
+      `server.Shutdown`, inside the same 10s budget: no handler is left to
+      trigger a run while it waits, and the pool stays open until the run has
+      stopped. On diagnosability, the reason the rating held: the cancelled run
+      is recorded as the last error and logged, and a run that outlives the
+      budget is logged as abandoned. Tested with a fetcher that blocks until
+      cancelled — `Wait` does not report done while the run is in flight,
+      returns after shutdown, and the cancellation is recorded — five times
+      under `-race`. In the built image, `docker stop` exits 0 at once.
 - [x] **T-29 · 5.0 · S** — Cap caption length (by runes) — `extraction` E3
       **RE-CITED, and simpler than it was.** The caption no longer reaches the
       API at `llm.go:83`; it enters at `LLMExtractor.Extract`
