@@ -444,7 +444,11 @@ re-opens a settled one or assumes a live one is settled:
       **27** when this task started, because the ≥ 6.0 work added database
       tests at a container apiece — exactly D3's prediction.
 - [ ] **T-14 · 5.4 · S** — Let a failed Instagram login recover without a restart — `integration` I8 — `cmd/recipe-reader/main.go:71-87`
-- [ ] **T-27 · 5.2 · S** — `-race` in `make test` — `delivery` D4 — `Makefile:20-21`. Nearly free after T-10.
+- [x] **T-27 · 5.2 · S** — `-race` in `make test` — `delivery` D4 — `Makefile:20-21`. Nearly free after T-10.
+      **DONE, and it was.** `make test` runs `go test -race ./...`, matching
+      CI. With T-10 in, the race-instrumented suite takes 46s wall including
+      the instrumented compile — against 43s for the uninstrumented suite
+      before T-10.
 - [ ] **T-08 · 5.0 · M** — Resolve lookups inside the recipe transaction — `persistence` P2 — `internal/repository/lookup_repository.go:28`. Note the T-03 link is withdrawn; this stands on its own.
 - [ ] **T-28 · 5.0 · S** — Wire the per-run fetch bounds to flags — `integration` I6
       **RE-CITED, and there are two knobs now.** `MaxItemsPerRun` became

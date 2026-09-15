@@ -225,7 +225,7 @@ database the container would use.
 
 ## Testing & linting
 
-    make check   # gofmt + go vet + golangci-lint + govulncheck + go test
+    make check   # gofmt + go vet + golangci-lint + govulncheck + go test -race
                  # go test starts one ephemeral Postgres container per database package
                  # via testcontainers-go — Docker must be running.
 
