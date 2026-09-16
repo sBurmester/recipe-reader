@@ -109,6 +109,39 @@ code lives and how much of each task is left.
 
 **S** — under an hour · **M** — half a day · **L** — a day or more
 
+## Blocked on external access
+
+Two tasks cannot be finished from the repository, whatever effort is spent on
+them. They are **blocked on access, not on work** — that is a different problem
+from "not done yet", and the distinction is what tells the next reader they
+cannot fix it by trying harder. Both stay unticked until the access exists.
+
+| Task | Rating | What it needs | Who can supply it | What is blocked behind it |
+| --- | --- | --- | --- | --- |
+| **T-43** — verify the Instagram endpoints against a real account | 3.4 | Live Instagram credentials and a real saved collection, plus the willingness to run an unofficial private API against them (see the README's Terms of Service caveat) | The account owner | **I1's magnitude** — the panel's only recorded open dissent, which ruling notes say *"requires one live run against a real account"*. **T-42's corpus provenance** — its gold captions are written rather than collected until this runs. **T-46's optional-field assumptions** — which response fields are genuinely optional is currently a guess. **T-19's no-progress guard**, verified only against a synthetic feed. |
+| **T-24** — default to Haiku 4.5 for batch extraction | 4.8 | An LLM API key, to run `TestGoldSetLLM` over the gold set for each candidate model | Whoever holds the project's billing | Nothing waits on it, but it is a cost finding: it goes on costing until it lands. |
+
+**T-24 is only half blocked, and it is worth being precise about which half.**
+Ruling R7 gates it on T-42's gold set, and T-42 has shipped — so the harness
+exists and the comparison is now runnable rather than hypothetical. What is
+missing is a key to run the paid half with, and the caveat that the corpus is
+synthetic until T-43 lands, which limits what a model comparison over it
+proves. Run it as:
+
+    RECIPE_READER_EVAL_LLM=1 ANTHROPIC_API_KEY=sk-... LLM_MODEL=<candidate> \
+      go test ./internal/extraction -run GoldSetLLM -v
+
+**Everything else still open is ordinary work.** The remaining 16 tasks in the
+2.0–2.9 and < 2.0 bands need no credential, no live account and no third-party
+approval; nothing in them is waiting on anyone.
+
+**Where the blocked work was routed instead.** Both entries below record what
+was done in place of the access, so its absence costs less while it lasts —
+T-46 shipped without T-43's fixture and made every assumption that fixture
+would have verified *diagnosable* rather than silent, and T-42 shipped with a
+written corpus and a provenance warning at the top of its README rather than
+waiting for captions that may never arrive.
+
 ## Execution order
 
 Rating order is not execution order. The consensus record says why in four
@@ -719,12 +752,21 @@ re-opens a settled one or assumes a live one is settled:
       publish threshold below the confidence threshold is odd but not incoherent,
       and the plan asked for range checks.
 - [ ] **T-24 · 4.8 · S** — Default to Haiku 4.5 for batch extraction — `extraction` E4
-      **NOT DONE — gated, deliberately.** Ruling R7 settles E4 "with T-42's gold
-      set", and the execution order puts T-42 (3.8, L) ahead of it in Stage 4.
-      T-42 has not been done, so the evidence the ruling requires does not exist
-      and flipping the default now would be the guess the eval was commissioned
-      to replace. Everything else in this band shipped. **When T-42 lands, three
-      places change, not two** — see the re-citation below.
+      **NOT DONE — the gate opened in revision 6, the access did not.** See
+      [Blocked on external access](#blocked-on-external-access). Ruling R7
+      settles E4 "with T-42's gold set", and **T-42 shipped**: the harness and
+      the corpus now exist, so the comparison is runnable rather than
+      hypothetical. Two things still stand between that and flipping the
+      default. It needs **an LLM API key** to run the paid `TestGoldSetLLM`
+      half over each candidate model, which nobody working from the repository
+      has. And T-42's captions are **written rather than collected** until T-43
+      runs, so a model comparison over them measures the extractors against
+      expected captions, not against the feed — read
+      `internal/extraction/testdata/gold/README.md` before drawing a
+      conclusion from the numbers.
+      Flipping it without running that is still the guess the eval was
+      commissioned to replace. **When it is run, three places change, not two**
+      — see the re-citation below.
       **Lowered in round 2** by its own reviewer: this is the only cost finding
       whose failure announces itself, on the first invoice. Settle the model
       choice with T-42's gold set (ruling R7).
@@ -854,9 +896,10 @@ re-opens a settled one or assumes a live one is settled:
       `127.0.0.1:5432` and nothing else.
 - [ ] **T-43 · 3.4 · M** — Verify the Instagram endpoints against a real account — `integration` I11
       **Promoted in importance by the round:** this is what settles T-01's unresolved magnitude. Commit the response as a fixture; it also gives T-18 a realistic case.
-      **STILL OPEN — it cannot be done from here.** It needs live Instagram
-      credentials and a real saved collection, which no amount of code changes
-      supplies. It is the one task in this band that is blocked on access
+      **STILL OPEN — it cannot be done from here.** See
+      [Blocked on external access](#blocked-on-external-access). It needs live
+      Instagram credentials and a real saved collection, which no amount of
+      code changes supplies. It is the one task in this band that is blocked on access
       rather than on work, and it stays the most informative task on the board:
       I1's magnitude, T-42's corpus provenance and T-46's field-optionality
       assumptions all wait on its fixture.
@@ -1065,10 +1108,9 @@ a finding. The GO-2026-5932 provenance note lives in the security review's
 | < 2.0 | 2 | 0 |
 | **Total** | **62** | **44** |
 
-**The two tasks rated ≥ 3.0 that are not done**, and why each is open on
-purpose rather than by omission:
-
-| Task | Rating | Why it is open |
-| --- | --- | --- |
-| **T-24** — default to Haiku 4.5 for batch extraction | 4.8 | Gated by R7 on T-42's gold set. **That gate is now open:** T-42 shipped in revision 6, so the model default can be measured instead of guessed. Read `testdata/gold/README.md` first — the corpus is written rather than collected until T-43 runs, which is a real limit on what a model comparison over it proves. |
-| **T-43** — verify the Instagram endpoints against a real account | 3.4 | **Blocked on access, not on work.** It needs live Instagram credentials and a real saved collection. Three things wait on its one live run: I1's magnitude (the panel's only recorded open dissent), T-42's corpus provenance, and T-46's guesses about which response fields are optional. |
+**The two tasks rated ≥ 3.0 that are not done** are the two in
+[Blocked on external access](#blocked-on-external-access): **T-24** (4.8, needs
+an LLM API key to run the eval that settles it) and **T-43** (3.4, needs live
+Instagram credentials). Neither is waiting on work. Everything else still open
+is in the 2.0–2.9 and < 2.0 bands and needs nothing from outside the
+repository.
