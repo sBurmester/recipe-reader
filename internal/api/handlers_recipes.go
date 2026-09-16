@@ -91,12 +91,12 @@ func (d Deps) handleCreateRecipe(w http.ResponseWriter, r *http.Request) {
 	if dto.Status == "" {
 		dto.Status = string(domain.StatusPublished)
 	}
-
-	recipe, err := d.dtoToRecipe(r, dto)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to resolve ingredients/categories")
+	if !domain.RecipeStatus(dto.Status).Valid() {
+		writeError(w, http.StatusBadRequest, errInvalidStatus)
 		return
 	}
+
+	recipe := dtoToRecipe(dto)
 	if err := d.Recipes.Create(r.Context(), recipe); err != nil {
 		writeError(w, http.StatusInternalServerError, "create failed")
 		return
@@ -104,8 +104,18 @@ func (d Deps) handleCreateRecipe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, toRecipeDTO(*recipe))
 }
 
+// errInvalidStatus is the 400 message for a status outside the domain's two
+// values. Migration 0002 enforces the same rule in the schema; checking here
+// as well turns a constraint violation into a message the client can act on.
+const errInvalidStatus = `status must be "needs_review" or "published"`
+
 // handleUpdateRecipe replaces a recipe wholesale — the body is the new state,
 // not a patch, which is also how the repository writes associations.
+//
+// Being a replacement is why it requires a name and a legal status rather than
+// defaulting them the way create does: an omitted field here means "set it to
+// empty", and a PUT without a status used to persist exactly that. Source is
+// not required — UpdateRecipe never writes it.
 func (d Deps) handleUpdateRecipe(w http.ResponseWriter, r *http.Request) {
 	id, err := parseIDParam(r)
 	if err != nil {
@@ -116,12 +126,16 @@ func (d Deps) handleUpdateRecipe(w http.ResponseWriter, r *http.Request) {
 	if !decodeRecipeBody(w, r, &dto) {
 		return
 	}
-
-	recipe, err := d.dtoToRecipe(r, dto)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to resolve ingredients/categories")
+	if dto.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if !domain.RecipeStatus(dto.Status).Valid() {
+		writeError(w, http.StatusBadRequest, errInvalidStatus)
+		return
+	}
+
+	recipe := dtoToRecipe(dto)
 	// The path wins over any id in the body, so a copy-pasted payload cannot
 	// overwrite a different recipe.
 	recipe.ID = id
@@ -174,48 +188,31 @@ func decodeRecipeBody(w http.ResponseWriter, r *http.Request, dto *RecipeDTO) bo
 	return false
 }
 
-// dtoToRecipe resolves the DTO's free-text category, ingredient, and unit
-// names to lookup rows, creating them on first sight — the same contract the
-// import pipeline uses, so a hand-entered recipe and an imported one end up
-// sharing the same lookup rows instead of duplicating them.
+// dtoToRecipe maps the DTO onto a domain.Recipe, carrying categories,
+// ingredients and units by name. RecipeRepository.Create and Update find or
+// create their lookup rows inside the transaction that writes the recipe — the
+// same contract the import pipeline uses, so a hand-entered recipe and an
+// imported one share lookup rows instead of duplicating them — and fill the
+// resolved ids and names back in on commit, which is what the response echoes.
 //
-// The resolved names are copied back onto the domain model's read-side fields
-// as well. The repository ignores them on write, but it means the response
-// built from this value echoes the ingredient and unit names the client sent
-// rather than blanks.
-func (d Deps) dtoToRecipe(r *http.Request, dto RecipeDTO) (*domain.Recipe, error) {
+// This used to resolve them itself, on the bare pool, before the write began.
+// They were committed by the time the recipe insert could fail, so a POST that
+// failed on a duplicate source left its new ingredients and categories behind
+// as orphans in the autocomplete pickers.
+func dtoToRecipe(dto RecipeDTO) *domain.Recipe {
 	recipe := &domain.Recipe{
 		Name: dto.Name, Instructions: dto.Instructions, ImageURL: dto.ImageURL,
 		Source: dto.Source, Status: domain.RecipeStatus(dto.Status),
 	}
 	for _, cat := range dto.Categories {
-		c, err := d.Lookups.FindOrCreateCategory(r.Context(), cat.Name)
-		if err != nil {
-			return nil, err
-		}
-		recipe.Categories = append(recipe.Categories, *c)
+		recipe.Categories = append(recipe.Categories, domain.Category{Name: cat.Name})
 	}
 	for _, ing := range dto.Ingredients {
-		ingredient, err := d.Lookups.FindOrCreateIngredient(r.Context(), ing.Name)
-		if err != nil {
-			return nil, err
-		}
-		ri := domain.RecipeIngredient{
-			IngredientID:   ingredient.ID,
-			IngredientName: ingredient.Name,
-			Amount:         ing.Amount,
-		}
-		if ing.Unit != "" {
-			unit, err := d.Lookups.FindOrCreateUnit(r.Context(), ing.Unit)
-			if err != nil {
-				return nil, err
-			}
-			ri.UnitID = &unit.ID
-			ri.UnitName = unit.Name
-		}
-		recipe.Ingredients = append(recipe.Ingredients, ri)
+		recipe.Ingredients = append(recipe.Ingredients, domain.RecipeIngredient{
+			IngredientName: ing.Name, Amount: ing.Amount, UnitName: ing.Unit,
+		})
 	}
-	return recipe, nil
+	return recipe
 }
 
 // parseIDParam reads the {id} wildcard the mux captured from the path.

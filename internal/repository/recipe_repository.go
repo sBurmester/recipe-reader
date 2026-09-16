@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -50,6 +51,10 @@ func NewRecipeRepository(pool *pgxpool.Pool) RecipeRepository {
 	return &pgRecipeRepository{pool: pool, queries: sqlc.New(pool)}
 }
 
+// Create inserts recipe with its ingredient and category associations in one
+// transaction, resolving any association given by name rather than id (see
+// resolveLookups). recipe is updated with the stored ids and timestamps only
+// once the transaction has committed; after a failure it is left as passed.
 func (r *pgRecipeRepository) Create(ctx context.Context, recipe *domain.Recipe) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -58,22 +63,33 @@ func (r *pgRecipeRepository) Create(ctx context.Context, recipe *domain.Recipe) 
 	defer tx.Rollback(ctx) //nolint:errcheck // no-op if Commit already succeeded
 
 	q := r.queries.WithTx(tx)
+	staged := stage(recipe)
 	row, err := q.CreateRecipe(ctx, sqlc.CreateRecipeParams{
-		Name: recipe.Name, Instructions: recipe.Instructions,
-		ImageUrl: recipe.ImageURL, Source: recipe.Source, Status: string(recipe.Status),
+		Name: staged.Name, Instructions: staged.Instructions,
+		ImageUrl: staged.ImageURL, Source: staged.Source, Status: string(staged.Status),
 	})
 	if err != nil {
 		return fmt.Errorf("repository: create recipe: %w", err)
 	}
-	recipe.ID = row.ID
-	recipe.CreatedAt, recipe.UpdatedAt = row.CreatedAt.Time, row.UpdatedAt.Time
+	staged.ID = row.ID
+	staged.CreatedAt, staged.UpdatedAt = row.CreatedAt.Time, row.UpdatedAt.Time
 
-	if err := writeAssociations(ctx, q, recipe); err != nil {
+	if err := resolveLookups(ctx, q, &staged); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	if err := writeAssociations(ctx, q, &staged); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("repository: commit create: %w", err)
+	}
+	*recipe = staged
+	return nil
 }
 
+// Update replaces recipe's fields and associations in one transaction, with
+// the same name resolution and the same only-on-commit update of recipe as
+// Create.
 func (r *pgRecipeRepository) Update(ctx context.Context, recipe *domain.Recipe) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -82,22 +98,84 @@ func (r *pgRecipeRepository) Update(ctx context.Context, recipe *domain.Recipe) 
 	defer tx.Rollback(ctx) //nolint:errcheck // no-op if Commit already succeeded
 
 	q := r.queries.WithTx(tx)
+	staged := stage(recipe)
 	row, err := q.UpdateRecipe(ctx, sqlc.UpdateRecipeParams{
-		ID: recipe.ID, Name: recipe.Name, Instructions: recipe.Instructions,
-		ImageUrl: recipe.ImageURL, Status: string(recipe.Status),
+		ID: staged.ID, Name: staged.Name, Instructions: staged.Instructions,
+		ImageUrl: staged.ImageURL, Status: string(staged.Status),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
 	}
 	if err != nil {
-		return fmt.Errorf("repository: update recipe %d: %w", recipe.ID, err)
+		return fmt.Errorf("repository: update recipe %d: %w", staged.ID, err)
 	}
-	recipe.UpdatedAt = row.UpdatedAt.Time
+	staged.CreatedAt, staged.UpdatedAt = row.CreatedAt.Time, row.UpdatedAt.Time
 
-	if err := writeAssociations(ctx, q, recipe); err != nil {
+	if err := resolveLookups(ctx, q, &staged); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	if err := writeAssociations(ctx, q, &staged); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("repository: commit update %d: %w", staged.ID, err)
+	}
+	*recipe = staged
+	return nil
+}
+
+// stage copies recipe, including its association slices, so a write can fill
+// in ids without touching the caller's value until the transaction commits.
+func stage(recipe *domain.Recipe) domain.Recipe {
+	staged := *recipe
+	staged.Ingredients = slices.Clone(recipe.Ingredients)
+	staged.Categories = slices.Clone(recipe.Categories)
+	return staged
+}
+
+// resolveLookups fills in the lookup-table ids an association is written with,
+// finding or creating the ingredient, unit or category row by name wherever
+// the caller gave a name and no id.
+//
+// It runs on the write's own transaction, and that is the point. The handler
+// and the pipeline used to resolve these on the bare pool before Create or
+// Update began, so the rows were already committed by the time the recipe
+// write could fail — a duplicate source, a cancelled context — and they stayed
+// behind as orphans in the frontend's autocomplete pickers. Here a failed write
+// rolls them back with everything else.
+//
+// An id wins over a name: a recipe loaded through GetByID carries both, and a
+// caller that changes the id without the name means the id.
+func resolveLookups(ctx context.Context, q *sqlc.Queries, recipe *domain.Recipe) error {
+	for i := range recipe.Categories {
+		cat := &recipe.Categories[i]
+		if cat.ID != 0 {
+			continue
+		}
+		row, err := q.FindOrCreateCategory(ctx, cat.Name)
+		if err != nil {
+			return fmt.Errorf("repository: find or create category %q: %w", cat.Name, err)
+		}
+		cat.ID, cat.Name = row.ID, row.Name
+	}
+	for i := range recipe.Ingredients {
+		ing := &recipe.Ingredients[i]
+		if ing.IngredientID == 0 {
+			row, err := q.FindOrCreateIngredient(ctx, ing.IngredientName)
+			if err != nil {
+				return fmt.Errorf("repository: find or create ingredient %q: %w", ing.IngredientName, err)
+			}
+			ing.IngredientID, ing.IngredientName = row.ID, row.Name
+		}
+		if ing.UnitID == nil && ing.UnitName != "" {
+			row, err := q.FindOrCreateUnit(ctx, ing.UnitName)
+			if err != nil {
+				return fmt.Errorf("repository: find or create unit %q: %w", ing.UnitName, err)
+			}
+			ing.UnitID, ing.UnitName = &row.ID, row.Name
+		}
+	}
+	return nil
 }
 
 // writeAssociations replaces a recipe's child rows wholesale: delete then

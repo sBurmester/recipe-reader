@@ -29,7 +29,14 @@ type Worker struct {
 	pipeline *Pipeline
 	interval time.Duration
 
-	mu            sync.Mutex
+	// runs counts the goroutines this worker started — the schedule loop and
+	// every triggered run — so Wait can hold shutdown until they are done.
+	runs sync.WaitGroup
+
+	mu sync.Mutex
+	// base is the context Start was given, kept so that runs started later by
+	// Trigger execute under it and stop with it. Nil before Start.
+	base          context.Context
 	running       bool
 	lastRun       time.Time
 	lastResult    ImportResult
@@ -55,12 +62,18 @@ func NewWorker(p *Pipeline, interval time.Duration) *Worker {
 }
 
 // Start launches the schedule in a background goroutine and returns
-// immediately. The first run happens one interval from now, not at boot;
-// call RunOnce directly if an immediate import is wanted. The goroutine
-// exits when ctx is cancelled.
+// immediately. The first run happens one interval from now, not at boot; call
+// Trigger for an immediate import. The schedule stops when ctx is cancelled,
+// and ctx is also what runs started by Trigger execute under.
 func (w *Worker) Start(ctx context.Context) {
+	w.mu.Lock()
+	w.base = ctx
+	w.mu.Unlock()
+
 	ticker := time.NewTicker(w.interval)
+	w.runs.Add(1)
 	go func() {
+		defer w.runs.Done()
 		defer ticker.Stop()
 		for {
 			select {
@@ -71,6 +84,52 @@ func (w *Worker) Start(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// Trigger starts a run in the background and returns at once. The run belongs
+// to the worker, not to the caller: it executes under the context Start was
+// given, so a shutdown cancels it, and Wait waits for it. Before Start it runs
+// under context.Background.
+//
+// It replaces the import handler's `go RunOnce(context.WithoutCancel(...))`.
+// Detaching the run from the request was right — the request's context ends
+// the moment the handler answers 202. Detaching it from everything was not:
+// nothing owned that goroutine, so shutdown drained the HTTP server, returned
+// from run() and closed the database pool beneath it, and the truncated run was
+// never reported because the process was already gone.
+func (w *Worker) Trigger() {
+	w.mu.Lock()
+	ctx := w.base
+	w.mu.Unlock()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	w.runs.Add(1)
+	go func() {
+		defer w.runs.Done()
+		w.RunOnce(ctx)
+	}()
+}
+
+// Wait blocks until every goroutine the worker started has returned, or until
+// ctx is done — in which case it returns ctx's error and leaves them running.
+//
+// Call it after cancelling the context given to Start, or the schedule loop
+// never returns; and after the HTTP server has shut down, so no handler can
+// Trigger another run while it waits.
+func (w *Worker) Wait(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		w.runs.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // RunOnce runs the pipeline synchronously and records the outcome. If a run
@@ -144,4 +203,14 @@ func (w *Worker) Status() Status {
 		Running:       w.running,
 		CooldownUntil: w.cooldownUntil,
 	}
+}
+
+// RecordFailure sets err as the error Status reports, without a run. It is for
+// failures that happen before the first run — a startup login, above all —
+// which would otherwise stay invisible until the first scheduled import, hours
+// later. The next run's outcome replaces it.
+func (w *Worker) RecordFailure(err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.lastErr = err
 }

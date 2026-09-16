@@ -63,32 +63,26 @@ func run() error {
 	recipes := repository.NewRecipeRepository(pool)
 	lookups := repository.NewLookupRepository(pool)
 
-	// Instagram is optional: without credentials, or when login fails, the
-	// server still serves the API over whatever is already in the database —
-	// only the import worker is withheld.
-	igClient := instagram.NewClient()
-	var fetcher pipeline.PostFetcher
-	if cfg.InstagramUsername != "" {
-		if err := igClient.LoginOrRestore(ctx, cfg.InstagramUsername, cfg.InstagramPassword, cfg.InstagramSessionPath); err != nil {
-			slog.Warn("instagram login failed; import worker will not run", "error", err)
-		} else {
-			fetcher = &instagram.PipelineFetcher{
-				Client:         igClient,
-				CollectionName: cfg.InstagramCollection,
-				Options:        instagram.FetchOptions{Known: alreadyImported(recipes)},
-			}
-		}
-	}
+	// Instagram is optional: without an account configured the server still
+	// serves the API over whatever is already in the database, and only the
+	// import worker is withheld. A failed login no longer withholds it — see
+	// newFetcher.
+	fetcher, loginErr := newFetcher(ctx, cfg, instagram.NewClient(), recipes)
 
 	var worker *pipeline.Worker
 	if fetcher != nil {
 		p := &pipeline.Pipeline{
 			Fetcher: fetcher, Extractor: extractor,
-			Recipes: recipes, Lookups: lookups,
+			Recipes:          recipes,
 			Threshold:        cfg.ExtractionThreshold,
 			PublishThreshold: cfg.ExtractionPublishThreshold,
 		}
 		worker = pipeline.NewWorker(p, cfg.ImportInterval)
+		if loginErr != nil {
+			// Reported now rather than after the first scheduled run, which
+			// is hours away: the import page shows it as the last error.
+			worker.RecordFailure(fmt.Errorf("instagram login failed at startup; the next import retries it: %w", loginErr))
+		}
 		worker.Start(ctx)
 	}
 
@@ -99,7 +93,7 @@ func run() error {
 
 	// Shutdown runs on signal; run() waits for it to finish draining before
 	// returning, so the deferred pool.Close above cannot pull the database out
-	// from under a request that is still being served.
+	// from under a request that is still being served — or an import.
 	shutdownDone := make(chan struct{})
 	go func() {
 		defer close(shutdownDone)
@@ -108,6 +102,16 @@ func run() error {
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			slog.Error("graceful shutdown failed", "error", err)
+		}
+		// Imports second, once no handler is left to trigger another. ctx is
+		// already cancelled, so a run in flight stops at its next check;
+		// waiting for it keeps the pool open until it has, and gets its outcome
+		// logged instead of lost with the process. It shares the server's
+		// budget rather than extending it.
+		if worker != nil {
+			if err := worker.Wait(shutdownCtx); err != nil {
+				slog.Error("import did not stop within the shutdown budget; abandoning it", "error", err)
+			}
 		}
 	}()
 
@@ -142,6 +146,7 @@ func newExtractor(cfg config.Config) (extraction.Extractor, error) {
 			APIKey:   settings.APIKey,
 			Model:    settings.Model,
 			BaseURL:  settings.BaseURL,
+			Timeout:  settings.Timeout,
 		})
 	}
 

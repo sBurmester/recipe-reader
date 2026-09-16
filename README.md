@@ -29,10 +29,15 @@ and serves a searchable web UI. Single Go binary with the frontend embedded; Pos
 
 ## Configuration
 
-Configuration is handled by [kong](https://github.com/alecthomas/kong): every setting can be
-supplied as a command-line flag or an environment variable, with flags taking precedence over
-the environment and the environment over the built-in defaults. Run `recipe-reader --help` for
-the full list. See `.env.example` for the environment-variable names and their defaults.
+Configuration is handled by [kong](https://github.com/alecthomas/kong): settings can be supplied
+as a command-line flag or an environment variable, with flags taking precedence over the
+environment and the environment over the built-in defaults. Run `recipe-reader --help` for the
+full list. See `.env.example` for the environment-variable names and their defaults.
+
+**Credentials are environment-only.** `API_TOKEN`, `INSTAGRAM_PASSWORD`, `LLM_API_KEY` and
+`ANTHROPIC_API_KEY` have no flag form: a value passed on the command line is visible to every user
+on the host through `ps`, and lands in shell history. `recipe-reader --help` names them in its
+description, since there is no flag entry to list them under.
 
 ### Access control
 
@@ -72,9 +77,9 @@ headers must arrive within 10s and the whole request within 30s, a response must
 | --- | --- | --- |
 | `GET` | `/api/healthz` | Liveness probe — `{"status":"ok"}`. |
 | `GET` | `/api/recipes` | Search and list recipes. Query params: `q` (free text), `category_id`, `status`, `page`, `page_size` — all optional; malformed numerics are ignored rather than rejected. Returns `{"recipes":[...],"total":N}`. |
-| `POST` | `/api/recipes` | Create a recipe. `name` and `source` are required. |
+| `POST` | `/api/recipes` | Create a recipe. `name` and `source` are required; `status` defaults to `published` and otherwise must be `needs_review` or `published`. |
 | `GET` | `/api/recipes/{id}` | Fetch one recipe. |
-| `PUT` | `/api/recipes/{id}` | Replace a recipe. |
+| `PUT` | `/api/recipes/{id}` | Replace a recipe. `name` is required and `status` must be `needs_review` or `published` — a replacement has no defaults. |
 | `DELETE` | `/api/recipes/{id}` | Delete a recipe. |
 | `GET` | `/api/categories` | List all categories. |
 | `GET` | `/api/units` | List all units. |
@@ -96,8 +101,18 @@ them into `failed` would make a healthy run look broken, and folding them into `
 hide how much of the feed is noise. Nothing is stored for them.
 
 The two `/api/import/*` routes return `503 {"error":"import worker not configured"}` when no
-Instagram credentials are set, since there is no worker to drive. Every other route works
-normally in that state, serving whatever is already in the database.
+Instagram account is configured (`INSTAGRAM_USERNAME` unset), since there is no worker to drive.
+Every other route works normally in that state, serving whatever is already in the database.
+
+A login that fails at startup does not disable imports. The server logs it, the import status
+reports it as the last error straight away, and the next import — scheduled or triggered — logs in
+before it fetches. Login attempts are rationed to one every 15 minutes, because repeated logins are
+what Instagram flags; a run triggered sooner than that reports the floor instead of trying.
+
+Each run is bounded. `IMPORT_MAX_ITEMS` (default `50`) caps how many new posts it collects — posts
+already imported do not count against it — and `IMPORT_MAX_PAGES` (default `100`) caps how many
+feed pages it walks. Raise them for a one-off backfill of a long saved-posts history; both must be
+at least 1.
 
 ## Extraction
 
@@ -128,6 +143,15 @@ provider; they are not borrowed by the `openai` one.
 
 Both transports build their `record_recipe` schema from the same shared property set, so the two cannot
 drift into asking the model for different fields.
+
+`LLM_TIMEOUT` (default `60s`) bounds each extraction call, the SDK's own retries included. A call that
+runs past it fails that one post — in `hybrid` mode the post falls back to the rules and is counted as
+degraded — and the import moves on instead of waiting indefinitely. Raise it for a local model running
+on CPU.
+
+A caption longer than 8,000 characters is cut to that length before it is sent. A real Instagram caption
+is at most 2,200, so this only ever trims input that did not come from an ordinary post, and it keeps
+any one post from running up an unbounded input-token bill.
 
 ### Confidence
 
@@ -225,16 +249,23 @@ database the container would use.
 
 ## Testing & linting
 
-    make check   # gofmt + go vet + golangci-lint + govulncheck + go test
-                 # go test spins up ephemeral Postgres containers via testcontainers-go —
-                 # Docker must be running.
+    make check   # gofmt + go vet + golangci-lint + govulncheck + go test -race
+                 # go test starts one ephemeral Postgres container per database package
+                 # via testcontainers-go — Docker must be running.
 
     npm --prefix web run typecheck
     npm --prefix web run build
 
-CI (`.github/workflows/ci.yml`) runs the same checks on every pull request, plus a `docker build`
-and a guard that fails if the committed `internal/db/sqlc/` has drifted from the queries and
-migrations it was generated from.
+CI (`.github/workflows/ci.yml`) runs the same checks on every pull request, a guard that fails if
+the committed `internal/db/sqlc/` has drifted from the queries and migrations it was generated
+from, and a `docker build` followed by a smoke test of the image:
+
+    docker build -t recipe-reader:ci .
+    scripts/smoke-test-image.sh recipe-reader:ci
+
+The script starts the image against a throwaway Postgres and fails unless `/api/healthz` answers,
+`/api/recipes` answers (so the migrations ran against a real database), and `/` serves the built
+frontend rather than the placeholder page. It runs the same way locally as in CI.
 
 ## Changing the database schema
 

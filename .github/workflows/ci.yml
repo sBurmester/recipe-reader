@@ -55,9 +55,10 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       # internal/db, internal/repository, internal/pipeline and internal/api
-      # each start ephemeral Postgres containers via testcontainers-go.
+      # each start one ephemeral Postgres container via testcontainers-go,
+      # shared across the package's tests (see internal/db/testdb).
       # ubuntu-latest runners have Docker natively, so no services: block is
-      # needed - but it does make this the slowest job by a wide margin.
+      # needed.
       - name: go test
         run: go test ./... -race
 
@@ -88,3 +89,12 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build image
         run: docker build -t recipe-reader:ci .
+
+      # Building catches Dockerfile drift; running catches what comes after it.
+      # The script starts the image against a throwaway Postgres and checks
+      # that it answers its health check, that a database-backed route works
+      # (so the migrations ran), and that / is the real frontend rather than the
+      # placeholder a build without it embeds - the failure a green build here
+      # used to let through.
+      - name: Smoke-test the image
+        run: scripts/smoke-test-image.sh recipe-reader:ci

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"math"
 	"net/http"
 	"strconv"
@@ -13,12 +12,13 @@ import (
 // work inline would block the request for as long as the LLM and Instagram
 // take — the status endpoint is how a caller finds out how it went.
 //
-// The run gets a context detached from the request: r.Context() is cancelled
-// the moment this handler returns, which would abort the import before it did
-// anything. WithoutCancel keeps any request-scoped values while dropping that
-// cancellation. The Worker itself ignores a second trigger while one run is
-// still in flight, so a double-click cannot start two imports.
-func (d Deps) handleImportRun(w http.ResponseWriter, r *http.Request) {
+// The run belongs to the worker, not to this request. It used to be a bare
+// `go RunOnce(context.WithoutCancel(r.Context()))`: detached from the request,
+// which was right, and from everything else, which was not — nothing waited
+// for it at shutdown. Worker.Trigger starts it under the worker's own context,
+// which shutdown cancels and then waits on. The Worker ignores a second trigger
+// while one run is still in flight, so a double-click cannot start two imports.
+func (d Deps) handleImportRun(w http.ResponseWriter, _ *http.Request) {
 	if d.Worker == nil {
 		writeError(w, http.StatusServiceUnavailable, "import worker not configured")
 		return
@@ -32,8 +32,7 @@ func (d Deps) handleImportRun(w http.ResponseWriter, r *http.Request) {
 			"Instagram rate limit: imports resume in "+cooldown.Round(time.Second).String())
 		return
 	}
-	ctx := context.WithoutCancel(r.Context())
-	go d.Worker.RunOnce(ctx)
+	d.Worker.Trigger()
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "started"})
 }
 

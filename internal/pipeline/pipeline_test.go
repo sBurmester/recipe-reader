@@ -46,7 +46,6 @@ func newTestPipeline(t *testing.T, fetcher PostFetcher, extractor extraction.Ext
 		Fetcher:          fetcher,
 		Extractor:        extractor,
 		Recipes:          repository.NewRecipeRepository(pool),
-		Lookups:          repository.NewLookupRepository(pool),
 		Threshold:        0.6,
 		PublishThreshold: 0.8,
 	}

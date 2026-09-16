@@ -3,6 +3,7 @@ package extraction
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	anthropicoption "github.com/anthropics/anthropic-sdk-go/option"
@@ -44,6 +45,9 @@ type LLMConfig struct {
 	APIKey   string
 	Model    string // "" => Anthropic: defaultLLMModel; OpenAI: required (error if empty)
 	BaseURL  string // "" => the provider SDK's default endpoint
+	// Timeout bounds one Extract call, the SDK's retries included.
+	// <= 0 => defaultLLMTimeout.
+	Timeout time.Duration
 }
 
 // newLLMClient builds the transport for cfg.Provider. It errors for an unknown

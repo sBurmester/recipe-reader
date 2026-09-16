@@ -223,3 +223,106 @@ func TestRecipeHandlers_BodyAtTheLimitIsDecoded(t *testing.T) {
 		t.Errorf("body = %s, want the validation error %q rather than a decode error", rec.Body.String(), want)
 	}
 }
+
+// A status outside the domain's two values used to persist on both write
+// paths, and a PUT without a name or status stored empty strings. Validation
+// runs before any repository call, so these need no database: a request that
+// slipped past it would panic on a nil repository and come back 500.
+func TestRecipeHandlers_RejectOutOfDomainWrites(t *testing.T) {
+	router := NewRouter(Deps{}, testSecurity)
+
+	for _, tc := range []struct {
+		name, method, path string
+		dto                RecipeDTO
+	}{
+		{"POST bogus status", http.MethodPost, "/api/recipes", RecipeDTO{Name: "x", Source: "s", Status: "banana"}},
+		{"PUT bogus status", http.MethodPut, "/api/recipes/1", RecipeDTO{Name: "x", Status: "banana"}},
+		{"PUT empty status", http.MethodPut, "/api/recipes/1", RecipeDTO{Name: "x"}},
+		{"PUT empty name", http.MethodPut, "/api/recipes/1", RecipeDTO{Status: string(domain.StatusPublished)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := json.Marshal(tc.dto)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, jsonRequest(tc.method, tc.path, body))
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400; body = %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// Create still defaults an omitted status rather than rejecting it — the
+// validation above runs on the defaulted value, not on the raw field.
+func TestRecipeHandlers_CreateDefaultsOmittedStatusToPublished(t *testing.T) {
+	router := NewRouter(newTestDeps(t), testSecurity)
+
+	body, err := json.Marshal(RecipeDTO{Name: "Brot", Source: "src-default-status"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/api/recipes", body))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body = %s", rec.Code, rec.Body.String())
+	}
+	var created RecipeDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if created.Status != string(domain.StatusPublished) {
+		t.Errorf("status = %q, want %q", created.Status, domain.StatusPublished)
+	}
+}
+
+// persistence P2's scenario end to end. The second POST fails on the duplicate
+// source, and the ingredient, unit and category it named must not outlive it.
+// They used to: the handler resolved them on the pool before the write began,
+// so they were committed before the insert could fail.
+func TestRecipeHandlers_FailedCreateLeavesNoOrphanLookups(t *testing.T) {
+	deps := newTestDeps(t)
+	router := NewRouter(deps, testSecurity)
+
+	post := func(dto RecipeDTO) int {
+		t.Helper()
+		body, err := json.Marshal(dto)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, jsonRequest(http.MethodPost, "/api/recipes", body))
+		return rec.Code
+	}
+
+	if code := post(RecipeDTO{Name: "Erstes", Source: "src-dup"}); code != http.StatusCreated {
+		t.Fatalf("first create status = %d, want 201", code)
+	}
+	code := post(RecipeDTO{
+		Name: "Zweites", Source: "src-dup",
+		Categories:  []CategoryDTO{{Name: "Orphan-Kategorie"}},
+		Ingredients: []IngredientDTO{{Name: "Orphan-Zutat", Amount: 1, Unit: "Orphan-Einheit"}},
+	})
+	if code != http.StatusInternalServerError {
+		t.Fatalf("duplicate-source create status = %d, want 500", code)
+	}
+
+	ctx := t.Context()
+	categories, err := deps.Lookups.ListCategories(ctx)
+	if err != nil {
+		t.Fatalf("ListCategories() error = %v", err)
+	}
+	ingredients, err := deps.Lookups.ListIngredients(ctx)
+	if err != nil {
+		t.Fatalf("ListIngredients() error = %v", err)
+	}
+	units, err := deps.Lookups.ListUnits(ctx)
+	if err != nil {
+		t.Fatalf("ListUnits() error = %v", err)
+	}
+	if len(categories) != 0 || len(ingredients) != 0 || len(units) != 0 {
+		t.Errorf("lookup rows left behind by the failed create: categories=%+v ingredients=%+v units=%+v",
+			categories, ingredients, units)
+	}
+}

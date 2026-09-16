@@ -29,7 +29,6 @@ func TestImportHandlers_RunAndStatus(t *testing.T) {
 		Fetcher:   noopFetcher{},
 		Extractor: (*extraction.HybridExtractor)(nil),
 		Recipes:   deps.Recipes,
-		Lookups:   deps.Lookups,
 		Threshold: 0.6,
 	}, time.Hour)
 	router := NewRouter(deps, testSecurity)
@@ -94,7 +93,6 @@ func TestImportHandlers_RefusesWhileCoolingDown(t *testing.T) {
 		Fetcher:   rateLimitedFetcher{},
 		Extractor: (*extraction.HybridExtractor)(nil),
 		Recipes:   deps.Recipes,
-		Lookups:   deps.Lookups,
 		Threshold: 0.6,
 	}, time.Hour)
 	deps.Worker.RunOnce(context.Background())

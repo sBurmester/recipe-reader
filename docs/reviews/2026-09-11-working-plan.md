@@ -3,7 +3,7 @@
 **Derived from:** the six-reviewer panel of 2026-09-11 ([index](README.md)),
 as adjudicated in the [consensus record](2026-09-11-consensus.md)
 **Source findings:** 66 post-round (72 entering, 1 withdrawn, 5 merged), **62 tasks**
-**Status:** in progress — bands ≥ 6.0 done, plus T-25 from Stage 5 (12 of 62)
+**Status:** in progress — bands ≥ 5.0 done, plus T-25 and T-61 (25 of 62)
 
 Mark a task `[x]` when it is done. Each task cites the finding IDs it closes.
 
@@ -85,6 +85,16 @@ code lives and how much of each task is left.
 Rating order is not execution order. The consensus record says why in four
 places, and those four rulings — not the decimals — are what orders the 51
 remaining tasks.
+
+> **Since revision 4 (2026-09-15): every task rated ≥ 5.0 is done.** That is
+> T-10 and T-27 (Stage 1), T-16 and T-08 (Stage 3), T-20 and T-29 (Stage 4),
+> T-21, T-28, T-14, T-17 and T-25 (Stage 5), T-22 (Stage 8) and T-19
+> (Stage 9), plus T-61 (Stage 6), which T-08 closed in passing. The order
+> below is unchanged and still governs the 37 tasks that remain. Two
+> consequences: **T-54 is unblocked** — `0002` exists, and T-16's migration
+> test already runs it down once — and **Stage 2's T-43 is rated below 5.0
+> and was not done**, so T-19 is verified only against a synthetic feed and
+> I1's magnitude is still open.
 
 **The constraints, quoted from the record:**
 
@@ -181,9 +191,9 @@ re-opens a settled one or assumes a live one is settled:
 | --- | --- | --- |
 | `security` | Should S1 rise above 9.0? *"Does the panel rate the shipped default or the cautious one?"* | **Dissolved.** T-02 made the shipped default the cautious one: a loopback bind, and a refusal to start on any other address without a token. The two readings no longer differ. |
 | `integration` | I2 (7.6) has never been challenged in either round | **Dissolved.** T-06 fixed it regardless of what a challenge would have concluded. |
-| `delivery` | Ratify or reject R3 at 2.5; defend D3's count rising 8→18 while its rating fell 7.0→5.5; whether D5 is a legitimate finding or an aggregate needing a split | **Partly answered — by the work, not by the panel.** D5 *was* an aggregate: T-18 closed it as three independent pieces, two of which other tasks had already covered. R3 is moot for remediation (T-13 is Low either way). **D3's count is still undefended, and T-10 will settle it empirically.** |
+| `delivery` | Ratify or reject R3 at 2.5; defend D3's count rising 8→18 while its rating fell 7.0→5.5; whether D5 is a legitimate finding or an aggregate needing a split | **Partly answered — by the work, not by the panel.** D5 *was* an aggregate: T-18 closed it as three independent pieces, two of which other tasks had already covered. R3 is moot for remediation (T-13 is Low either way). **D3's count is now settled by measurement (T-10):** 21 container boots at `4ce206e`, the last commit before remediation, so the corrected 18 was itself low — and 27 by the time T-10 started. The rating's fall stands on category, not on the count. |
 | `integration` | Settle I1's magnitude — hold 7.6 provisional, split it, or drop to the confirmed-only rating | **OPEN.** Only T-43 can close it. The 7.6 stays provisional; the fix shipped anyway, because nothing in it depended on the magnitude. |
-| `persistence` | Ratify or reject R1 at 5.5; over-correction check on P1 (7.2→4.0); P3-vs-S4 calibration at 4.8 | **OPEN.** R1 stands ratified by one party of two. T-16 is written to its condition regardless, and Stage 3 is where all three get tested in practice rather than in argument. |
+| `persistence` | Ratify or reject R1 at 5.5; over-correction check on P1 (7.2→4.0); P3-vs-S4 calibration at 4.8 | **OPEN.** R1 stands ratified by one party of two. T-16 has shipped to its condition — both halves — so the remediation no longer waits on the ratification, though the rating itself still does. P1 (T-07) and P3-vs-S4 (T-31 against T-30) remain untested. |
 | `integration` | Lane bias: it owns 3 of 7 findings ≥ 7.0, all in one package. Untested | **OPEN, and now harder to test.** All three — I1, I2 and I3, shipped as T-01, T-06 and T-11 — are fixed. Whether that lane was over-weighted is no longer observable from the code; only from whether the fixes turn out to have mattered. |
 
 ---
@@ -390,7 +400,7 @@ re-opens a settled one or assumes a live one is settled:
 
 ## Band 5.0 – 5.9 (12 tasks)
 
-- [ ] **T-19 · 5.8 · S** — Page cap and no-progress guard in the paging loop — `integration` I7
+- [x] **T-19 · 5.8 · S** — Page cap and no-progress guard in the paging loop — `integration` I7
       **HALF DONE by T-11, and the remaining half has a named consequence.**
       The page cap shipped: `FetchOptions.MaxPages` (default 100) bounds every
       walk. The **no-progress guard did not**, and `pageMedia`
@@ -402,7 +412,23 @@ re-opens a settled one or assumes a live one is settled:
       corruption — the pipeline dedupes on `source`, so the repeats land as
       `Skipped` — but it inflates `Seen` and spends a paid LLM call per
       duplicate. Fix: stop when `next == maxID`. Verify against T-43's fixture.
-- [ ] **T-20 · 5.8 · S** — Timeout on the model call — `extraction` E6
+      **DONE, slightly wider than written — and the cost claim above corrected.**
+      (1) The walk ends on any cursor **already seen in this run**, not only
+      `next == maxID`. A cycle back to an older cursor is the same fault one
+      step removed, and a last-cursor check would page through it until
+      `MaxPages`. It logs a warning, because only a misbehaving server trips it.
+      (2) A post already collected in this run is skipped, so overlapping pages
+      — ordinary on a feed that shifts while it is walked — do not hand the
+      pipeline the same post twice. **Correction:** a repeat does *not*
+      generally spend an LLM call. The pipeline runs `GetBySource` per post
+      before extracting, sequentially, so the first copy is stored before the
+      second is checked and the repeat is `Skipped` for free. The exceptions
+      are posts that store nothing — no recipe, or a failed store — which were
+      extracted again on every repeat. What every repeat did cost was a slot in
+      `MaxItems`. Tested against a synthetic feed with a stuck cursor, a cycle
+      and an overlap — **not yet against T-43's fixture**, which does not exist
+      until T-43 runs.
+- [x] **T-20 · 5.8 · S** — Timeout on the model call — `extraction` E6
       **RE-CITED, and round 2 was wrong about this one.** The claim that *"the
       `WithRequestTimeout` seam T-20 needs comes with the merge"* is false:
       `4bbe23e` added no timeout option, and the ported code has none either.
@@ -412,40 +438,169 @@ re-opens a settled one or assumes a live one is settled:
       add a `Timeout` field to `LLMConfig` and apply it in
       `LLMExtractor.Extract` (`internal/extraction/llm.go`), which is the single
       point both transports pass through.
-- [ ] **T-21 · 5.6 · S** — Credentials environment-only, not CLI flags — `security` S2 — `internal/config/config.go`
+      **DONE, as described, plus one addition.** `LLMConfig.Timeout` is applied
+      once in `Extract` with `context.WithTimeout`, so it bounds the SDKs'
+      retries too; E6's 60s is the default. **The addition: it is configurable**
+      (`LLM_TIMEOUT` / `--llm-timeout`). A fixed 60s would break the supported
+      local-model case on the `openai` transport, since an Ollama on CPU can
+      legitimately take longer. A timed-out call wraps
+      `context.DeadlineExceeded`: in `hybrid` mode the post falls back to the
+      rules and counts as degraded (`hybrid.go`), in `llm` mode it counts as
+      failed, and the run moves on either way. Tested against a client that
+      never answers, with an outer 5s guard so a regression fails the test
+      rather than hanging it.
+- [x] **T-21 · 5.6 · S** — Credentials environment-only, not CLI flags — `security` S2 — `internal/config/config.go`
       **SCOPE GREW: four flags now, not two.** S2 named
       `--instagram-password` and `--anthropic-api-key`. Since then T-02 added
       `--api-token` and T-18 added `--llm-api-key`, both as flag *and*
       environment, consistent with the rest of the file — which means both are
       visible in `ps aux` exactly as S2 describes. Sweep all four together.
-- [ ] **T-22 · 5.6 · M** — Smoke-test the built image in CI — `delivery` D7 — `.github/workflows/ci.yml`
+      **DONE — and S2's proposed mechanism would not have worked.** S2 said to
+      *"drop `name:` on both so they become environment-only — kong supports
+      this"*. It does not: kong v1.16.1 names an untagged field's flag after the
+      field (`build.go:162-164`), so dropping the tag leaves
+      `--instagram-password` exactly where it was. The four fields are now
+      `kong:"-"`, and `load` reads them from the environment in
+      `readCredentials`. `--help`'s description names them, because kong has no
+      flag entry to list them under. Tests: all four flags are refused as
+      unknown, all four arrive from the environment, and the description names
+      each one. Nothing in the repository used the flag form.
+- [x] **T-22 · 5.6 · M** — Smoke-test the built image in CI — `delivery` D7 — `.github/workflows/ci.yml`
       **Now guards T-05 rather than covering it.** T-05 shipped, so the
       placeholder can no longer reach a `make build` artifact — but nothing in
       CI would catch it regressing, and `webui.IsPlaceholder()`'s startup
       warning is only visible to someone reading the log. Run the image and
       assert `/api/healthz` plus a `/` body that is not the placeholder.
-- [ ] **T-16 · 5.5 · S** — Validate `status`, in the handler **and** the schema — `go` #2 + `persistence` P7 (chair ruling R1)
+      **DONE, and shown to fail when it should.** `scripts/smoke-test-image.sh`
+      starts the image on a private network against a throwaway Postgres. It
+      requires `/api/healthz` to answer ok; `/api/recipes` to answer, because
+      liveness touches no dependency and this is what proves the migrations
+      ran; and `/` to differ from `internal/webui/placeholder/index.html`. It
+      compares against that file rather than a marker string, so rewording the
+      placeholder cannot quietly disable the check. CI runs it after the build,
+      and it runs identically locally. **Verified both ways:** the real image
+      passes, and an image built without the frontend fails with "the image
+      serves the placeholder frontend, not a real build". **Not done:** D7's
+      second half, pushing the image to a registry on `main`. That needs
+      registry credentials and `packages: write`, and the plan scoped this
+      task to the smoke test.
+- [x] **T-16 · 5.5 · S** — Validate `status`, in the handler **and** the schema — `go` #2 + `persistence` P7 (chair ruling R1)
       **Both halves or it is not done:** validate against the two domain values on POST *and* PUT (a non-empty bogus status like `"banana"` persists today on both paths), plus a `0002` migration adding `CHECK (status IN ('needs_review','published'))` preceded by a backfill. Validation alone leaves existing bad rows and leaves the invariant unenforced against psql and future writers.
       **CORRECTED:** a `status=''` row is *not* invisible in the list view — `web/src/pages/list.ts:54-58` sends no status filter, so it appears and silently reads as published.
-- [ ] **T-10 · 5.5 · M** — One Postgres container per package, not per test — `delivery` D3
+      **DONE, both halves.** (1) `domain.RecipeStatus.Valid()`. POST validates
+      *after* its existing default to `published`, so an omitted status still
+      creates; PUT requires a legal status **and a non-empty name** — go #2's
+      other half. PUT is a replacement, so an omitted field there meant "store
+      empty", which is how `''` got in. (2) `0002_recipe_status_check`
+      backfills out-of-domain rows to `needs_review` — P7's choice, the state
+      that puts a person in front of them — and adds the CHECK in one
+      transaction. `TestMigration0002_BackfillsThenEnforcesStatus` stops a
+      separate database at `0001`, writes `'banana'` and `''` rows, migrates
+      over them, checks the backfill and the `23514` refusal, then migrates
+      back down, so the down file is exercised ahead of T-54.
+- [x] **T-10 · 5.5 · M** — One Postgres container per package, not per test — `delivery` D3
       `TestMain` per package + `TRUNCATE ... RESTART IDENTITY CASCADE` between tests. **CORRECTED: 18 containers, not 8** — five `testdb.New` call sites sit inside `t.Helper()` wrappers that several tests each invoke. Rating fell (it fails loudly and hits only developers) while the payoff rose.
-- [ ] **T-14 · 5.4 · S** — Let a failed Instagram login recover without a restart — `integration` I8 — `cmd/recipe-reader/main.go:71-87`
-- [ ] **T-27 · 5.2 · S** — `-race` in `make test` — `delivery` D4 — `Makefile:20-21`. Nearly free after T-10.
-- [ ] **T-08 · 5.0 · M** — Resolve lookups inside the recipe transaction — `persistence` P2 — `internal/repository/lookup_repository.go:28`. Note the T-03 link is withdrawn; this stands on its own.
-- [ ] **T-28 · 5.0 · S** — Wire the per-run fetch bounds to flags — `integration` I6
+      **DONE — 27 container boots to 4, and 43s of wall time to 5s.**
+      `testdb.New` now starts one container per test binary, lazily on first
+      use, and on every call truncates each application table with
+      `RESTART IDENTITY`. The table list is read from `pg_tables`, so a table a
+      later migration adds is covered without editing the helper. A `TestMain`
+      in each of the four database packages calls `testdb.Main`, which
+      terminates the container. **No call site changed.**
+      `TestTestDBNew_ResetsRowsAndSequences` guards the reset.
+      **D3's count, settled by measurement.** Counted with a live
+      `docker events` stream — `--since` replays from a bounded buffer and
+      under-read the same run as 17: **21** boots at `4ce206e`, the last commit
+      before any remediation, so the corrected 18 was itself an undercount; and
+      **27** when this task started, because the ≥ 6.0 work added database
+      tests at a container apiece — exactly D3's prediction.
+- [x] **T-14 · 5.4 · S** — Let a failed Instagram login recover without a restart — `integration` I8 — `cmd/recipe-reader/main.go:71-87`
+      **DONE — the worker is built whenever an account is configured.** A
+      failed startup login used to leave the fetcher nil, so no worker existed
+      and both import routes answered 503 until a restart. `newFetcher`
+      (`cmd/recipe-reader/fetcher.go`) now returns the fetcher *and* the login
+      error. `run()` builds the worker regardless and records the error with
+      `Worker.RecordFailure`, so `/api/import/status` shows it at once rather
+      than after the first scheduled run, hours later. A 503 now means only "no
+      account configured", which makes I8's two states distinguishable.
+      **How the retry happens.** T-06's re-login path was not enough on its
+      own. `LoginOrRestore` already kept the credentials, but a client with no
+      session would have sent an unauthenticated request and relied on this
+      unofficial endpoint answering `login_required` to reach the re-login —
+      which nobody has verified. `Client` now tracks whether it holds a session,
+      and `do` logs in *first* when it does not, under the same 15-minute floor
+      that rations every login. The tests run offline: instago refuses an empty
+      password before building a request, so a failed startup login needs no
+      network. Both paths are asserted: refused by the floor, and a login
+      attempted before any request.
+- [x] **T-27 · 5.2 · S** — `-race` in `make test` — `delivery` D4 — `Makefile:20-21`. Nearly free after T-10.
+      **DONE, and it was.** `make test` runs `go test -race ./...`, matching
+      CI. With T-10 in, the race-instrumented suite takes 46s wall including
+      the instrumented compile — against 43s for the uninstrumented suite
+      before T-10.
+- [x] **T-08 · 5.0 · M** — Resolve lookups inside the recipe transaction — `persistence` P2 — `internal/repository/lookup_repository.go:28`. Note the T-03 link is withdrawn; this stands on its own.
+      **DONE — by moving resolution into the write, not by `WithTx`.** P2
+      proposed a `LookupRepository.WithTx(pgx.Tx)` with the transaction opened
+      in the handler and the pipeline. That would have put a `pgx.Tx` in both
+      upper layers to fix one repository's boundary. Instead
+      `RecipeRepository.Create` and `Update` resolve any category, ingredient or
+      unit given **by name with no id** on the queries of the transaction they
+      already open; an id still wins, so a recipe loaded through `GetByID`
+      round-trips unchanged. The handler's `dtoToRecipe` and the pipeline's
+      `toRecipe` now map names only, and `Pipeline.Lookups` is gone. The
+      caller's recipe is updated **only on commit** — before, `Create` set
+      `recipe.ID` ahead of a commit that could still fail.
+      *Side effect on T-15:* the pipeline's `resolve-lookups` log stage folds
+      into `store`, since both now fail inside one call.
+      *Tests:* `TestRecipeHandlers_FailedCreateLeavesNoOrphanLookups` is P2's
+      duplicate-source scenario through the API. The repository test places the
+      failure *after* resolution, a foreign-key violation on a missing unit id,
+      so only the transaction can take the new rows back; it also checks the
+      caller's value is left as passed.
+- [x] **T-28 · 5.0 · S** — Wire the per-run fetch bounds to flags — `integration` I6
       **RE-CITED, and there are two knobs now.** `MaxItemsPerRun` became
       `instagram.FetchOptions.MaxItems`, and T-11 added `MaxPages` beside it.
       Both are set only from their package defaults (50 and 100) at
       `cmd/recipe-reader/main.go`, and neither is reachable from configuration.
       A backfill is exactly when an operator wants to raise them.
-- [ ] **T-17 · 5.0 · S** — Lifecycle owner for the detached import goroutine — `go` #4 — `internal/api/handlers_import.go` (`context.WithoutCancel` + `go d.Worker.RunOnce`)
+      **DONE, both knobs, and a zero is refused.** `IMPORT_MAX_ITEMS` /
+      `--import-max-items` (default 50) and `IMPORT_MAX_PAGES` /
+      `--import-max-pages` (default 100) match the package defaults and reach
+      `FetchOptions` in `newFetcher`. **One addition:** `Config.validate`
+      rejects either below 1. `FetchOptions.withDefaults` silently replaces a
+      zero with the default, so `IMPORT_MAX_ITEMS=0` — plausibly meant as
+      "pause imports" — would have imported fifty posts. Tested: defaults, env
+      and flag overrides, the refusal, and the values reaching the fetcher.
+      **Still open:** `.env.example` does not list them, and could not be
+      edited in this session; it needs a manual update.
+- [x] **T-17 · 5.0 · S** — Lifecycle owner for the detached import goroutine — `go` #4 — `internal/api/handlers_import.go` (`context.WithoutCancel` + `go d.Worker.RunOnce`)
       **CORRECTED in round 2:** this is *not* a use-after-close. `puddle/v2@v2.2.2/pool.go:179-195` destroys only idle resources, leaving an in-flight connection untouched, and the process usually exits first. The rating holds at 5.0 on different reasoning — high likelihood, small blast radius, **zero diagnosability**, since the truncated run is never reported.
-- [ ] **T-29 · 5.0 · S** — Cap caption length (by runes) — `extraction` E3
+      **DONE — the worker owns its runs, and shutdown stops them and waits.**
+      `Worker.Trigger` replaces the handler's `go RunOnce(WithoutCancel(...))`.
+      The run executes under the context `Start` was given — the signal
+      context — so shutdown *cancels* it instead of letting it run on, and a
+      `sync.WaitGroup` counts it together with the schedule loop, which go #4
+      noted had the same gap. `run()` calls `worker.Wait(shutdownCtx)` after
+      `server.Shutdown`, inside the same 10s budget: no handler is left to
+      trigger a run while it waits, and the pool stays open until the run has
+      stopped. On diagnosability, the reason the rating held: the cancelled run
+      is recorded as the last error and logged, and a run that outlives the
+      budget is logged as abandoned. Tested with a fetcher that blocks until
+      cancelled — `Wait` does not report done while the run is in flight,
+      returns after shutdown, and the cancellation is recorded — five times
+      under `-race`. In the built image, `docker stop` exits 0 at once.
+- [x] **T-29 · 5.0 · S** — Cap caption length (by runes) — `extraction` E3
       **RE-CITED, and simpler than it was.** The caption no longer reaches the
       API at `llm.go:83`; it enters at `LLMExtractor.Extract`
       (`internal/extraction/llm.go`) and is handed to whichever transport is
       configured. Cap it there — **one edit, not one per provider**. Shares a
       sitting with T-20, which wants the same function.
+      **DONE.** `capCaption` (`internal/extraction/caption.go`) cuts to
+      `maxCaptionRunes` = 8000 (E3's figure), by runes, and logs a warning when
+      it cuts — a caption that long is not a real Instagram caption. It is
+      tested on four-byte emoji for exact rune count and valid UTF-8. `Extract`
+      applies it on the line every transport passes through, which a
+      capturing fake confirms.
 
 ## Band 4.0 – 4.9 (10 tasks)
 
@@ -558,7 +713,10 @@ re-opens a settled one or assumes a live one is settled:
 - [ ] **T-58 · 2.2 · S** — Re-panic on `http.ErrAbortHandler` — `go` #11
 - [ ] **T-59 · 2.2 · S** — Drop the fixed `/tmp` path from `make lint` — `delivery` D10
 - [ ] **T-60 · 2.0 · S** — Optional: read-then-insert for `FindOrCreate*` — `persistence` P6
-- [ ] **T-61 · 2.0 · S** — `dtoToRecipe` should take `context.Context` — `go` #9
+- [x] **T-61 · 2.0 · S** — `dtoToRecipe` should take `context.Context` — `go` #9
+      **Closed by T-08, not worked on its own.** `dtoToRecipe` no longer
+      resolves lookups, so it needs neither the request nor a context — it
+      takes only the DTO.
 
 ## Band < 2.0 (2 tasks)
 
@@ -579,9 +737,9 @@ a finding. The GO-2026-5932 provenance note lives in the security review's
 | ≥ 8.0 | 1 | 1 |
 | 7.0 – 7.9 | 6 | 6 |
 | 6.0 – 6.9 | 4 | 4 |
-| 5.0 – 5.9 | 12 | 0 |
+| 5.0 – 5.9 | 12 | 12 |
 | 4.0 – 4.9 | 10 | 1 |
 | 3.0 – 3.9 | 12 | 0 |
-| 2.0 – 2.9 | 15 | 0 |
+| 2.0 – 2.9 | 15 | 1 |
 | < 2.0 | 2 | 0 |
-| **Total** | **62** | **12** |
+| **Total** | **62** | **25** |

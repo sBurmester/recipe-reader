@@ -61,12 +61,14 @@ type Client struct {
 	slot chan struct{}
 
 	// mu guards the credentials captured by LoginOrRestore, which
-	// reauthenticate replays when a session expires mid-run.
+	// reauthenticate replays when a session expires mid-run, and whether the
+	// client currently holds a session at all.
 	mu          sync.Mutex
 	username    string
 	password    string
 	sessionPath string
 	lastLogin   time.Time
+	hasSession  bool
 }
 
 // NewClient returns a Client backed by a fresh instago client. Call
@@ -123,14 +125,25 @@ func (c *Client) run(ctx context.Context, what string, fn func() error) error {
 	}
 }
 
-// do performs one private-API request, re-authenticating once if the session
-// turned out to be stale.
+// do performs one private-API request, logging in first if the client holds no
+// session, and re-authenticating once if the session turned out to be stale.
 //
 // The retry is deliberately not a loop, and a challenge or two-factor prompt
 // is reported without attempting a login at all: neither is something a
 // password login can clear, and spending an attempt on it only feeds the
 // behaviour that produced the challenge.
 func (c *Client) do(ctx context.Context, opts ig.PrivateRequestOpts) (map[string]any, error) {
+	// A client whose startup login failed has no session. Sending the request
+	// anyway would spend it on finding that out, and would rely on this
+	// unofficial endpoint answering login_required to route into the re-login
+	// below — which nobody has verified. Logging in first, under the same
+	// floor every re-login observes, relies on neither.
+	if !c.sessionHeld() {
+		if err := c.reauthenticate(ctx); err != nil {
+			return nil, fmt.Errorf("%w: no session yet, and logging in failed: %w", ErrReauthRequired, err)
+		}
+	}
+
 	body, err := c.request(ctx, opts)
 	switch {
 	case err == nil:
@@ -178,29 +191,34 @@ func (c *Client) request(ctx context.Context, opts ig.PrivateRequestOpts) (map[s
 // resulting session to sessionPath for next time (avoids repeated logins,
 // which Instagram rate-limits and may flag as suspicious).
 //
-// The credentials are kept so that a session which expires later — sessions do
-// expire, and a password change or an account challenge invalidates them
-// immediately — can be re-established mid-run instead of disabling imports
-// until someone notices and restarts the process.
+// The credentials are kept even when the login fails. A session that expires
+// later — sessions do expire, and a password change or an account challenge
+// invalidates them immediately — is re-established mid-run from them; and a
+// login that fails at startup is retried from them by the next request, instead
+// of disabling imports until someone notices and restarts the process.
 func (c *Client) LoginOrRestore(ctx context.Context, username, password, sessionPath string) error {
 	c.mu.Lock()
 	c.username, c.password, c.sessionPath = username, password, sessionPath
 	c.mu.Unlock()
 
 	if err := c.raw.LoadSettings(sessionPath, false); err == nil {
+		c.mu.Lock()
+		c.hasSession = true
+		c.mu.Unlock()
 		return nil
 	}
 	return c.login(ctx, username, password, sessionPath)
 }
 
 // login performs the login and persists the resulting session, recording the
-// attempt so reauthenticate can rate-limit itself.
+// attempt so reauthenticate can rate-limit itself, and whether it left the
+// client holding a session.
 func (c *Client) login(ctx context.Context, username, password, sessionPath string) error {
 	c.mu.Lock()
 	c.lastLogin = time.Now()
 	c.mu.Unlock()
 
-	return c.run(ctx, "login", func() error {
+	err := c.run(ctx, "login", func() error {
 		if err := c.raw.Login(username, password, ""); err != nil {
 			return fmt.Errorf("instagram: login: %w", err)
 		}
@@ -209,6 +227,20 @@ func (c *Client) login(ctx context.Context, username, password, sessionPath stri
 		}
 		return nil
 	})
+
+	c.mu.Lock()
+	c.hasSession = err == nil
+	c.mu.Unlock()
+	return err
+}
+
+// sessionHeld reports whether the client has a session to send requests with:
+// one restored from disk or established by a login. It says nothing about
+// whether Instagram still honours it — do finds that out, and re-logs in.
+func (c *Client) sessionHeld() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.hasSession
 }
 
 // reauthenticate re-establishes an expired session from the credentials

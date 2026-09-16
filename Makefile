@@ -31,8 +31,12 @@ db-up:
 build: frontend
 	CGO_ENABLED=0 go build -o bin/recipe-reader ./cmd/recipe-reader
 
+# -race matches CI. Without it the race detector only ran after a push, while
+# the local gate (`make check`) skipped the one check most likely to catch a
+# regression in Worker's locking, the detached import goroutine or the shutdown
+# sequence. Sharing one Postgres container per package made it affordable.
 test:
-	go test ./...
+	go test -race ./...
 
 lint:
 	gofmt -l . | tee /tmp/gofmt-out; test ! -s /tmp/gofmt-out
