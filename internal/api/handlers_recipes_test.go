@@ -13,6 +13,21 @@ import (
 	"github.com/sBurmester/recipe-reader/internal/repository"
 )
 
+// testSecurity is the loopback deployment: no token, so these tests exercise
+// the handlers rather than the auth check. The token path has its own tests in
+// middleware_test.go.
+var testSecurity = Security{AllowedOrigins: []string{"http://localhost:5173"}}
+
+// jsonRequest builds a request the write guards accept. Every state-changing
+// route now requires Content-Type: application/json — that header is not
+// CORS-"simple", which is what forces a cross-origin write to be preflighted
+// and so brings it under the origin allowlist.
+func jsonRequest(method, path string, body []byte) *http.Request {
+	req := httptest.NewRequest(method, path, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
 func newTestDeps(t *testing.T) Deps {
 	t.Helper()
 	pool := testdb.New(t)
@@ -24,7 +39,7 @@ func newTestDeps(t *testing.T) Deps {
 
 func TestRecipeHandlers_CreateGetListUpdateDelete(t *testing.T) {
 	deps := newTestDeps(t)
-	router := NewRouter(deps)
+	router := NewRouter(deps, testSecurity)
 
 	createBody, err := json.Marshal(RecipeDTO{
 		Name:         "Pfannkuchen",
@@ -36,7 +51,7 @@ func TestRecipeHandlers_CreateGetListUpdateDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal create body: %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/recipes", bytes.NewReader(createBody))
+	req := jsonRequest(http.MethodPost, "/api/recipes", createBody)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
@@ -76,7 +91,7 @@ func TestRecipeHandlers_CreateGetListUpdateDelete(t *testing.T) {
 		t.Fatalf("marshal update body: %v", err)
 	}
 	updatePath := fmt.Sprintf("/api/recipes/%d", created.ID)
-	req = httptest.NewRequest(http.MethodPut, updatePath, bytes.NewReader(updateBody))
+	req = jsonRequest(http.MethodPut, updatePath, updateBody)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -97,7 +112,7 @@ func TestRecipeHandlers_CreateGetListUpdateDelete(t *testing.T) {
 		t.Errorf("name after update = %q, want the updated name", fetched.Name)
 	}
 
-	req = httptest.NewRequest(http.MethodDelete, updatePath, nil)
+	req = jsonRequest(http.MethodDelete, updatePath, nil)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
@@ -114,14 +129,14 @@ func TestRecipeHandlers_CreateGetListUpdateDelete(t *testing.T) {
 
 func TestRecipeHandlers_ListSearchQueryParams(t *testing.T) {
 	deps := newTestDeps(t)
-	router := NewRouter(deps)
+	router := NewRouter(deps, testSecurity)
 
 	for _, name := range []string{"Apfelkuchen", "Bananenbrot"} {
 		body, err := json.Marshal(RecipeDTO{Name: name, Source: "src-" + name, Status: string(domain.StatusPublished)})
 		if err != nil {
 			t.Fatalf("marshal %q: %v", name, err)
 		}
-		req := httptest.NewRequest(http.MethodPost, "/api/recipes", bytes.NewReader(body))
+		req := jsonRequest(http.MethodPost, "/api/recipes", body)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		if rec.Code != http.StatusCreated {
@@ -146,13 +161,13 @@ func TestRecipeHandlers_ListSearchQueryParams(t *testing.T) {
 
 func TestRecipeHandlers_CreateValidation(t *testing.T) {
 	deps := newTestDeps(t)
-	router := NewRouter(deps)
+	router := NewRouter(deps, testSecurity)
 
 	body, err := json.Marshal(RecipeDTO{})
 	if err != nil {
 		t.Fatalf("marshal empty body: %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/recipes", bytes.NewReader(body))
+	req := jsonRequest(http.MethodPost, "/api/recipes", body)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {

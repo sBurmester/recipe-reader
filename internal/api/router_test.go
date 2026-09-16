@@ -7,7 +7,7 @@ import (
 )
 
 func TestRouter_Health(t *testing.T) {
-	router := NewRouter(Deps{})
+	router := NewRouter(Deps{}, testSecurity)
 	req := httptest.NewRequest(http.MethodGet, "/api/healthz", nil)
 	rec := httptest.NewRecorder()
 
@@ -22,7 +22,7 @@ func TestRouter_Health(t *testing.T) {
 }
 
 func TestRouter_RecoversFromPanic(t *testing.T) {
-	router := NewRouter(Deps{})
+	router := NewRouter(Deps{}, testSecurity)
 	// A handler that panics must produce a 500, not crash the process.
 	// handleListRecipes dereferences the nil Deps.Recipes interface — exercised
 	// here deliberately to prove the recovery middleware turns a handler panic
@@ -37,15 +37,20 @@ func TestRouter_RecoversFromPanic(t *testing.T) {
 	}
 }
 
-func TestRouter_SetsCORSHeaders(t *testing.T) {
-	router := NewRouter(Deps{})
+func TestRouter_SetsCORSHeadersForAllowedOrigin(t *testing.T) {
+	router := NewRouter(Deps{}, testSecurity)
 	req := httptest.NewRequest(http.MethodOptions, "/api/healthz", nil)
 	req.Header.Set("Origin", "http://localhost:5173")
 	rec := httptest.NewRecorder()
 
 	router.ServeHTTP(rec, req)
 
-	if got := rec.Header().Get("Access-Control-Allow-Origin"); got == "" {
-		t.Error("expected Access-Control-Allow-Origin header to be set")
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want the request origin echoed back", got)
+	}
+	// Without Vary, a shared cache could hand one origin's response — headers
+	// included — to a different one, which would undo the allowlist.
+	if got := rec.Header().Get("Vary"); got != "Origin" {
+		t.Errorf("Vary = %q, want Origin", got)
 	}
 }

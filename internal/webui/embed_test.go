@@ -2,6 +2,7 @@
 package webui
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -60,5 +61,33 @@ func TestHandler_EmptyPathDoesNotPanic(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rec.Code)
+	}
+}
+
+// A binary built without a frontend must say so. This is the guard that makes
+// `go build ./...` — which bypasses the Makefile's frontend prerequisite —
+// produce something diagnosable rather than a binary that looks complete and
+// serves a placeholder page.
+func TestIsPlaceholder_MatchesWhatIsServed(t *testing.T) {
+	sub, placeholder, err := frontend()
+	if err != nil {
+		t.Fatalf("frontend() error = %v", err)
+	}
+	if placeholder != IsPlaceholder() {
+		t.Errorf("IsPlaceholder() = %v, but frontend() reports placeholder = %v", IsPlaceholder(), placeholder)
+	}
+
+	// Whichever it is, index.html must exist: that is what Handler serves and
+	// what the fallback rewrites to.
+	if _, err := fs.Stat(sub, "index.html"); err != nil {
+		t.Errorf("index.html missing from the served filesystem: %v", err)
+	}
+}
+
+// The placeholder lives outside dist/ precisely so that a `make build` cannot
+// overwrite it and silently turn the warning off.
+func TestPlaceholder_IsNotInsideTheBuildOutputDirectory(t *testing.T) {
+	if _, err := fs.Stat(placeholderFS, "placeholder/index.html"); err != nil {
+		t.Errorf("placeholder/index.html is missing: %v", err)
 	}
 }

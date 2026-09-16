@@ -26,6 +26,13 @@ type ExtractedRecipe struct {
 	Instructions string
 	Categories   []string
 	Confidence   float64
+
+	// Degraded marks a result produced by a weaker path than the one that was
+	// asked for — in practice, rules output returned because the LLM call
+	// failed. Without it the import tally counts such a result as an ordinary
+	// success, so an expired API key or a rate-limited provider reads as a
+	// healthy run while extraction quality quietly drops.
+	Degraded bool
 }
 
 // Extractor parses a caption into a recipe. Implementations must be safe for

@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"math"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -21,6 +23,15 @@ func (d Deps) handleImportRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "import worker not configured")
 		return
 	}
+	// Refusing here rather than letting the worker skip silently: a 202 the
+	// worker then ignores tells the caller a run started when none did, and
+	// the status endpoint would go on reporting the previous run's tally.
+	if cooldown := d.Worker.Cooldown(); cooldown > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(cooldown.Seconds()))))
+		writeError(w, http.StatusTooManyRequests,
+			"Instagram rate limit: imports resume in "+cooldown.Round(time.Second).String())
+		return
+	}
 	ctx := context.WithoutCancel(r.Context())
 	go d.Worker.RunOnce(ctx)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "started"})
@@ -35,17 +46,32 @@ func (d Deps) handleImportStatus(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "import worker not configured")
 		return
 	}
-	lastRun, lastResult, lastErr, running := d.Worker.Status()
+	status := d.Worker.Status()
 	resp := map[string]any{
-		"running":  running,
-		"last_run": lastRun.Format(time.RFC3339),
-		"seen":     lastResult.Seen,
-		"imported": lastResult.Imported,
-		"skipped":  lastResult.Skipped,
-		"failed":   lastResult.Failed,
+		"running":  status.Running,
+		"last_run": status.LastRun.Format(time.RFC3339),
+		"seen":     status.LastResult.Seen,
+		"imported": status.LastResult.Imported,
+		"skipped":  status.LastResult.Skipped,
+		// Reported apart from skipped and failed: a saved-posts feed
+		// legitimately contains things that are not recipes, and how many is
+		// the difference between "the importer is broken" and "most of what
+		// you saved is not a recipe".
+		"no_recipe": status.LastResult.NoRecipe,
+		// Degraded counts posts extracted by the rules after the LLM call
+		// failed. The tally would otherwise report those as ordinary
+		// successes while quality silently dropped.
+		"degraded": status.LastResult.Degraded,
+		"failed":   status.LastResult.Failed,
 	}
-	if lastErr != nil {
-		resp["error"] = lastErr.Error()
+	if status.LastErr != nil {
+		resp["error"] = status.LastErr.Error()
+	}
+	// Present only while a rate limit is being waited out, so the UI can say
+	// "paused until" rather than "ready" when a trigger would be refused.
+	if cooldown := d.Worker.Cooldown(); cooldown > 0 {
+		resp["cooldown_until"] = status.CooldownUntil.Format(time.RFC3339)
+		resp["cooldown_seconds"] = int(math.Ceil(cooldown.Seconds()))
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

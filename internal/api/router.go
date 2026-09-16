@@ -25,10 +25,11 @@ type Deps struct {
 }
 
 // NewRouter builds the API handler: a method-and-path ServeMux wrapped in the
-// CORS, panic-recovery, and logging middleware, outermost first. Recovery sits
-// inside CORS so that a 500 produced by a panic still carries the CORS headers
-// the browser needs in order to read it.
-func NewRouter(deps Deps) http.Handler {
+// CORS, panic-recovery, logging, authentication, and JSON-write middleware,
+// outermost first. Recovery sits inside CORS so that a 500 produced by a panic
+// still carries the CORS headers the browser needs in order to read it, and
+// both guards sit inside logging so a rejected write is still logged.
+func NewRouter(deps Deps, sec Security) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/healthz", handleHealth)
@@ -46,7 +47,7 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/import/run", deps.handleImportRun)
 	mux.HandleFunc("GET /api/import/status", deps.handleImportStatus)
 
-	return withCORS(withRecovery(withLogging(mux)))
+	return withCORS(sec.AllowedOrigins, withRecovery(withLogging(withAuth(sec.Token, withJSONWrites(mux)))))
 }
 
 // handleHealth answers a liveness probe. It deliberately touches no

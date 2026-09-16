@@ -22,7 +22,13 @@ services:
         condition: service_healthy
     environment:
       DB_DSN: "postgres://recipes:recipes@db:5432/recipes?sslmode=disable"
+      # The container has to bind every interface for the published port to
+      # reach it, which is exactly the network-reachable case the server
+      # refuses to start in without a token. Compose fails first, with a
+      # message that says what to set.
       HTTP_ADDR: ":8080"
+      API_TOKEN: ${API_TOKEN:?set API_TOKEN - the published port exposes the write endpoints to anything that can route to it}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       INSTAGRAM_USERNAME: ${INSTAGRAM_USERNAME:-}
       INSTAGRAM_PASSWORD: ${INSTAGRAM_PASSWORD:-}
       INSTAGRAM_COLLECTION: ${INSTAGRAM_COLLECTION:-}
