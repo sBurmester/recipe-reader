@@ -10,6 +10,12 @@ import (
 	"github.com/sBurmester/recipe-reader/internal/repository"
 )
 
+// maxRecipeBodyBytes caps a recipe write. An Instagram caption is at most 2,200
+// characters, so 1 MiB is several hundred times the largest recipe this service
+// ever stores — generous for a hand-entered one, and small enough that a
+// multi-gigabyte body cannot be decoded into memory until the process is killed.
+const maxRecipeBodyBytes = 1 << 20
+
 // handleListRecipes serves the search endpoint. Every filter is optional and a
 // malformed numeric parameter is ignored rather than rejected, so a stale
 // bookmark or a half-typed URL still returns results instead of a 400. The
@@ -74,8 +80,7 @@ func (d Deps) handleGetRecipe(w http.ResponseWriter, r *http.Request) {
 // recipe without one could be re-imported forever.
 func (d Deps) handleCreateRecipe(w http.ResponseWriter, r *http.Request) {
 	var dto RecipeDTO
-	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	if !decodeRecipeBody(w, r, &dto) {
 		return
 	}
 	if dto.Name == "" || dto.Source == "" {
@@ -108,8 +113,7 @@ func (d Deps) handleUpdateRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var dto RecipeDTO
-	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	if !decodeRecipeBody(w, r, &dto) {
 		return
 	}
 
@@ -145,6 +149,29 @@ func (d Deps) handleDeleteRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// decodeRecipeBody decodes the request body into dto, reading at most
+// maxRecipeBodyBytes of it, and reports whether the handler should carry on.
+// On failure it has already written the response.
+//
+// An over-long body answers 413 rather than the 400 a malformed one gets: the
+// client sent nothing wrong in kind, only too much of it, and telling the two
+// apart is what lets it fix the right thing. http.MaxBytesReader also marks the
+// connection to be closed after the response, so a client cannot keep streaming
+// the rest of the body into the same socket.
+func decodeRecipeBody(w http.ResponseWriter, r *http.Request, dto *RecipeDTO) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRecipeBodyBytes)
+	err := json.NewDecoder(r.Body).Decode(dto)
+	if err == nil {
+		return true
+	}
+	if _, tooLarge := errors.AsType[*http.MaxBytesError](err); tooLarge {
+		writeError(w, http.StatusRequestEntityTooLarge, "request body exceeds the 1 MiB limit")
+		return false
+	}
+	writeError(w, http.StatusBadRequest, "invalid JSON body")
+	return false
 }
 
 // dtoToRecipe resolves the DTO's free-text category, ingredient, and unit

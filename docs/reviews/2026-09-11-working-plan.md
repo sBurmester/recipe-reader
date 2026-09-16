@@ -3,7 +3,7 @@
 **Derived from:** the six-reviewer panel of 2026-09-11 ([index](README.md)),
 as adjudicated in the [consensus record](2026-09-11-consensus.md)
 **Source findings:** 66 post-round (72 entering, 1 withdrawn, 5 merged), **62 tasks**
-**Status:** in progress — bands ≥ 6.0 done (11 of 62)
+**Status:** in progress — bands ≥ 6.0 done, plus T-25 from Stage 5 (12 of 62)
 
 Mark a task `[x]` when it is done. Each task cites the finding IDs it closes.
 
@@ -138,12 +138,15 @@ edits.
 ### Stage 5 — one sitting in `internal/config` and the composition root
 
 **T-21** (5.6, now four flags, not two) → **T-28** (5.0) → **T-34** (4.5) →
-**T-14** (5.4) → **T-17** (5.0) → **T-25** (4.8, the two-file one).
+**T-14** (5.4) → **T-17** (5.0) → ~~**T-25** (4.8, the two-file one)~~ **done**,
+taken ahead of the rest of the stage — both halves shipped together, as R4
+requires.
 
 ### Stage 6 — one sitting in `internal/api`
 
 **T-30** (4.8) → **T-48** (2.8) → **T-49** (2.8) → **T-58** (2.2) → **T-61**
-(2.0). T-25's `MaxBytesReader` half lands here too if Stage 5 left it.
+(2.0). T-25's `MaxBytesReader` half is no longer waiting here; it shipped with
+the timeouts.
 
 ### Stage 7 — one sitting in `internal/repository` and the queries
 
@@ -446,13 +449,32 @@ re-opens a settled one or assumes a live one is settled:
 
 ## Band 4.0 – 4.9 (10 tasks)
 
-- [ ] **T-25 · 4.8 · S** — Bound request bodies and set server timeouts — `security` S3 + `go` #8
+- [x] **T-25 · 4.8 · S** — Bound request bodies and set server timeouts — `security` S3 + `go` #8
       **Two edits in two files** (chair ruling R4): the four timeout fields on
       the `http.Server`, and `http.MaxBytesReader` at both `json.NewDecoder`
       sites in `internal/api/handlers_recipes.go` (→ 413, not 400).
       **RE-CITED:** the server is no longer built in `run()` — T-18 moved it to
       `newServer` in `cmd/recipe-reader/main.go`, which is also now a function a
       test can call, so the timeout fields are assertable.
+      **DONE, both halves in one change.** (1) `newServer` sets
+      `ReadHeaderTimeout` 10s, `ReadTimeout` 30s, `WriteTimeout` 60s and
+      `IdleTimeout` 120s. S3's figures were taken for the first two; two
+      deliberate departures: `WriteTimeout` — which S3 did not name — is set
+      *above* `ReadTimeout`, because net/http starts it when the headers are
+      read, so it has to outlast a body read the server still allows; and
+      `IdleTimeout` is set on its own rather than left to inherit `ReadTimeout`.
+      `TestNewServer_SetsTimeouts` asserts all four and both orderings. (2) Both
+      decoder sites go through one `decodeRecipeBody` helper capping the body at
+      1 MiB, where a `*http.MaxBytesError` answers **413** and anything else
+      stays 400. Tested one byte over the cap on POST and PUT, and exactly at
+      it, without a database — the cap fires before any repository is touched.
+      **Verified in the built image** (`docker compose up --build`): a 2 MiB
+      POST answers 413 with `Connection: close`, a normal POST still answers
+      201, and a client that never finishes its headers is dropped at 10.0s.
+      **Not done, deliberately:** S3's aside about `DisallowUnknownFields`. The
+      reviewer called it *"not a vulnerability"*, it is not one of R4's two
+      edits, and it changes what the API accepts from every client — a contract
+      decision, not a hardening one.
 - [ ] **T-30 · 4.8 · S** — Stop echoing internal error strings — `security` S4 — `internal/api/handlers_import.go`
       Still live: `handleImportStatus` returns `status.LastErr.Error()` verbatim,
       which now carries wrapped DSN fragments and `instago` response bodies.
@@ -558,8 +580,8 @@ a finding. The GO-2026-5932 provenance note lives in the security review's
 | 7.0 – 7.9 | 6 | 6 |
 | 6.0 – 6.9 | 4 | 4 |
 | 5.0 – 5.9 | 12 | 0 |
-| 4.0 – 4.9 | 10 | 0 |
+| 4.0 – 4.9 | 10 | 1 |
 | 3.0 – 3.9 | 12 | 0 |
 | 2.0 – 2.9 | 15 | 0 |
 | < 2.0 | 2 | 0 |
-| **Total** | **62** | **11** |
+| **Total** | **62** | **12** |
