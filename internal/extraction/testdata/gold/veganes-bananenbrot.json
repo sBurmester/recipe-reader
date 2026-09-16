@@ -1,0 +1,44 @@
+{
+  "id": "veganes-bananenbrot",
+  "origin": "synthetic",
+  "note": "Decimal amounts written with a comma, which is how German captions write them.",
+  "caption": "🍌 Veganes Bananenbrot 🍌\n\nZutaten:\n- 3 Bananen\n- 250 g Dinkelmehl\n- 1,5 TL Backpulver\n- 80 ml Pflanzenöl\n- 100 g Zucker\n\nZubereitung:\nBananen zerdrücken und mit Öl und Zucker verrühren.\nMehl und Backpulver unterheben.\nIn eine Kastenform füllen und 50 Minuten bei 180 Grad backen.\n\n#vegan #backen #bananenbrot",
+  "expect": {
+    "no_recipe": false,
+    "name": "Veganes Bananenbrot",
+    "ingredients": [
+      {
+        "name": "Bananen",
+        "amount": 3,
+        "unit": ""
+      },
+      {
+        "name": "Dinkelmehl",
+        "amount": 250,
+        "unit": "g"
+      },
+      {
+        "name": "Backpulver",
+        "amount": 1.5,
+        "unit": "TL"
+      },
+      {
+        "name": "Pflanzenöl",
+        "amount": 80,
+        "unit": "ml"
+      },
+      {
+        "name": "Zucker",
+        "amount": 100,
+        "unit": "g"
+      }
+    ],
+    "instructions_contain": [
+      "zerdrücken",
+      "180 Grad"
+    ],
+    "rules": {
+      "min_confidence": 0.95
+    }
+  }
+}

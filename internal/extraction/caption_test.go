@@ -45,7 +45,9 @@ func TestLLMExtractor_ExtractCapsTheCaption(t *testing.T) {
 	if _, err := e.Extract(context.Background(), strings.Repeat("ö", 2*maxCaptionRunes)); err != nil {
 		t.Fatalf("Extract() error = %v", err)
 	}
-	if n := utf8.RuneCountInString(client.caption); n != maxCaptionRunes {
+	// The transport is handed the delimited span (see wrapCaption), so the cap
+	// is measured on the caption inside it.
+	if n := utf8.RuneCountInString(captionBody(t, client.caption)); n != maxCaptionRunes {
 		t.Errorf("transport received %d runes, want %d", n, maxCaptionRunes)
 	}
 }

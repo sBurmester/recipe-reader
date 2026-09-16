@@ -1,0 +1,12 @@
+{
+  "id": "kein-rezept-gym",
+  "origin": "synthetic",
+  "note": "The gym selfie the sentinel path exists for.",
+  "caption": "Leg day done 💪 Endlich wieder Kraft in den Beinen!\n\n#gym #fitness #motivation",
+  "expect": {
+    "no_recipe": true,
+    "name": "",
+    "ingredients": [],
+    "instructions_contain": []
+  }
+}

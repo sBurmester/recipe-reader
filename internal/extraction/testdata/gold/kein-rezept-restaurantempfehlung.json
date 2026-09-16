@@ -1,0 +1,12 @@
+{
+  "id": "kein-rezept-restaurantempfehlung",
+  "origin": "synthetic",
+  "note": "Food words with no recipe in them — the caption a keyword heuristic would fall for.",
+  "caption": "Gestern im besten Italiener der Stadt gewesen 🍝\nDie Pasta mit Trüffel war unfassbar gut, und das Tiramisu erst!\nUnbedingt hingehen wenn ihr in der Stadt seid.\n\n#foodie #pasta #restaurant",
+  "expect": {
+    "no_recipe": true,
+    "name": "",
+    "ingredients": [],
+    "instructions_contain": []
+  }
+}

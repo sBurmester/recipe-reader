@@ -1,0 +1,40 @@
+{
+  "id": "chili-mengenbereich",
+  "origin": "synthetic",
+  "note": "Amount ranges ('2-3 EL'). A known miss, kept so the eval records it rather than hiding it.",
+  "caption": "Chili sin Carne\n\nZutaten:\n- 400 g Kidneybohnen\n- 400 g gehackte Tomaten\n- 2-3 EL Tomatenmark\n- 1 Zwiebel\n- 200 g Mais\n\nZubereitung:\nZwiebel anbraten, Tomatenmark zugeben und kurz mitrösten.\nBohnen, Mais und Tomaten zugeben und 25 Minuten köcheln lassen.\nKräftig würzen.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Chili sin Carne",
+    "ingredients": [
+      {
+        "name": "Kidneybohnen",
+        "amount": 400,
+        "unit": "g"
+      },
+      {
+        "name": "gehackte Tomaten",
+        "amount": 400,
+        "unit": "g"
+      },
+      {
+        "name": "Tomatenmark",
+        "amount": 3,
+        "unit": "EL"
+      },
+      {
+        "name": "Zwiebel",
+        "amount": 1,
+        "unit": ""
+      },
+      {
+        "name": "Mais",
+        "amount": 200,
+        "unit": "g"
+      }
+    ],
+    "instructions_contain": [
+      "mitrösten"
+    ]
+  }
+}

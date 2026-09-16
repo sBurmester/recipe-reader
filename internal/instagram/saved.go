@@ -3,10 +3,13 @@ package instagram
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
+	"sort"
+	"strings"
 
 	ig "github.com/felipeinf/instago"
 )
@@ -150,12 +153,13 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 	opts = opts.withDefaults()
 
 	var out []SavedPost
-	// dropped counts items the feed returned that this code could not read.
-	// The endpoint is unofficial and undocumented, so a field rename upstream
-	// turns every item into a silent no-op: without this counter the run
-	// reports an ordinary empty success and nothing distinguishes "nothing new
-	// was saved" from "the response shape changed".
+	// dropped counts items the feed returned that this code could not read,
+	// and drops records why. The endpoint is unofficial and undocumented, so a
+	// field rename upstream turns every item into a silent no-op: without
+	// these the run reports an ordinary empty success and nothing
+	// distinguishes "nothing new was saved" from "the response shape changed".
 	dropped := 0
+	drops := dropReasons{}
 	maxID := ""
 	// cursors and collected are the walk's own record of where it has been:
 	// every cursor followed, and every post already taken. See the progress
@@ -183,23 +187,23 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 			return out, fmt.Errorf("instagram: fetch %s: %w", endpoint, err)
 		}
 
-		items, _ := res["items"].([]any)
-		if len(items) == 0 {
+		// Named feed, not page: page is the loop's counter, and shadowing it
+		// here would silently change what the cursor warning below reports.
+		feed, err := decodeFeedPage(res)
+		if err != nil {
+			// The response did not have the shape of a feed page at all,
+			// which is drift of the loudest kind. Reported rather than
+			// treated as an empty page, so it cannot read as "nothing new".
+			return out, fmt.Errorf("instagram: fetch %s: %w", endpoint, err)
+		}
+		if len(feed.Items) == 0 {
 			break
 		}
-		for _, raw := range items {
-			item, ok := raw.(map[string]any)
-			if !ok {
+		for _, raw := range feed.Items {
+			post, err := decodeSavedPost(raw)
+			if err != nil {
 				dropped++
-				continue
-			}
-			media, ok := item["media"].(map[string]any)
-			if !ok {
-				media = item // some endpoints return the media object directly
-			}
-			post, ok := extractMedia(media)
-			if !ok {
-				dropped++
+				drops.count(err)
 				continue
 			}
 			// collected is checked first: it is free, where Known is a
@@ -214,7 +218,7 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 			}
 		}
 
-		next, _ := res["next_max_id"].(string)
+		next := feed.NextMaxID
 		if next == "" {
 			break
 		}
@@ -238,13 +242,16 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 		// Unreadable items alongside readable ones is ordinary — a saved video
 		// or a deleted post. Unreadable items and *nothing* readable is the
 		// signature of a changed response shape, and an empty success is the
-		// wrong way to report it.
+		// wrong way to report it. Either way the reasons travel with the
+		// count: "no media code" and "cannot decode the item" point at
+		// different upstream changes, and guessing between them means reading
+		// a raw response by hand.
 		if len(out) == 0 {
-			return nil, fmt.Errorf("instagram: fetch %s: %w: %d items returned, none readable",
-				endpoint, ErrSchemaDrift, dropped)
+			return nil, fmt.Errorf("instagram: fetch %s: %w: %d items returned, none readable (%s)",
+				endpoint, ErrSchemaDrift, dropped, drops)
 		}
 		slog.Warn("instagram: some feed items could not be read",
-			"endpoint", endpoint, "dropped", dropped, "collected", len(out))
+			"endpoint", endpoint, "dropped", dropped, "collected", len(out), "reasons", drops.String())
 	}
 	return out, nil
 }
@@ -255,26 +262,129 @@ func pageMedia(ctx context.Context, req requester, endpoint string, opts FetchOp
 // that otherwise arrives as a successful run that imported nothing.
 var ErrSchemaDrift = errors.New("instagram: unrecognised response shape")
 
-func extractMedia(media map[string]any) (SavedPost, bool) {
-	code, _ := media["code"].(string)
-	if code == "" {
-		return SavedPost{}, false
+// The typed shape of a saved-posts feed page.
+//
+// This used to be `map[string]any` spelunking with the comma-ok form at every
+// level. That was panic-free, which is the important part, but it meant a
+// field rename or a type change upstream made items vanish with no signal:
+// every lookup failed silently, the item was skipped, and the run reported an
+// ordinary empty success. Named types put the failure somewhere it can be
+// reported — a page that does not decode is ErrSchemaDrift, an item that does
+// not decode is a counted drop with a reason.
+//
+// Items are held as raw JSON rather than decoded with the page, so one
+// malformed item drops on its own instead of taking the whole page with it.
+// A pointer field is an optional object: nil for absent or null, which is
+// ordinary — a video has no image_versions2, a post may carry no caption.
+//
+// These types are written from the endpoint's documented-by-observation shape,
+// not from a verified response: nothing in this repository has yet run against
+// a real account (finding I11). Whichever fields turn out to be genuinely
+// optional, the drop reasons above are what will say so.
+type savedFeedPage struct {
+	Items     []json.RawMessage `json:"items"`
+	NextMaxID string            `json:"next_max_id"`
+}
+
+// savedFeedItem covers both shapes the saved feeds are known to use: the media
+// wrapped in a "media" key, and the media object returned directly. The
+// embedded mediaObject is the second case, so one decode handles both.
+type savedFeedItem struct {
+	Media *mediaObject `json:"media"`
+	mediaObject
+}
+
+type mediaObject struct {
+	Code           string         `json:"code"`
+	Caption        *captionObject `json:"caption"`
+	ImageVersions2 *imageVersions `json:"image_versions2"`
+}
+
+type captionObject struct {
+	Text string `json:"text"`
+}
+
+type imageVersions struct {
+	Candidates []imageCandidate `json:"candidates"`
+}
+
+type imageCandidate struct {
+	URL string `json:"url"`
+}
+
+// errNoMediaCode reports an item with no shortcode in it. The code is the
+// post's identity and the whole of its permalink, so an item without one
+// cannot be imported at all.
+var errNoMediaCode = errors.New("no media code")
+
+// decodeFeedPage re-encodes the dependency's map and decodes it into the typed
+// page. The round trip is the price of the seam: instago hands back
+// map[string]any and exposes no raw body, and one extra marshal per page is
+// nothing beside the request that fetched it.
+func decodeFeedPage(res map[string]any) (savedFeedPage, error) {
+	raw, err := json.Marshal(res)
+	if err != nil {
+		return savedFeedPage{}, fmt.Errorf("%w: cannot re-encode the response: %w", ErrSchemaDrift, err)
 	}
-	caption := ""
-	if capObj, ok := media["caption"].(map[string]any); ok {
-		caption, _ = capObj["text"].(string)
+	var page savedFeedPage
+	if err := json.Unmarshal(raw, &page); err != nil {
+		return savedFeedPage{}, fmt.Errorf("%w: %w", ErrSchemaDrift, err)
 	}
-	imageURL := ""
-	if imgVersions, ok := media["image_versions2"].(map[string]any); ok {
-		if candidates, ok := imgVersions["candidates"].([]any); ok && len(candidates) > 0 {
-			if first, ok := candidates[0].(map[string]any); ok {
-				imageURL, _ = first["url"].(string)
-			}
-		}
+	return page, nil
+}
+
+// decodeSavedPost turns one raw feed item into a SavedPost, or says why it
+// could not.
+func decodeSavedPost(raw json.RawMessage) (SavedPost, error) {
+	var item savedFeedItem
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return SavedPost{}, fmt.Errorf("cannot decode the item: %w", err)
 	}
-	return SavedPost{
-		Source:   "https://www.instagram.com/p/" + code + "/",
-		Caption:  caption,
-		ImageURL: imageURL,
-	}, true
+
+	media := item.Media
+	if media == nil {
+		media = &item.mediaObject
+	}
+	if media.Code == "" {
+		return SavedPost{}, errNoMediaCode
+	}
+
+	post := SavedPost{Source: "https://www.instagram.com/p/" + media.Code + "/"}
+	if media.Caption != nil {
+		post.Caption = media.Caption.Text
+	}
+	if media.ImageVersions2 != nil && len(media.ImageVersions2.Candidates) > 0 {
+		post.ImageURL = media.ImageVersions2.Candidates[0].URL
+	}
+	return post, nil
+}
+
+// dropReasons tallies why items were skipped, so the warning says what changed
+// upstream rather than only how many items it cost.
+type dropReasons map[string]int
+
+// count records one drop. Decode errors are grouped under one key: their text
+// carries the offset of the byte that failed, which would otherwise make every
+// item its own reason.
+func (d dropReasons) count(err error) {
+	switch {
+	case errors.Is(err, errNoMediaCode):
+		d[errNoMediaCode.Error()]++
+	default:
+		d["undecodable item"]++
+	}
+}
+
+// String renders the tally in a stable order, so two runs' logs compare.
+func (d dropReasons) String() string {
+	keys := make([]string, 0, len(d))
+	for k := range d {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%d", k, d[k]))
+	}
+	return strings.Join(parts, ", ")
 }

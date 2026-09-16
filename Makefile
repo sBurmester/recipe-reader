@@ -1,4 +1,4 @@
-.PHONY: build test cover cover-html lint vuln check run docker frontend sqlc-generate db-up
+.PHONY: build test cover cover-html lint vuln check run docker frontend frontend-check sqlc-generate db-up
 
 # npm writes this file itself, so it is a real dependency target rather than a
 # stamp we invent: `npm ci` reruns only when the lockfile actually changes.
@@ -26,9 +26,24 @@ frontend: $(NODE_MODULES)
 	cp -r web/dist/. internal/webui/dist/
 	@touch internal/webui/dist/.gitkeep
 
+# `go tool`, not a bare `sqlc`: the version lives in go.mod, so this target and
+# CI's codegen-drift gate run the same one. They used not to — this called
+# whatever sqlc happened to be installed locally while CI ran sqlc@latest, and
+# CI fails on any byte of difference in internal/db/sqlc. An upstream release
+# that changed generated output therefore reddened every PR at once, and the
+# remediation message CI prints ("run make sqlc-generate") could produce a third
+# output again. Bumping it is now `go get -tool github.com/sqlc-dev/sqlc/cmd/sqlc@latest`,
+# which is a commit you can see and revert.
+#
+# golangci-lint and govulncheck stay on latest deliberately: a stale
+# vulnerability database is the worse failure, and neither produces a committed
+# artifact that a version change can silently invalidate.
 sqlc-generate:
-	sqlc generate
+	go tool sqlc generate
 
+# Publishes Postgres on 127.0.0.1:5432 for a binary running on the host.
+# Compose has no default password any more, so this needs one:
+#   POSTGRES_PASSWORD=... make db-up
 db-up:
 	docker compose up -d db
 
@@ -76,7 +91,20 @@ lint:
 vuln:
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-check: lint vuln test
+# The frontend is checked here because CI checks it: ci.yml's `frontend` job
+# runs typecheck and build, so a TypeScript error or a broken Vite build used
+# to pass `make check` locally and fail only after the push. The documented
+# pre-commit gate now represents the pipeline.
+#
+# $(NODE_MODULES) is the same lockfile-keyed dependency `frontend` uses, so
+# this costs an `npm ci` only when web/package-lock.json actually changed.
+frontend-check: $(NODE_MODULES)
+	npm --prefix web run typecheck
+	npm --prefix web run build
+
+# Ordered cheapest-first: the static checks fail in seconds, the test run
+# starts Postgres containers.
+check: lint frontend-check vuln test
 
 run: frontend
 	go run ./cmd/recipe-reader

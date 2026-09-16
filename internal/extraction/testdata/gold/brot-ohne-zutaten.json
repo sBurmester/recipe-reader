@@ -1,0 +1,17 @@
+{
+  "id": "brot-ohne-zutaten",
+  "origin": "synthetic",
+  "note": "A method with no ingredient list: the other half recipe.",
+  "caption": "Mein Alltagsbrot\n\nZubereitung:\nAlle Zutaten am Vorabend verkneten und über Nacht im Kühlschrank gehen lassen.\nAm Morgen rund wirken und im vorgeheizten Topf 45 Minuten bei 230 Grad backen.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Mein Alltagsbrot",
+    "ingredients": [],
+    "instructions_contain": [
+      "über Nacht"
+    ],
+    "rules": {
+      "max_confidence": 0.5
+    }
+  }
+}

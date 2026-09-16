@@ -1,0 +1,53 @@
+{
+  "id": "schokokuchen-einheiten",
+  "origin": "synthetic",
+  "note": "The unit alias table under load: Pck, EL, TL, Prise and a bare Stück.",
+  "caption": "Saftiger Schokokuchen\n\nZutaten:\n- 200 g Mehl\n- 1 Pck Backpulver\n- 4 Stück Eier\n- 3 EL Kakao\n- 1 TL Vanilleextrakt\n- 1 Prise Salz\n- 150 g Butter\n\nZubereitung:\nButter mit Zucker schaumig rühren, Eier einzeln unterrühren.\nMehl, Backpulver und Kakao mischen und unterheben.\n45 Minuten bei 170 Grad backen.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Saftiger Schokokuchen",
+    "ingredients": [
+      {
+        "name": "Mehl",
+        "amount": 200,
+        "unit": "g"
+      },
+      {
+        "name": "Backpulver",
+        "amount": 1,
+        "unit": "Packung"
+      },
+      {
+        "name": "Eier",
+        "amount": 4,
+        "unit": "Stück"
+      },
+      {
+        "name": "Kakao",
+        "amount": 3,
+        "unit": "EL"
+      },
+      {
+        "name": "Vanilleextrakt",
+        "amount": 1,
+        "unit": "TL"
+      },
+      {
+        "name": "Salz",
+        "amount": 1,
+        "unit": "Prise"
+      },
+      {
+        "name": "Butter",
+        "amount": 150,
+        "unit": "g"
+      }
+    ],
+    "instructions_contain": [
+      "schaumig"
+    ],
+    "rules": {
+      "min_confidence": 0.95
+    }
+  }
+}

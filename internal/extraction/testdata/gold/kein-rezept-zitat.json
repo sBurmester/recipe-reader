@@ -1,0 +1,12 @@
+{
+  "id": "kein-rezept-zitat",
+  "origin": "synthetic",
+  "note": "A quote post. The rules must score it zero, or the pipeline stores a row for it.",
+  "caption": "\"Das Leben ist zu kurz für schlechtes Essen.\"\n\nHabt einen schönen Sonntag ihr Lieben ❤️\n\n#sonntag #mood #foodie",
+  "expect": {
+    "no_recipe": true,
+    "name": "",
+    "ingredients": [],
+    "instructions_contain": []
+  }
+}

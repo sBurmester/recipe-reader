@@ -12,9 +12,9 @@ and serves a searchable web UI. Single Go binary with the frontend embedded; Pos
 - **Docker + Docker Compose** — Postgres for dev and production, and `go test` starts ephemeral
   Postgres containers through testcontainers-go
 - **golangci-lint** — for `make lint`
-- **sqlc** — only if you change `internal/db/queries/*.sql` or `internal/db/migrations/*.sql`
-  and need to regenerate `internal/db/sqlc/`. `make sqlc-generate` expects it on `PATH`; CI runs
-  it through `go run` instead, so no install is needed there.
+- **sqlc** — no install needed. It is a pinned tool dependency in `go.mod`, so
+  `make sqlc-generate` and CI both run `go tool sqlc` at exactly the same version. Bump it with
+  `go get -tool github.com/sqlc-dev/sqlc/cmd/sqlc@latest`, which shows up as a commit.
 
 ## Setup
 
@@ -24,8 +24,11 @@ and serves a searchable web UI. Single Go binary with the frontend embedded; Pos
     # app still runs — it serves the API and UI over whatever is already in the database, and
     # extraction falls back to rules only.
 
-    make db-up      # starts Postgres via docker compose
-    make run        # builds the frontend, then serves on 127.0.0.1:8080
+    POSTGRES_PASSWORD=dev make db-up   # Postgres on 127.0.0.1:5432 via docker compose
+    make run                           # builds the frontend, then serves on 127.0.0.1:8080
+
+`POSTGRES_PASSWORD` has no default and compose refuses to start without it. Put the same password
+in your `.env` `DB_DSN` so the locally run binary can reach the container.
 
 ## Configuration
 
@@ -191,10 +194,61 @@ what actually came back — how many ingredients, how long the instructions are,
 ingredients got an amount. A confident model cannot publish a threadbare result, and a rich result
 cannot talk an uncertain model up.
 
+The rule-based score is continuous too. It used to return only `0`, `0.5` or `1.0`, which
+collapsed both float thresholds to three behaviours — every setting in `(0.5, 1.0]` meant the same
+thing, so tuning one from `0.6` to `0.9` changed nothing until it crossed an invisible cliff. It
+now weighs how many ingredients were found, what fraction of the ingredient section's lines
+actually parsed, how many of them carried an amount, and how long the instructions are. The
+boundaries callers were tuned against still hold: no ingredients and no instructions is exactly
+`0`, one section alone cannot exceed `0.5`, and a clean full caption still reaches `1.0`. A
+caption that offered no usable title scores three quarters of what it otherwise would, because a
+nameless caption is weak evidence of a recipe.
+
 A caption with no recipe in it produces `extraction.ErrNoRecipe` and stores nothing. Previously
 such a post became a recipe row whose instructions were the literal string `NO_RECIPE_FOUND` —
 and since `source` is `UNIQUE` and the pipeline skips anything already present, that row
 permanently blocked the post from being re-imported by a better extractor.
+
+### Titles
+
+The recipe name is what the search filter runs against, so a bad title degrades search and not
+only display. The rules extractor no longer takes the caption's first line: it scans down to the
+first section header, skipping hashtag blocks and long hooks, and prefers a line that reads like a
+name — short, carrying a letter, not itself a header ending in `:`. Whatever it picks is stripped
+of its leading emoji run and trailing hashtag block. A caption that offers nothing usable gets
+`Unbenanntes Rezept` and a reduced confidence.
+
+### Prompt injection
+
+The caption is attacker-controlled: anyone can post content designed to be saved. It reaches the
+model inside a `<caption>` span the system prompt names, with a statement that everything between
+the tags is data rather than instructions — including the confidence field, since a caption that
+talks the score up is a caption that publishes without review. A caption carrying a `<caption>` or
+`</caption>` tag of its own has it neutralised first, so it cannot close the span early.
+
+Two things already bounded the blast radius and still do: `ToolChoice` is pinned to
+`record_recipe`, so there is no second tool to steer the model into, and the output schema is
+closed. Two more are new. The categories an import may attach are now closed to the vocabulary
+already in the database — the seeded set plus anything a human has created — so an injected
+caption can no longer write an arbitrary row into the table every user's picker reads. Ingredient
+and unit names cannot be a closed set, so they are bounded instead: a name is collapsed to one
+line and truncated, which keeps a row a label rather than a payload.
+
+### Measuring extraction quality
+
+`internal/extraction/testdata/gold/` holds a gold set — captions with the extraction a human says
+is correct for each — and `gold_test.go` scores the extractors against it, on ingredient-level
+precision and recall rather than exact equality.
+
+    go test ./internal/extraction -run GoldSetRules -v      # hermetic, runs in CI
+
+    RECIPE_READER_EVAL_LLM=1 ANTHROPIC_API_KEY=sk-... \
+      go test ./internal/extraction -run GoldSetLLM -v      # opt-in; costs money
+
+Both print a per-case table. The aggregate floors are a regression signal, not a target; read
+`testdata/gold/README.md` before changing them, and note the provenance caveat there — the corpus
+is written rather than collected, because the Instagram endpoints have still not been run against
+a real account.
 
 ## Importing a backlog
 
@@ -254,12 +308,26 @@ The frontend build is embedded into the binary with `go:embed`, so the applicati
 single file with no assets to deploy beside it. Anything not under `/api/` is served from that
 embedded directory, falling back to the app shell rather than a 404.
 
-    API_TOKEN=$(openssl rand -hex 32) docker compose up --build   # app on :8080, Postgres on :5432
+    API_TOKEN=$(openssl rand -hex 32) POSTGRES_PASSWORD=$(openssl rand -hex 16) \
+      docker compose up --build        # app on :8080, Postgres on 127.0.0.1:5432
     docker compose down
 
-The compose stack publishes port 8080, so the container binds every interface — the case the
-server refuses without a token. `API_TOKEN` is therefore mandatory here, and compose fails with
-that message if it is unset rather than starting something open to the network.
+Two variables are mandatory and have no defaults; compose fails with a message naming each one
+rather than starting something open to the network.
+
+`API_TOKEN`, because the compose stack publishes port 8080 and the container therefore binds every
+interface — the case the server refuses without a token.
+
+`POSTGRES_PASSWORD`, because it used to be the literal `recipes`, for user `recipes` on database
+`recipes`, with Postgres published on every host interface. On a laptop that is a convenience; on
+the VPS a working compose file invites you to copy it to, it is an internet-exposed database with
+a three-way-guessable credential. The published port is now bound to `127.0.0.1` as well — the app
+reaches `db` by name over the compose network and never needed it published at all; it is there
+only so `make db-up` can serve a binary running on the host.
+
+`POSTGRES_USER` and `POSTGRES_DB` still default to `recipes`, and `DB_DSN` is built from all three
+so the app and the database cannot disagree. Set `DB_DSN` yourself to override it wholesale, which
+is also the answer for a password containing characters a URL would have to percent-encode.
 
 The image builds the frontend and the Go binary in separate stages and ships only the binary on
 Alpine — about 20 MB, running as a non-root user. Credentials come from the environment (see
@@ -267,7 +335,7 @@ Alpine — about 20 MB, running as a non-root user. Credentials come from the en
 not log in again on every restart, which Instagram rate-limits.
 
 `make db-up` starts only the Postgres service, for running the Go binary locally against the same
-database the container would use.
+database the container would use. It needs `POSTGRES_PASSWORD` too.
 
 ### Version stamping
 
@@ -291,9 +359,16 @@ version is passed in as a build argument instead:
 
 ## Testing & linting
 
-    make check   # gofmt + go vet + golangci-lint + govulncheck + go test -race
+    make check   # gofmt + go vet + golangci-lint + frontend typecheck/build
+                 # + govulncheck + go test -race
                  # go test starts one ephemeral Postgres container per database package
                  # via testcontainers-go — Docker must be running.
+
+    make frontend-check   # just the frontend half: npm run typecheck && npm run build
+
+`check` covers the frontend because CI does: a TypeScript error or a broken Vite build used to
+pass the local gate and fail only after the push. The `npm ci` behind it is keyed on
+`web/package-lock.json`, so it reruns only when the lockfile actually changes.
 
     make cover       # the twenty least-covered functions
     make cover-html  # the same profile as a browsable report
@@ -369,3 +444,15 @@ unofficial private API through the `instago` library. Those endpoints are not do
 supported, so they can break without notice if Instagram changes them, and using them carries
 real Terms of Service risk. Treat this as personal automation against your own account for your
 own recipe collection — not as a scraping service for other people's data.
+
+**They have not been verified against a live account.** Nothing in this repository records a
+successful run: that `feed/saved/posts/` is the right endpoint, that saved entries wrap the media
+in a `media` key, and that `next_max_id` is this endpoint's cursor are all still assumptions. What
+has changed is that a wrong assumption is now diagnosable rather than silent. The response is
+decoded into named types instead of walked as `map[string]any`; a page that does not decode at all
+comes back as `ErrSchemaDrift`; an item that does not decode is counted with a reason ("no media
+code" and "undecodable item" point at different upstream changes); and items returned with none of
+them readable is an error rather than an empty success.
+
+Verifying this is a release gate and is still open. Run it against a real account, commit the
+response as a `testdata/` fixture, and the three assumptions above become a test.

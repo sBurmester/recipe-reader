@@ -1,0 +1,38 @@
+{
+  "id": "kartoffelsalat-prosa",
+  "origin": "synthetic",
+  "note": "Prose drifting into the ingredients section — the coverage term's whole purpose.",
+  "caption": "Kartoffelsalat\n\nZutaten:\n- 1 kg Kartoffeln\ndas Rezept ist von meiner Oma und gelingt wirklich immer und überall\n- 1 Zwiebel\n- 200 ml Gemüsebrühe\nnehmt gerne was ihr da habt, ich mache das auch nie genau gleich\n- 3 EL Essig\n\nZubereitung:\nKartoffeln kochen, pellen und in Scheiben schneiden.\nMit heißer Brühe, Essig und Zwiebel vermengen und ziehen lassen.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Kartoffelsalat",
+    "ingredients": [
+      {
+        "name": "Kartoffeln",
+        "amount": 1,
+        "unit": "kg"
+      },
+      {
+        "name": "Zwiebel",
+        "amount": 1,
+        "unit": ""
+      },
+      {
+        "name": "Gemüsebrühe",
+        "amount": 200,
+        "unit": "ml"
+      },
+      {
+        "name": "Essig",
+        "amount": 3,
+        "unit": "EL"
+      }
+    ],
+    "instructions_contain": [
+      "ziehen lassen"
+    ],
+    "rules": {
+      "max_confidence": 0.98
+    }
+  }
+}

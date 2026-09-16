@@ -28,10 +28,32 @@ type Querier interface {
 	GetRecipe(ctx context.Context, id int64) (Recipe, error)
 	GetRecipeBySource(ctx context.Context, source string) (Recipe, error)
 	ListCategories(ctx context.Context) ([]Category, error)
+	ListCategoriesForRecipes(ctx context.Context, dollar_1 []int64) ([]ListCategoriesForRecipesRow, error)
 	ListIngredients(ctx context.Context) ([]Ingredient, error)
+	// ListIngredientsForRecipes and ListCategoriesForRecipes are the batched forms
+	// of the two queries above: one page of search used to cost 2 + 2N round
+	// trips, because every row was assembled on its own. At the default page size
+	// of 20 that is 42 queries for the listing the app opens on, and 202 at the
+	// maximum page size of 100. These two take the page's ids at once and are
+	// grouped in Go, so a page costs four queries whatever its size.
+	//
+	// The single-row queries above stay: GetByID and GetBySource fetch one recipe,
+	// where a batch of one would be the same work with more ceremony.
+	ListIngredientsForRecipes(ctx context.Context, dollar_1 []int64) ([]ListIngredientsForRecipesRow, error)
 	ListRecipeCategories(ctx context.Context, recipeID int64) ([]Category, error)
 	ListRecipeIngredients(ctx context.Context, recipeID int64) ([]ListRecipeIngredientsRow, error)
 	ListUnits(ctx context.Context) ([]Unit, error)
+	// The category filter is a semi-join, not a join.
+	//
+	// It used to be a LEFT JOIN onto recipe_categories that was always present,
+	// even though it only ever served the optional category_id filter. With no
+	// category given, every recipe came back once per category it carries and a
+	// DISTINCT over all eight columns removed the copies again — a sort or hash
+	// aggregate on the full row width, on the unfiltered listing that loads first.
+	// EXISTS asks the same question without multiplying the rows, so the DISTINCT
+	// is gone and the planner can skip the subquery entirely when the argument is
+	// NULL. It also frees the ORDER BY: under SELECT DISTINCT, every column
+	// ordered on has to appear in the select list.
 	SearchRecipes(ctx context.Context, arg SearchRecipesParams) ([]Recipe, error)
 	UpdateRecipe(ctx context.Context, arg UpdateRecipeParams) (Recipe, error)
 }

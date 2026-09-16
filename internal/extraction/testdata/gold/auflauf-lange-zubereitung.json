@@ -1,0 +1,44 @@
+{
+  "id": "auflauf-lange-zubereitung",
+  "origin": "synthetic",
+  "note": "A long method, where the instruction length term is saturated.",
+  "caption": "Gemüseauflauf\n\nZutaten:\n- 600 g Kartoffeln\n- 300 g Brokkoli\n- 200 ml Sahne\n- 150 g geriebener Käse\n- 1 Prise Muskat\n\nZubereitung:\nKartoffeln schälen und in dünne Scheiben hobeln.\nBrokkoli in Röschen teilen und drei Minuten blanchieren.\nBeides abwechselnd in eine gefettete Auflaufform schichten.\nSahne mit Muskat, Salz und Pfeffer verrühren und darüber gießen.\nMit Käse bestreuen und 40 Minuten bei 190 Grad backen, bis die Oberfläche goldbraun ist.\nVor dem Servieren fünf Minuten ruhen lassen.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Gemüseauflauf",
+    "ingredients": [
+      {
+        "name": "Kartoffeln",
+        "amount": 600,
+        "unit": "g"
+      },
+      {
+        "name": "Brokkoli",
+        "amount": 300,
+        "unit": "g"
+      },
+      {
+        "name": "Sahne",
+        "amount": 200,
+        "unit": "ml"
+      },
+      {
+        "name": "geriebener Käse",
+        "amount": 150,
+        "unit": "g"
+      },
+      {
+        "name": "Muskat",
+        "amount": 1,
+        "unit": "Prise"
+      }
+    ],
+    "instructions_contain": [
+      "blanchieren",
+      "goldbraun"
+    ],
+    "rules": {
+      "min_confidence": 0.95
+    }
+  }
+}

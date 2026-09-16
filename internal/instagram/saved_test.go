@@ -3,6 +3,7 @@ package instagram
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -155,22 +156,18 @@ func TestFetchOptions_Defaults(t *testing.T) {
 	}
 }
 
-func TestExtractMedia(t *testing.T) {
-	media := map[string]any{
-		"code": "Cxyz123",
-		"caption": map[string]any{
-			"text": "Zutaten: 200g Mehl\nZubereitung: Backen.",
-		},
-		"image_versions2": map[string]any{
-			"candidates": []any{
-				map[string]any{"url": "https://example.com/photo.jpg"},
-			},
-		},
-	}
+func TestDecodeSavedPost(t *testing.T) {
+	raw := json.RawMessage(`{
+		"media": {
+			"code": "Cxyz123",
+			"caption": {"text": "Zutaten: 200g Mehl\nZubereitung: Backen."},
+			"image_versions2": {"candidates": [{"url": "https://example.com/photo.jpg"}]}
+		}
+	}`)
 
-	post, ok := extractMedia(media)
-	if !ok {
-		t.Fatal("extractMedia() ok = false, want true")
+	post, err := decodeSavedPost(raw)
+	if err != nil {
+		t.Fatalf("decodeSavedPost() error = %v", err)
 	}
 	if post.Source != "https://www.instagram.com/p/Cxyz123/" {
 		t.Errorf("Source = %q", post.Source)
@@ -183,9 +180,69 @@ func TestExtractMedia(t *testing.T) {
 	}
 }
 
-func TestExtractMedia_MissingCode(t *testing.T) {
-	if _, ok := extractMedia(map[string]any{}); ok {
-		t.Error("expected ok = false when code is missing")
+// Some saved endpoints return the media object directly rather than under a
+// "media" key. Both shapes decode through the same type.
+func TestDecodeSavedPost_UnwrappedMedia(t *testing.T) {
+	post, err := decodeSavedPost(json.RawMessage(`{"code":"Cabc","caption":{"text":"hi"}}`))
+	if err != nil {
+		t.Fatalf("decodeSavedPost() error = %v", err)
+	}
+	if post.Source != "https://www.instagram.com/p/Cabc/" || post.Caption != "hi" {
+		t.Errorf("post = %+v", post)
+	}
+}
+
+// The optional objects really are optional: a video carries no
+// image_versions2, and a post may carry no caption at all.
+func TestDecodeSavedPost_OptionalFieldsMayBeAbsentOrNull(t *testing.T) {
+	for _, raw := range []string{
+		`{"media":{"code":"Cabc"}}`,
+		`{"media":{"code":"Cabc","caption":null,"image_versions2":null}}`,
+		`{"media":{"code":"Cabc","image_versions2":{"candidates":[]}}}`,
+	} {
+		post, err := decodeSavedPost(json.RawMessage(raw))
+		if err != nil {
+			t.Fatalf("decodeSavedPost(%s) error = %v", raw, err)
+		}
+		if post.Source != "https://www.instagram.com/p/Cabc/" {
+			t.Errorf("decodeSavedPost(%s) Source = %q", raw, post.Source)
+		}
+		if post.Caption != "" || post.ImageURL != "" {
+			t.Errorf("decodeSavedPost(%s) invented content: %+v", raw, post)
+		}
+	}
+}
+
+// A drop has to say what was wrong with the item, because "no media code" and
+// "undecodable item" point at different upstream changes.
+func TestDecodeSavedPost_DropsCarryAReason(t *testing.T) {
+	if _, err := decodeSavedPost(json.RawMessage(`{}`)); !errors.Is(err, errNoMediaCode) {
+		t.Errorf("error = %v, want errNoMediaCode", err)
+	}
+	if _, err := decodeSavedPost(json.RawMessage(`{"media":"a string"}`)); err == nil {
+		t.Error("a media field of the wrong type decoded without error")
+	} else if errors.Is(err, errNoMediaCode) {
+		t.Errorf("error = %v, want a decode failure rather than a missing code", err)
+	}
+
+	reasons := dropReasons{}
+	reasons.count(errNoMediaCode)
+	reasons.count(errNoMediaCode)
+	reasons.count(errors.New("cannot decode the item: boom"))
+	if got, want := reasons.String(), "no media code=2, undecodable item=1"; got != want {
+		t.Errorf("dropReasons = %q, want %q", got, want)
+	}
+}
+
+// A response that is not a feed page at all is the loudest kind of drift, and
+// must not read as a page with nothing new on it.
+func TestPageMedia_UndecodableResponseIsSchemaDrift(t *testing.T) {
+	req := func(context.Context, ig.PrivateRequestOpts) (map[string]any, error) {
+		return map[string]any{"items": "not an array"}, nil
+	}
+	_, err := pageMedia(context.Background(), req, "feed/saved/posts/", FetchOptions{})
+	if !errors.Is(err, ErrSchemaDrift) {
+		t.Errorf("error = %v, want ErrSchemaDrift", err)
 	}
 }
 

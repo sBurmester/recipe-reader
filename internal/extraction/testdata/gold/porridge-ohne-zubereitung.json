@@ -1,0 +1,36 @@
+{
+  "id": "porridge-ohne-zubereitung",
+  "origin": "synthetic",
+  "note": "Ingredients with no method: a half recipe, which must stay under the fallback threshold.",
+  "caption": "Bestes Porridge\n\nZutaten:\n- 50 g Haferflocken\n- 200 ml Hafermilch\n- 1 TL Zimt\n- 1 Banane\n\nMehr dazu in meiner Story!",
+  "expect": {
+    "no_recipe": false,
+    "name": "Bestes Porridge",
+    "ingredients": [
+      {
+        "name": "Haferflocken",
+        "amount": 50,
+        "unit": "g"
+      },
+      {
+        "name": "Hafermilch",
+        "amount": 200,
+        "unit": "ml"
+      },
+      {
+        "name": "Zimt",
+        "amount": 1,
+        "unit": "TL"
+      },
+      {
+        "name": "Banane",
+        "amount": 1,
+        "unit": ""
+      }
+    ],
+    "instructions_contain": [],
+    "rules": {
+      "max_confidence": 0.5
+    }
+  }
+}

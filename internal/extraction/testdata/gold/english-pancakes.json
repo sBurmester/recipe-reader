@@ -1,0 +1,38 @@
+{
+  "id": "english-pancakes",
+  "origin": "synthetic",
+  "note": "English headers and units — the caption language the prompt also advertises.",
+  "caption": "Fluffy Buttermilk Pancakes\n\nIngredients:\n- 250 g flour\n- 2 eggs\n- 300 ml buttermilk\n- 1 TL baking powder\n\nInstructions:\nWhisk the eggs into the buttermilk.\nFold in the flour and baking powder until just combined.\nFry in a buttered pan until golden on both sides.\n\n#pancakes #breakfast",
+  "expect": {
+    "no_recipe": false,
+    "name": "Fluffy Buttermilk Pancakes",
+    "ingredients": [
+      {
+        "name": "flour",
+        "amount": 250,
+        "unit": "g"
+      },
+      {
+        "name": "eggs",
+        "amount": 2,
+        "unit": ""
+      },
+      {
+        "name": "buttermilk",
+        "amount": 300,
+        "unit": "ml"
+      },
+      {
+        "name": "baking powder",
+        "amount": 1,
+        "unit": "TL"
+      }
+    ],
+    "instructions_contain": [
+      "Whisk"
+    ],
+    "rules": {
+      "min_confidence": 0.9
+    }
+  }
+}

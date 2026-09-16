@@ -1,0 +1,33 @@
+{
+  "id": "guacamole-knapp",
+  "origin": "synthetic",
+  "note": "A real but minimal recipe: three ingredients and one short sentence.",
+  "caption": "Schnelle Guacamole\n\nZutaten:\n- 2 Avocados\n- 1 Limette\n- 1 Prise Salz\n\nZubereitung:\nAlles zerdrücken und verrühren.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Schnelle Guacamole",
+    "ingredients": [
+      {
+        "name": "Avocados",
+        "amount": 2,
+        "unit": ""
+      },
+      {
+        "name": "Limette",
+        "amount": 1,
+        "unit": ""
+      },
+      {
+        "name": "Salz",
+        "amount": 1,
+        "unit": "Prise"
+      }
+    ],
+    "instructions_contain": [
+      "zerdrücken"
+    ],
+    "rules": {
+      "max_confidence": 0.9
+    }
+  }
+}
