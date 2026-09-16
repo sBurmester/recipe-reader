@@ -8,3 +8,6 @@ internal/webui/dist/*
 !internal/webui/dist/.gitkeep
 web/dist-ts/
 web/*.tsbuildinfo
+
+# Coverage profile written by `make test` (D6: measured and reported, never gated).
+cover.out

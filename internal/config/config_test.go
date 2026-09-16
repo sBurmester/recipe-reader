@@ -20,10 +20,22 @@ func clearEnv(t *testing.T, keys ...string) {
 	}
 }
 
+// testVersion is what loadArgs stamps as the build version. Only the
+// --version tests care what it is; every other test simply needs load's second
+// argument filled in.
+const testVersion = "v0.0.0-test"
+
+// loadArgs parses args the way Load parses the real command line, with a fixed
+// version stamp. It keeps the version out of the tests that are about
+// something else.
+func loadArgs(args []string) (Config, error) {
+	return load(args, testVersion)
+}
+
 func TestLoad_Defaults(t *testing.T) {
 	clearEnv(t, "DB_DSN", "HTTP_ADDR", "IMPORT_INTERVAL", "EXTRACTION_CONFIDENCE_THRESHOLD", "EXTRACTION_MODE", "ANTHROPIC_MODEL", "API_TOKEN", "CORS_ORIGINS")
 
-	cfg, err := load(nil)
+	cfg, err := loadArgs(nil)
 	if err != nil {
 		t.Fatalf("load() error = %v", err)
 	}
@@ -54,14 +66,14 @@ func TestLoad_Defaults(t *testing.T) {
 
 func TestLoad_InvalidThreshold(t *testing.T) {
 	t.Setenv("EXTRACTION_CONFIDENCE_THRESHOLD", "not-a-number")
-	if _, err := load(nil); err == nil {
+	if _, err := loadArgs(nil); err == nil {
 		t.Fatal("load() error = nil, want error for invalid threshold")
 	}
 }
 
 func TestLoad_InvalidImportInterval(t *testing.T) {
 	t.Setenv("IMPORT_INTERVAL", "not-a-duration")
-	if _, err := load(nil); err == nil {
+	if _, err := loadArgs(nil); err == nil {
 		t.Fatal("load() error = nil, want error for invalid import interval")
 	}
 }
@@ -71,7 +83,7 @@ func TestLoad_EnvOverridesDefault(t *testing.T) {
 	t.Setenv("IMPORT_INTERVAL", "12h")
 	t.Setenv("ANTHROPIC_API_KEY", "sk-test")
 
-	cfg, err := load(nil)
+	cfg, err := loadArgs(nil)
 	if err != nil {
 		t.Fatalf("load() error = %v", err)
 	}
@@ -89,7 +101,7 @@ func TestLoad_EnvOverridesDefault(t *testing.T) {
 func TestLoad_FlagsOverrideEnv(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "127.0.0.1:9999")
 
-	cfg, err := load([]string{
+	cfg, err := loadArgs([]string{
 		"--http-addr", "127.0.0.1:7777",
 		"--extraction-mode", "rule",
 		"--import-interval", "30m",
@@ -109,7 +121,7 @@ func TestLoad_FlagsOverrideEnv(t *testing.T) {
 }
 
 func TestLoad_UnknownFlag(t *testing.T) {
-	if _, err := load([]string{"--does-not-exist"}); err == nil {
+	if _, err := loadArgs([]string{"--does-not-exist"}); err == nil {
 		t.Fatal("load() error = nil, want error for unknown flag")
 	}
 }
@@ -121,7 +133,7 @@ func TestLoad_RejectsNonLoopbackBindWithoutToken(t *testing.T) {
 	clearEnv(t, "API_TOKEN")
 
 	for _, addr := range []string{":8080", "0.0.0.0:8080", "192.168.1.10:8080"} {
-		if _, err := load([]string{"--http-addr", addr}); err == nil {
+		if _, err := loadArgs([]string{"--http-addr", addr}); err == nil {
 			t.Errorf("load(--http-addr %s) error = nil, want a refusal without API_TOKEN", addr)
 		}
 	}
@@ -130,7 +142,7 @@ func TestLoad_RejectsNonLoopbackBindWithoutToken(t *testing.T) {
 func TestLoad_AllowsNonLoopbackBindWithToken(t *testing.T) {
 	t.Setenv("API_TOKEN", "s3cret-token")
 
-	cfg, err := load([]string{"--http-addr", ":8080"})
+	cfg, err := loadArgs([]string{"--http-addr", ":8080"})
 	if err != nil {
 		t.Fatalf("load() error = %v, want success once a token is configured", err)
 	}
@@ -146,7 +158,7 @@ func TestLoad_AllowsLoopbackBindWithoutToken(t *testing.T) {
 	clearEnv(t, "API_TOKEN")
 
 	for _, addr := range []string{"127.0.0.1:8080", "localhost:8080", "[::1]:8080"} {
-		if _, err := load([]string{"--http-addr", addr}); err != nil {
+		if _, err := loadArgs([]string{"--http-addr", addr}); err != nil {
 			t.Errorf("load(--http-addr %s) error = %v, want success", addr, err)
 		}
 	}
@@ -155,7 +167,7 @@ func TestLoad_AllowsLoopbackBindWithoutToken(t *testing.T) {
 func TestLoad_CORSOriginsSplitOnComma(t *testing.T) {
 	t.Setenv("CORS_ORIGINS", "http://localhost:5173,https://recipes.example")
 
-	cfg, err := load(nil)
+	cfg, err := loadArgs(nil)
 	if err != nil {
 		t.Fatalf("load() error = %v", err)
 	}
@@ -168,18 +180,18 @@ func TestLoad_CORSOriginsSplitOnComma(t *testing.T) {
 // inspected — so a typo silently selected the weakest extractor rather than
 // failing. The enum is what makes a wrong value loud.
 func TestLoad_RejectsUnknownExtractionMode(t *testing.T) {
-	if _, err := load([]string{"--extraction-mode", "banana"}); err == nil {
+	if _, err := loadArgs([]string{"--extraction-mode", "banana"}); err == nil {
 		t.Error("load() error = nil, want a refusal for an unknown extraction mode")
 	}
 	for _, mode := range []string{"rule", "llm", "hybrid"} {
-		if _, err := load([]string{"--extraction-mode", mode}); err != nil {
+		if _, err := loadArgs([]string{"--extraction-mode", mode}); err != nil {
 			t.Errorf("load(--extraction-mode %s) error = %v", mode, err)
 		}
 	}
 }
 
 func TestLoad_RejectsUnknownLLMProvider(t *testing.T) {
-	if _, err := load([]string{"--llm-provider", "gemini"}); err == nil {
+	if _, err := loadArgs([]string{"--llm-provider", "gemini"}); err == nil {
 		t.Error("load() error = nil, want a refusal for an unsupported provider")
 	}
 }
@@ -187,7 +199,7 @@ func TestLoad_RejectsUnknownLLMProvider(t *testing.T) {
 func TestLoad_PublishThresholdDefaultsAboveTheFallbackThreshold(t *testing.T) {
 	clearEnv(t, "EXTRACTION_CONFIDENCE_THRESHOLD", "EXTRACTION_PUBLISH_THRESHOLD")
 
-	cfg, err := load(nil)
+	cfg, err := loadArgs(nil)
 	if err != nil {
 		t.Fatalf("load() error = %v", err)
 	}

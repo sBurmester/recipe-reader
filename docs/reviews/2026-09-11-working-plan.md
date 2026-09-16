@@ -3,10 +3,22 @@
 **Derived from:** the six-reviewer panel of 2026-09-11 ([index](README.md)),
 as adjudicated in the [consensus record](2026-09-11-consensus.md)
 **Source findings:** 66 post-round (72 entering, 1 withdrawn, 5 merged), **62 tasks**
-**Status:** in progress — bands ≥ 5.0 done, plus T-25 and T-61 (25 of 62)
+**Status:** in progress — bands ≥ 4.0 done except T-24, plus T-61 (33 of 62)
 
 Mark a task `[x]` when it is done. Each task cites the finding IDs it closes.
 
+> **Revision 5 — after Band 4.0–4.9 shipped (2026-09-16).** Nine of the band's
+> ten tasks are done: T-30, T-31, T-34, T-35, T-36, T-37, T-07 and T-38, joining
+> T-25. **T-24 is the exception and is still open on purpose** — ruling R7
+> settles E4 with T-42's gold set, and T-42 has not been done, so flipping the
+> model default now would be exactly the guess the eval exists to replace. Each
+> task below records what it actually did where that diverged from the plan; the
+> three that diverged most are T-07 (the API contract gained a 409), T-30 (the
+> classification lives in `pipeline`, and the handler deliberately does *not*
+> log) and T-37 (the DSN keeps precedence over the new defaults). **Stage 3 is
+> now complete except T-54, Stage 7 except its 3.0-and-below tail, and Stage 5
+> entirely.** First coverage measurement, from T-38: 71.5% overall.
+>
 > **Revision 4 — after the first eleven tasks shipped (2026-09-12).** Bands
 > ≥ 6.0 are complete. This revision does three things: records what each closed
 > task actually did where it diverged from the plan, **re-cites every task whose
@@ -86,6 +98,12 @@ Rating order is not execution order. The consensus record says why in four
 places, and those four rulings — not the decimals — are what orders the 51
 remaining tasks.
 
+> **Since revision 5 (2026-09-16): every task rated ≥ 4.0 is done but T-24**,
+> which R7 gates behind T-42. **T-42 is now the highest-value task on the
+> board after T-43**: it is the only thing standing between T-24 and T-40 and
+> their remediation, and both are cost findings that go on costing until it
+> lands.
+>
 > **Since revision 4 (2026-09-15): every task rated ≥ 5.0 is done.** That is
 > T-10 and T-27 (Stage 1), T-16 and T-08 (Stage 3), T-20 and T-29 (Stage 4),
 > T-21, T-28, T-14, T-17 and T-25 (Stage 5), T-22 (Stage 8) and T-19
@@ -193,7 +211,7 @@ re-opens a settled one or assumes a live one is settled:
 | `integration` | I2 (7.6) has never been challenged in either round | **Dissolved.** T-06 fixed it regardless of what a challenge would have concluded. |
 | `delivery` | Ratify or reject R3 at 2.5; defend D3's count rising 8→18 while its rating fell 7.0→5.5; whether D5 is a legitimate finding or an aggregate needing a split | **Partly answered — by the work, not by the panel.** D5 *was* an aggregate: T-18 closed it as three independent pieces, two of which other tasks had already covered. R3 is moot for remediation (T-13 is Low either way). **D3's count is now settled by measurement (T-10):** 21 container boots at `4ce206e`, the last commit before remediation, so the corrected 18 was itself low — and 27 by the time T-10 started. The rating's fall stands on category, not on the count. |
 | `integration` | Settle I1's magnitude — hold 7.6 provisional, split it, or drop to the confirmed-only rating | **OPEN.** Only T-43 can close it. The 7.6 stays provisional; the fix shipped anyway, because nothing in it depended on the magnitude. |
-| `persistence` | Ratify or reject R1 at 5.5; over-correction check on P1 (7.2→4.0); P3-vs-S4 calibration at 4.8 | **OPEN.** R1 stands ratified by one party of two. T-16 has shipped to its condition — both halves — so the remediation no longer waits on the ratification, though the rating itself still does. P1 (T-07) and P3-vs-S4 (T-31 against T-30) remain untested. |
+| `persistence` | Ratify or reject R1 at 5.5; over-correction check on P1 (7.2→4.0); P3-vs-S4 calibration at 4.8 | **OPEN on the ratings, closed on the remediation.** R1 stands ratified by one party of two. T-16, T-07, T-31 and T-30 have all now shipped, so nothing waits on the panel to reconvene. Two observations the work supplies where the panel did not: **P1's fix turned out to be a simplification, not a defence** — removing the check-then-act took a query out and changed the API contract (409), which is a better argument for it than the race ever was, and supports the correction to 4.0. And **P3 and S4 did diverge in effort** — S4 (T-30) needed two new sentinels, a classification and a frontend change, where P3 (T-31) was one SQL edit; equal ratings at 4.8 read as generous to P3. |
 | `integration` | Lane bias: it owns 3 of 7 findings ≥ 7.0, all in one package. Untested | **OPEN, and now harder to test.** All three — I1, I2 and I3, shipped as T-01, T-06 and T-11 — are fixed. Whether that lane was over-weighted is no longer observable from the code; only from whether the fixes turn out to have mattered. |
 
 ---
@@ -630,14 +648,56 @@ re-opens a settled one or assumes a live one is settled:
       reviewer called it *"not a vulnerability"*, it is not one of R4's two
       edits, and it changes what the API accepts from every client — a contract
       decision, not a hardening one.
-- [ ] **T-30 · 4.8 · S** — Stop echoing internal error strings — `security` S4 — `internal/api/handlers_import.go`
+- [x] **T-30 · 4.8 · S** — Stop echoing internal error strings — `security` S4 — `internal/api/handlers_import.go`
       Still live: `handleImportStatus` returns `status.LastErr.Error()` verbatim,
       which now carries wrapped DSN fragments and `instago` response bodies.
       **Leave the rate-limit message alone** — T-12's cooldown string is composed
       for the caller and leaks nothing.
-- [ ] **T-31 · 4.8 · S** — Escape `LIKE` metacharacters — `persistence` P3 — `internal/db/queries/recipes.sql`
-- [ ] **T-34 · 4.5 · S** — Validate `--import-interval` and the thresholds — `go` #7 — `NewWorker` in `internal/pipeline/worker.go` still takes any duration and `Start`'s ticker panics on a non-positive one. **There are three thresholds to validate now:** T-04 added `EXTRACTION_PUBLISH_THRESHOLD` beside `EXTRACTION_CONFIDENCE_THRESHOLD`, and neither is range-checked. Shares a sitting with T-21 and T-28 in `internal/config`.
+      **DONE.** `pipeline.Classify` reduces the error to one of six stable codes
+      (`rate_limited`, `instagram_auth`, `instagram_schema_drift`, `fetch_failed`,
+      `cancelled`, `import_failed`) plus a fixed sentence per code; the handler
+      reports `error` and `error_message` and nothing derived from the chain. The
+      classification lives in `pipeline`, not `api`, because `pipeline` already
+      owns the sentinels — and two were added so the distinction survives without
+      matching on message text: `ErrFetch`, which `Run` wraps every fetch failure
+      with, and `ErrLogin`, which the composition root wraps the startup login
+      failure with (the one error that reaches `Status` without a run). **Not
+      logged in the handler**, deliberately: the full chain is already logged
+      where it is raised, and this endpoint is polled every two seconds while the
+      import page is open. S4's fix asked for a server-side `slog.Error` — it was
+      already there twice over, and adding a third would have filled the log with
+      copies of one failure. The rate-limit message is untouched, as ruled.
+      Frontend follows: `IMPORT_ERROR_TEXT` in `web/src/pages/import.ts` maps each
+      code to German, falling back to `error_message` for a code it does not know.
+- [x] **T-31 · 4.8 · S** — Escape `LIKE` metacharacters — `persistence` P3 — `internal/db/queries/recipes.sql`
+      **DONE, in SQL rather than in Go**, as P3 recommends: the triple `replace`
+      plus `ESCAPE '\'` is applied in *both* `SearchRecipes` and `CountRecipes`,
+      so the page and its `total` cannot drift apart — which normalising once in
+      `Search` would have left possible. Regenerated `internal/db/sqlc`. Tested
+      against real Postgres for `%`, `_` and a literal backslash, with the count
+      asserted alongside the rows; a bare `%` now finds the one recipe with a
+      percent sign in its name rather than all of them.
+- [x] **T-34 · 4.5 · S** — Validate `--import-interval` and the thresholds — `go` #7 — `NewWorker` in `internal/pipeline/worker.go` still takes any duration and `Start`'s ticker panics on a non-positive one. **There are three thresholds to validate now:** T-04 added `EXTRACTION_PUBLISH_THRESHOLD` beside `EXTRACTION_CONFIDENCE_THRESHOLD`, and neither is range-checked. Shares a sitting with T-21 and T-28 in `internal/config`.
+      **DONE, all three, in `Config.validate` — and #7's other option taken as
+      well.** The finding offered "validate in `config.load` *or* return an error
+      from `NewWorker`"; config is where an operator's typo belongs, but
+      `NewWorker` is exported and takes any duration, so `Start` now refuses a
+      non-positive interval with one `slog.Error` instead of panicking
+      `time.NewTicker` on the caller's goroutine. Both thresholds are checked
+      against `0..1` with the endpoints legal — `0` for the confidence threshold
+      means "never fall back to the LLM" and `1` for the publish threshold means
+      "publish nothing unreviewed", and both are coherent requests. The check is
+      written as "not inside the range" so `NaN` fails it too.
+      **Not done:** the relation between the two thresholds is not enforced. A
+      publish threshold below the confidence threshold is odd but not incoherent,
+      and the plan asked for range checks.
 - [ ] **T-24 · 4.8 · S** — Default to Haiku 4.5 for batch extraction — `extraction` E4
+      **NOT DONE — gated, deliberately.** Ruling R7 settles E4 "with T-42's gold
+      set", and the execution order puts T-42 (3.8, L) ahead of it in Stage 4.
+      T-42 has not been done, so the evidence the ruling requires does not exist
+      and flipping the default now would be the guess the eval was commissioned
+      to replace. Everything else in this band shipped. **When T-42 lands, three
+      places change, not two** — see the re-citation below.
       **Lowered in round 2** by its own reviewer: this is the only cost finding
       whose failure announces itself, on the first invoice. Settle the model
       choice with T-42's gold set (ruling R7).
@@ -647,22 +707,79 @@ re-opens a settled one or assumes a live one is settled:
       `LLM_MODEL` beside it — which takes precedence and has no default at all,
       so a `LLM_PROVIDER=anthropic` deployment that sets only `LLM_MODEL=` still
       falls through to the expensive default.
-- [ ] **T-35 · 4.4 · S** — `Temperature: 0` for extraction — `extraction` E5
+- [x] **T-35 · 4.4 · S** — `Temperature: 0` for extraction — `extraction` E5
       **RE-CITED: two edits now.** Temperature is unset in *both* transports,
       `anthropicClient.recordRecipe` and `openAIClient.recordRecipe`
       (`internal/extraction/llm_provider.go`). Setting one and not the other
       would make extraction reproducible on one provider and not the other —
       the same drift the shared `record_recipe` schema exists to prevent.
-- [ ] **T-36 · 4.4 · S** — Stamp a version into the binary — `delivery` D8 — `Makefile:16-17`, `Dockerfile:20`
-- [ ] **T-37 · 4.2 · S** — Configure the connection pool — `persistence` P5 — `internal/db/connect.go:28`
-- [ ] **T-07 · 4.0 · S** — Make the insert itself the dedupe — `persistence` P1
+      **DONE, both transports**, through one `extractionTemperature` constant so
+      a future change cannot move one and leave the other. Tested by capturing
+      what each transport actually puts on the wire — the existing provider stubs
+      discard the request, which is precisely what a test about what we *send*
+      cannot do — and confirmed failing without the change.
+- [x] **T-36 · 4.4 · S** — Stamp a version into the binary — `delivery` D8 — `Makefile:16-17`, `Dockerfile:20`
+      **DONE, both surfaces D8 asked for.** `var version = "dev"` in
+      `cmd/recipe-reader/version.go`, stamped by `-ldflags -X main.version` from
+      `git describe --tags --always --dirty` in the Makefile, and by an
+      `ARG VERSION` in the Dockerfile — which has to be passed in, because
+      `.dockerignore` excludes `.git` and the image build has no history to
+      describe itself from. `make docker`, compose and CI all supply it.
+      Surfaced as `recipe-reader --version` (kong `VersionFlag`, so `config.Load`
+      now takes the version) and as the `version` field of `/api/healthz`, which
+      is omitted rather than empty on an unstamped build.
+      **Guarded where it can actually break:** the link-time stamp is the one
+      part no unit test reaches, so `scripts/smoke-test-image.sh` now asserts
+      that `--version` and `/api/healthz` agree and that the result is not `dev`.
+      Verified in the built image: both report `74637be-dirty`.
+- [x] **T-37 · 4.2 · S** — Configure the connection pool — `persistence` P5 — `internal/db/connect.go:28`
+      **DONE via `ParseConfig` + `NewWithConfig`**, with one departure from P5's
+      sketch: the defaults are applied *only where the DSN is silent*. P5's own
+      complaint is that "the DSN is the only lever an operator has", and
+      overwriting `pool_max_conns` unconditionally would have taken that lever
+      away while claiming to add one. `MaxConns` 10 (above pgxpool's
+      `max(4, NumCPU)`, for P4's `2+2N` list endpoint on a small container),
+      `MinConns` 2 (pgxpool's 0 drains the pool between six-hourly imports),
+      `ConnectTimeout` 5s. A DSN `pool_max_conns` below our floor lowers the
+      floor with it, so capping connections cannot produce a config pgxpool
+      refuses to build. Lifetime, idle time and health-check period are left at
+      pgxpool's values, which P5 lists without objecting to.
+- [x] **T-07 · 4.0 · S** — Make the insert itself the dedupe — `persistence` P1
       `ON CONFLICT (source) DO NOTHING` on `CreateRecipe`; treat `pgx.ErrNoRows` as `Skipped`. **CORRECTED:** the race is latent, not live — the worker mutex closes the import-vs-import path and `createRecipe` (`web/src/api.ts`) has no caller in the shipped UI. Still worth doing: the fix is simpler and one query cheaper than the check-then-act it replaces.
       **There are two dedupe reads now.** T-01 added `FetchOptions.Known`, wired
       to `GetBySource`, so the fetcher can page past imported posts. That one is
       deliberately advisory — it answers "not known" on any error and the
       pipeline re-checks authoritatively. **Leave it alone; this task is only
       about the pipeline's check-then-act.**
-- [ ] **T-38 · 4.0 · S** — Measure coverage, report it, do not gate on it — `delivery` D6
+      **DONE.** `ON CONFLICT (source) DO NOTHING` on `CreateRecipe`; the
+      repository turns the resulting `pgx.ErrNoRows` into `ErrDuplicateSource`,
+      and the pipeline's `GetBySource` pre-check is gone — one query cheaper, as
+      the plan says. `FetchOptions.Known` is untouched. **Two consequences the
+      plan did not name.** (1) `POST /api/recipes` now answers **409** where it
+      answered 500: the collision arrives as a sentinel rather than as a unique
+      violation wrapped in an opaque write failure, and the existing
+      orphan-lookup test was updated to expect it — the rest of that test still
+      holds, because the conflict fires inside the transaction before
+      `resolveLookups` runs. (2) A duplicate is now discovered *after* extraction
+      rather than before it, so it can cost one LLM call. It stays a non-issue
+      because the fetcher already pages past imported posts, so a duplicate only
+      reaches the pipeline when that advisory check could not answer — one wasted
+      call against a read on every post of every run. Verified end to end in the
+      built image: the second POST answers 409 and leaves no lookup rows.
+- [x] **T-38 · 4.0 · S** — Measure coverage, report it, do not gate on it — `delivery` D6
+      **DONE, and nothing is gated.** `make test` runs with
+      `-coverprofile=cover.out -covermode=atomic` and prints the total; `go test`
+      prints each package's percentage as it goes, which is D6's per-package
+      ranking. `make cover` lists the twenty least-covered functions —
+      the "where is a test worth writing next" question D6 wanted answered in one
+      command — and `make cover-html` opens the profile. CI prints the total into
+      the job summary and uploads `cover.out` as an artifact, `if: always()`, on
+      the theory that a coverage profile is most useful on the run that failed.
+      No threshold anywhere, as D6 explicitly asked. First measurement: **71.5%
+      total**. The floor is `cmd/recipe-reader` at 41.0%, not `internal/instagram`
+      — which D6 used as its illustration and which measures 70.5%. The number
+      D6 wanted visible immediately contradicted the guess made about it, which
+      is the argument for measuring rather than ranking by hand.
 
 ## Band 3.0 – 3.9 (12 tasks)
 
@@ -738,8 +855,8 @@ a finding. The GO-2026-5932 provenance note lives in the security review's
 | 7.0 – 7.9 | 6 | 6 |
 | 6.0 – 6.9 | 4 | 4 |
 | 5.0 – 5.9 | 12 | 12 |
-| 4.0 – 4.9 | 10 | 1 |
+| 4.0 – 4.9 | 10 | 9 |
 | 3.0 – 3.9 | 12 | 0 |
 | 2.0 – 2.9 | 15 | 1 |
 | < 2.0 | 2 | 0 |
-| **Total** | **62** | **25** |
+| **Total** | **62** | **33** |

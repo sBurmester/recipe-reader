@@ -12,6 +12,12 @@ type Querier interface {
 	AddRecipeCategory(ctx context.Context, arg AddRecipeCategoryParams) error
 	AddRecipeIngredient(ctx context.Context, arg AddRecipeIngredientParams) (RecipeIngredient, error)
 	CountRecipes(ctx context.Context, arg CountRecipesParams) (int64, error)
+	// ON CONFLICT DO NOTHING makes the unique index on source the dedupe itself:
+	// the insert either stores the recipe or returns no row, with no window in
+	// between for a second importer to slip through. The check-then-act this
+	// replaced (GetBySource, then Create) was one query more expensive and could
+	// only ever narrow that window, not close it. A conflict surfaces as
+	// pgx.ErrNoRows, which the repository translates to ErrDuplicateSource.
 	CreateRecipe(ctx context.Context, arg CreateRecipeParams) (Recipe, error)
 	DeleteRecipe(ctx context.Context, id int64) (int64, error)
 	DeleteRecipeCategories(ctx context.Context, recipeID int64) error

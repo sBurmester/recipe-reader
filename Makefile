@@ -1,10 +1,19 @@
-.PHONY: build test lint vuln check run docker frontend sqlc-generate db-up
+.PHONY: build test cover cover-html lint vuln check run docker frontend sqlc-generate db-up
 
 # npm writes this file itself, so it is a real dependency target rather than a
 # stamp we invent: `npm ci` reruns only when the lockfile actually changes.
 # Without that, making `build` depend on `frontend` would reinstall the whole
 # tree on every build.
 NODE_MODULES := web/node_modules/.package-lock.json
+
+# VERSION is stamped into the binary so a deployed instance can say what it is,
+# through `recipe-reader --version` and the version field of /api/healthz. The
+# --dirty suffix is deliberate: a build from an unclean tree is not the commit
+# it claims to be, and that is exactly what you want to know when the thing in
+# front of you is misbehaving. Override it (`make build VERSION=1.2.3`) where
+# git is not available, e.g. inside an image build.
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -X main.version=$(VERSION)
 
 $(NODE_MODULES): web/package-lock.json
 	npm --prefix web ci
@@ -29,14 +38,31 @@ db-up:
 # startup now (webui.IsPlaceholder), for the build paths that bypass this
 # Makefile entirely.
 build: frontend
-	CGO_ENABLED=0 go build -o bin/recipe-reader ./cmd/recipe-reader
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bin/recipe-reader ./cmd/recipe-reader
 
 # -race matches CI. Without it the race detector only ran after a push, while
 # the local gate (`make check`) skipped the one check most likely to catch a
 # regression in Worker's locking, the detached import goroutine or the shutdown
 # sequence. Sharing one Postgres container per package made it affordable.
+#
+# Coverage is measured and printed, and nothing is gated on it. A percentage
+# target produces tests written to move the number; a per-package line produces
+# the same information the panel's manual read of the suite produced, in one
+# command. cover.out is left behind for `go tool cover -html=cover.out`.
 test:
-	go test -race ./...
+	go test -race -coverprofile=cover.out -covermode=atomic ./...
+	@go tool cover -func=cover.out | tail -n 1
+
+# The twenty least-covered functions. `test` already prints the per-package
+# percentages go test reports and the total; this is the ranking that says where
+# a test is worth writing next, which is the question D6 asked coverage to
+# answer. Still no threshold anywhere: nothing here fails a build.
+cover: test
+	@go tool cover -func=cover.out | sort -k3 -g | head -n 20
+
+# The HTML report, for reading one package's uncovered lines.
+cover-html: test
+	go tool cover -html=cover.out
 
 lint:
 	gofmt -l . | tee /tmp/gofmt-out; test ! -s /tmp/gofmt-out
@@ -55,5 +81,7 @@ check: lint vuln test
 run: frontend
 	go run ./cmd/recipe-reader
 
+# --build-arg VERSION: the image build has no git history to describe itself
+# from, so the version is passed in from here, where there is one.
 docker:
-	docker build -t recipe-reader .
+	docker build --build-arg VERSION=$(VERSION) -t recipe-reader .

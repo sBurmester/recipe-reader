@@ -7,7 +7,7 @@ import "testing"
 func TestLoad_ImportBounds(t *testing.T) {
 	clearEnv(t, "IMPORT_MAX_ITEMS", "IMPORT_MAX_PAGES")
 
-	cfg, err := load(nil)
+	cfg, err := loadArgs(nil)
 	if err != nil {
 		t.Fatalf("load() error = %v", err)
 	}
@@ -16,7 +16,7 @@ func TestLoad_ImportBounds(t *testing.T) {
 	}
 
 	t.Setenv("IMPORT_MAX_ITEMS", "500")
-	cfg, err = load([]string{"--import-max-pages", "400"})
+	cfg, err = loadArgs([]string{"--import-max-pages", "400"})
 	if err != nil {
 		t.Fatalf("load() error = %v", err)
 	}
@@ -33,7 +33,7 @@ func TestLoad_RejectsImportBoundsBelowOne(t *testing.T) {
 		{"--import-max-items", "-5"},
 		{"--import-max-pages", "0"},
 	} {
-		if _, err := load(args); err == nil {
+		if _, err := loadArgs(args); err == nil {
 			t.Errorf("load(%v) error = nil, want a refusal", args)
 		}
 	}

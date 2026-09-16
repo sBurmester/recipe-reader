@@ -11,6 +11,7 @@ web/dist
 web/dist-ts
 web/*.tsbuildinfo
 bin/
+cover.out
 
 # The frontend stage supplies internal/webui/dist, so the committed
 # placeholder (and any local `make frontend` output) must not shadow it.

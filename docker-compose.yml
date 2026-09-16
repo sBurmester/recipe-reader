@@ -16,7 +16,14 @@ services:
       retries: 5
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        # Stamped into the binary so `docker compose exec app recipe-reader
+        # --version` and /api/healthz report what is running. Compose has no
+        # git either, so pass it in: VERSION=$(git describe --tags --always
+        # --dirty) docker compose up --build.
+        VERSION: ${VERSION:-dev}
     depends_on:
       db:
         condition: service_healthy

@@ -1,9 +1,29 @@
 // web/src/pages/import.ts
 import { importStatus, triggerImport } from "../api";
 import { clear, el } from "../dom";
-import type { ImportStatus } from "../types";
+import type { ImportErrorCode, ImportStatus } from "../types";
 
 const POLL_INTERVAL_MS = 2000;
+
+// The status endpoint reports a failure as a stable code plus a fixed English
+// sentence; it deliberately never sends the underlying error text, which can
+// carry endpoint paths and connection-string fragments. Translating the code
+// here is what keeps the page German without the server composing prose for it.
+const IMPORT_ERROR_TEXT: Record<ImportErrorCode, string> = {
+  rate_limited: "Instagram drosselt den Zugriff. Der Import wird nach der Wartezeit fortgesetzt.",
+  instagram_auth: "Instagram hat die Anmeldung abgelehnt. Der nächste Import versucht es erneut.",
+  instagram_schema_drift: "Instagram hat unerwartet geantwortet — der Importer muss angepasst werden.",
+  fetch_failed: "Die gespeicherten Beiträge konnten nicht abgerufen werden.",
+  cancelled: "Der Import wurde vorzeitig beendet.",
+  import_failed: "Der letzte Import ist fehlgeschlagen.",
+};
+
+// An unknown code means the server has learned a failure this build has no
+// wording for. Its own sentence is the better fallback than the bare code.
+function importErrorText(s: ImportStatus): string | undefined {
+  if (!s.error) return undefined;
+  return IMPORT_ERROR_TEXT[s.error as ImportErrorCode] ?? s.error_message ?? s.error;
+}
 
 /** Go formats a zero time.Time as year 1, which is not a real "last run". */
 const NEVER_RUN_PREFIX = "0001-01-01";
@@ -58,6 +78,7 @@ export function renderImportPage(container: HTMLElement): void {
 
   function renderStatus(s: ImportStatus): void {
     clear(statusEl);
+    const errorText = importErrorText(s);
     statusEl.append(
       el("p", {}, [stateLine(s)]),
       el("p", {}, [`Letzter Lauf: ${formatLastRun(s.last_run)}`]),
@@ -73,7 +94,7 @@ export function renderImportPage(container: HTMLElement): void {
       ...(s.degraded
         ? [el("p", { class: "error" }, [`${s.degraded} Rezept(e) nur regelbasiert extrahiert — LLM nicht erreichbar.`])]
         : []),
-      ...(s.error ? [el("p", { class: "error" }, [`Fehler: ${s.error}`])] : []),
+      ...(errorText ? [el("p", { class: "error" }, [`Fehler: ${errorText}`])] : []),
     );
     if (!s.running) triggerBtn.removeAttribute("disabled");
   }

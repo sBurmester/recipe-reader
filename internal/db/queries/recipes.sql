@@ -1,6 +1,13 @@
 -- name: CreateRecipe :one
+-- ON CONFLICT DO NOTHING makes the unique index on source the dedupe itself:
+-- the insert either stores the recipe or returns no row, with no window in
+-- between for a second importer to slip through. The check-then-act this
+-- replaced (GetBySource, then Create) was one query more expensive and could
+-- only ever narrow that window, not close it. A conflict surfaces as
+-- pgx.ErrNoRows, which the repository translates to ErrDuplicateSource.
 INSERT INTO recipes (name, instructions, image_url, source, status)
 VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (source) DO NOTHING
 RETURNING *;
 
 -- name: GetRecipe :one
@@ -21,7 +28,8 @@ DELETE FROM recipes WHERE id = $1;
 -- name: SearchRecipes :many
 SELECT DISTINCT r.* FROM recipes r
 LEFT JOIN recipe_categories rc ON rc.recipe_id = r.id
-WHERE (sqlc.narg(text)::text IS NULL OR lower(r.name) LIKE '%' || lower(sqlc.narg(text)::text) || '%')
+WHERE (sqlc.narg(text)::text IS NULL OR lower(r.name) LIKE '%' || replace(replace(replace(
+      lower(sqlc.narg(text)::text), '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
   AND (sqlc.narg(category_id)::bigint IS NULL OR rc.category_id = sqlc.narg(category_id)::bigint)
   AND (sqlc.narg(status)::text IS NULL OR r.status = sqlc.narg(status)::text)
 ORDER BY r.name, r.id
@@ -30,7 +38,8 @@ LIMIT $1 OFFSET $2;
 -- name: CountRecipes :one
 SELECT COUNT(DISTINCT r.id) FROM recipes r
 LEFT JOIN recipe_categories rc ON rc.recipe_id = r.id
-WHERE (sqlc.narg(text)::text IS NULL OR lower(r.name) LIKE '%' || lower(sqlc.narg(text)::text) || '%')
+WHERE (sqlc.narg(text)::text IS NULL OR lower(r.name) LIKE '%' || replace(replace(replace(
+      lower(sqlc.narg(text)::text), '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
   AND (sqlc.narg(category_id)::bigint IS NULL OR rc.category_id = sqlc.narg(category_id)::bigint)
   AND (sqlc.narg(status)::text IS NULL OR r.status = sqlc.narg(status)::text);
 

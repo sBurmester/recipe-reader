@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # Smoke-tests a built recipe-reader image: starts it against a throwaway
 # Postgres, waits for /api/healthz, checks that a database-backed route answers
-# (so the migrations ran), and checks that / serves the real frontend rather
-# than the placeholder page a build without the frontend embeds.
+# (so the migrations ran), checks that / serves the real frontend rather than
+# the placeholder page a build without the frontend embeds, and checks that the
+# binary reports a version.
 #
 # CI runs this after `docker build`; it runs the same way locally.
 #
-# Usage: scripts/smoke-test-image.sh [image]    (default: recipe-reader:ci)
+# Usage: scripts/smoke-test-image.sh [image] [expected-version]
+#   image             default: recipe-reader:ci
+#   expected-version  the string --build-arg VERSION was given; when omitted,
+#                     any version other than the unstamped "dev" passes
 set -euo pipefail
 
 image=${1:-recipe-reader:ci}
+want_version=${2:-}
 repo=$(cd "$(dirname "$0")/.." && pwd)
 placeholder="$repo/internal/webui/placeholder/index.html"
 
@@ -79,4 +84,22 @@ body=$(curl -fsS "$base/")
 [ "$body" != "$(cat "$placeholder")" ] || fail "the image serves the placeholder frontend, not a real build"
 grep -qi '<script' <<<"$body" || fail "GET / does not look like the built application"
 
-echo "smoke test passed: $image"
+# The version is stamped by -ldflags at build time, which no unit test can
+# reach: a broken ARG, build-arg or ldflags leaves everything else here passing
+# and the deployed container unable to say what it is. Checked both ways it is
+# surfaced.
+cli_version=$(docker run --rm --entrypoint /usr/local/bin/recipe-reader "$image" --version | tr -d '\r\n')
+http_version=$(curl -fsS "$base/api/healthz" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+
+[ -n "$cli_version" ] || fail "--version printed nothing"
+[ "$cli_version" = "$http_version" ] ||
+	fail "--version says '$cli_version' but /api/healthz says '$http_version'"
+if [ -n "$want_version" ]; then
+	[ "$cli_version" = "$want_version" ] ||
+		fail "version is '$cli_version', expected '$want_version' from --build-arg VERSION"
+else
+	[ "$cli_version" != dev ] ||
+		fail "version is 'dev' — the image was built without --build-arg VERSION"
+fi
+
+echo "smoke test passed: $image ($cli_version)"

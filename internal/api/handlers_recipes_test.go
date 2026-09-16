@@ -304,8 +304,11 @@ func TestRecipeHandlers_FailedCreateLeavesNoOrphanLookups(t *testing.T) {
 		Categories:  []CategoryDTO{{Name: "Orphan-Kategorie"}},
 		Ingredients: []IngredientDTO{{Name: "Orphan-Zutat", Amount: 1, Unit: "Orphan-Einheit"}},
 	})
-	if code != http.StatusInternalServerError {
-		t.Fatalf("duplicate-source create status = %d, want 500", code)
+	// 409, not 500: the duplicate is the unique index on source firing inside
+	// CreateRecipe's ON CONFLICT clause, which the repository reports as
+	// ErrDuplicateSource rather than as an opaque write failure.
+	if code != http.StatusConflict {
+		t.Fatalf("duplicate-source create status = %d, want 409", code)
 	}
 
 	ctx := t.Context()

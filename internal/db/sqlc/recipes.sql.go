@@ -63,7 +63,8 @@ func (q *Queries) AddRecipeIngredient(ctx context.Context, arg AddRecipeIngredie
 const countRecipes = `-- name: CountRecipes :one
 SELECT COUNT(DISTINCT r.id) FROM recipes r
 LEFT JOIN recipe_categories rc ON rc.recipe_id = r.id
-WHERE ($1::text IS NULL OR lower(r.name) LIKE '%' || lower($1::text) || '%')
+WHERE ($1::text IS NULL OR lower(r.name) LIKE '%' || replace(replace(replace(
+      lower($1::text), '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
   AND ($2::bigint IS NULL OR rc.category_id = $2::bigint)
   AND ($3::text IS NULL OR r.status = $3::text)
 `
@@ -84,6 +85,7 @@ func (q *Queries) CountRecipes(ctx context.Context, arg CountRecipesParams) (int
 const createRecipe = `-- name: CreateRecipe :one
 INSERT INTO recipes (name, instructions, image_url, source, status)
 VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (source) DO NOTHING
 RETURNING id, name, instructions, image_url, source, status, created_at, updated_at
 `
 
@@ -95,6 +97,12 @@ type CreateRecipeParams struct {
 	Status       string
 }
 
+// ON CONFLICT DO NOTHING makes the unique index on source the dedupe itself:
+// the insert either stores the recipe or returns no row, with no window in
+// between for a second importer to slip through. The check-then-act this
+// replaced (GetBySource, then Create) was one query more expensive and could
+// only ever narrow that window, not close it. A conflict surfaces as
+// pgx.ErrNoRows, which the repository translates to ErrDuplicateSource.
 func (q *Queries) CreateRecipe(ctx context.Context, arg CreateRecipeParams) (Recipe, error) {
 	row := q.db.QueryRow(ctx, createRecipe,
 		arg.Name,
@@ -260,7 +268,8 @@ func (q *Queries) ListRecipeIngredients(ctx context.Context, recipeID int64) ([]
 const searchRecipes = `-- name: SearchRecipes :many
 SELECT DISTINCT r.id, r.name, r.instructions, r.image_url, r.source, r.status, r.created_at, r.updated_at FROM recipes r
 LEFT JOIN recipe_categories rc ON rc.recipe_id = r.id
-WHERE ($3::text IS NULL OR lower(r.name) LIKE '%' || lower($3::text) || '%')
+WHERE ($3::text IS NULL OR lower(r.name) LIKE '%' || replace(replace(replace(
+      lower($3::text), '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
   AND ($4::bigint IS NULL OR rc.category_id = $4::bigint)
   AND ($5::text IS NULL OR r.status = $5::text)
 ORDER BY r.name, r.id

@@ -21,6 +21,12 @@ import (
 // ErrNotFound is returned by single-row lookups when no row matches.
 var ErrNotFound = errors.New("repository: not found")
 
+// ErrDuplicateSource is returned by Create when a recipe with the same source
+// already exists. It is a normal outcome rather than a failure: source is the
+// import's identity for a post, so a second insert of one is a duplicate, not
+// an error — see CreateRecipe's ON CONFLICT clause.
+var ErrDuplicateSource = errors.New("repository: a recipe with this source already exists")
+
 // SearchQuery is the filter and pagination input for RecipeRepository.Search.
 type SearchQuery struct {
 	Text       string
@@ -33,6 +39,7 @@ type SearchQuery struct {
 // RecipeRepository persists and queries recipes together with their
 // ingredient and category associations.
 type RecipeRepository interface {
+	// Create returns ErrDuplicateSource when r.Source is already stored.
 	Create(ctx context.Context, r *domain.Recipe) error
 	GetByID(ctx context.Context, id int64) (*domain.Recipe, error)
 	GetBySource(ctx context.Context, source string) (*domain.Recipe, error)
@@ -55,6 +62,9 @@ func NewRecipeRepository(pool *pgxpool.Pool) RecipeRepository {
 // transaction, resolving any association given by name rather than id (see
 // resolveLookups). recipe is updated with the stored ids and timestamps only
 // once the transaction has committed; after a failure it is left as passed.
+//
+// It returns ErrDuplicateSource when a recipe with the same source is already
+// stored. Callers that import are expected to treat that as a skip.
 func (r *pgRecipeRepository) Create(ctx context.Context, recipe *domain.Recipe) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -68,6 +78,13 @@ func (r *pgRecipeRepository) Create(ctx context.Context, recipe *domain.Recipe) 
 		Name: staged.Name, Instructions: staged.Instructions,
 		ImageUrl: staged.ImageURL, Source: staged.Source, Status: string(staged.Status),
 	})
+	// ON CONFLICT (source) DO NOTHING returns no row on a duplicate, which pgx
+	// reports as ErrNoRows. That is the dedupe firing, not a failure, so it
+	// gets its own sentinel — and it fires inside the transaction, before any
+	// lookup row has been written, so the rollback leaves nothing behind.
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrDuplicateSource
+	}
 	if err != nil {
 		return fmt.Errorf("repository: create recipe: %w", err)
 	}

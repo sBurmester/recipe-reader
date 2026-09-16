@@ -11,7 +11,7 @@ import (
 // since kong names an untagged field's flag after the field.
 func TestLoad_RejectsCredentialFlags(t *testing.T) {
 	for _, flag := range []string{"--api-token", "--instagram-password", "--anthropic-api-key", "--llm-api-key"} {
-		if _, err := load([]string{flag, "secret"}); err == nil {
+		if _, err := loadArgs([]string{flag, "secret"}); err == nil {
 			t.Errorf("load(%s secret) error = nil, want an unknown-flag refusal", flag)
 		}
 	}
@@ -24,7 +24,7 @@ func TestLoad_ReadsCredentialsFromTheEnvironment(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "sk-ant")
 	t.Setenv("LLM_API_KEY", "sk-llm")
 
-	cfg, err := load(nil)
+	cfg, err := loadArgs(nil)
 	if err != nil {
 		t.Fatalf("load() error = %v", err)
 	}

@@ -105,6 +105,20 @@ var recordRecipeProperties = map[string]any{
 // which is the case the field exists for.
 var recordRecipeRequired = []string{"name", "instructions", "ingredients", "categories", "confidence"}
 
+// extractionTemperature is sent by both transports. Left unset, both APIs
+// default to 1.0, which is the wrong end of the range for this job: the tool
+// schema already fixes the output shape, and what is wanted inside it is
+// faithful transcription, not variety. At 1.0 the same caption yields different
+// ingredient splits from one run to the next, so a re-import disagrees with
+// itself and any eval built on the extractor measures the sampler as much as
+// the model.
+//
+// Set in both transports rather than one. Setting it in only one would make
+// extraction reproducible on Anthropic and not on an OpenAI-compatible
+// endpoint — exactly the divergence the shared record_recipe schema exists to
+// prevent.
+const extractionTemperature = 0
+
 // --- Anthropic transport ---------------------------------------------------
 
 // defaultLLMModel is used when LLMConfig.Model is empty and the provider is
@@ -144,10 +158,11 @@ func newAnthropicClient(cfg LLMConfig) *anthropicClient {
 
 func (c *anthropicClient) recordRecipe(ctx context.Context, caption string) ([]byte, error) {
 	resp, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.Model(c.model),
-		MaxTokens: 2048,
-		System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
-		Tools:     []anthropic.ToolUnionParam{{OfTool: &recordRecipeTool}},
+		Model:       anthropic.Model(c.model),
+		MaxTokens:   2048,
+		Temperature: anthropic.Float(extractionTemperature),
+		System:      []anthropic.TextBlockParam{{Text: systemPrompt}},
+		Tools:       []anthropic.ToolUnionParam{{OfTool: &recordRecipeTool}},
 		ToolChoice: anthropic.ToolChoiceUnionParam{
 			OfTool: &anthropic.ToolChoiceToolParam{Name: "record_recipe"},
 		},
@@ -198,8 +213,9 @@ var recordRecipeParameters = openai.FunctionParameters{
 
 func (c *openAIClient) recordRecipe(ctx context.Context, caption string) ([]byte, error) {
 	resp, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Model:     c.model,
-		MaxTokens: openai.Int(2048),
+		Model:       c.model,
+		MaxTokens:   openai.Int(2048),
+		Temperature: openai.Float(extractionTemperature),
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.SystemMessage(systemPrompt),
 			openai.UserMessage(caption),

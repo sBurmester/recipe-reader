@@ -76,7 +76,7 @@ type Pipeline struct {
 func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 	posts, fetchErr := p.Fetcher.FetchNewPosts(ctx)
 	if fetchErr != nil && len(posts) == 0 {
-		return ImportResult{}, fmt.Errorf("pipeline: fetch posts: %w", fetchErr)
+		return ImportResult{}, fmt.Errorf("%w: %w", ErrFetch, fetchErr)
 	}
 
 	var result ImportResult
@@ -89,18 +89,6 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 			return result, fmt.Errorf("pipeline: %w", err)
 		}
 		result.Seen++
-
-		if _, err := p.Recipes.GetBySource(ctx, post.Source); err == nil {
-			result.Skipped++
-			continue
-		} else if !errors.Is(err, repository.ErrNotFound) {
-			// Every Failed branch below names its stage. The tally alone says
-			// a post failed; it never said where, and these three failures need
-			// three different responses from whoever reads the log.
-			result.Failed++
-			slog.Warn("import: post failed", "stage", "dedupe-lookup", "source", post.Source, "error", err)
-			continue
-		}
 
 		extracted, err := p.Extractor.Extract(ctx, post.Caption)
 		if errors.Is(err, extraction.ErrNoRecipe) {
@@ -127,7 +115,26 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 		// Create resolves the category, ingredient and unit names inside its
 		// own transaction, so a lookup failure is a store failure too — and
 		// either way the post leaves no lookup rows behind.
-		if err := p.Recipes.Create(ctx, p.toRecipe(post, extracted)); err != nil {
+		//
+		// The insert is also the dedupe. There used to be a GetBySource here,
+		// before the extraction, and the gap between that read and this write
+		// was a window in which the same post could be stored twice. Now the
+		// unique index on source decides, and a duplicate comes back as
+		// ErrDuplicateSource. The Failed branches below each name their stage:
+		// the tally alone says a post failed, never where.
+		//
+		// What that trades: a duplicate is now discovered after extraction
+		// rather than before it, so it can cost one LLM call. It stays a
+		// non-issue because the fetcher already pages past imported posts
+		// (FetchOptions.Known), so a duplicate only reaches here when that
+		// advisory check could not answer — and the cost of being wrong is one
+		// wasted call, against a read on every post of every run.
+		err = p.Recipes.Create(ctx, p.toRecipe(post, extracted))
+		if errors.Is(err, repository.ErrDuplicateSource) {
+			result.Skipped++
+			continue
+		}
+		if err != nil {
 			result.Failed++
 			slog.Warn("import: post failed", "stage", "store", "source", post.Source, "error", err)
 			continue
@@ -139,7 +146,7 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 	}
 
 	if fetchErr != nil {
-		return result, fmt.Errorf("pipeline: fetch posts: %w", fetchErr)
+		return result, fmt.Errorf("%w: %w", ErrFetch, fetchErr)
 	}
 	return result, nil
 }

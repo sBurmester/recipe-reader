@@ -60,7 +60,31 @@ jobs:
       # ubuntu-latest runners have Docker natively, so no services: block is
       # needed.
       - name: go test
-        run: go test ./... -race
+        # -coverprofile, and nothing that gates on the result. A threshold
+        # produces tests written to move a number; the per-package percentages
+        # go test prints, plus the total below and the uploaded profile, are the
+        # visibility D6 asked for without that incentive.
+        run: go test ./... -race -coverprofile=cover.out -covermode=atomic
+
+      - name: Coverage summary
+        run: |
+          go tool cover -func=cover.out | tail -n 1
+          {
+            echo '### Coverage'
+            echo '```'
+            go tool cover -func=cover.out | tail -n 1
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Kept even when the tests fail: a coverage profile is most useful on the
+      # run that went wrong.
+      - name: Upload coverage profile
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: coverage
+          path: cover.out
+          if-no-files-found: warn
 
   frontend:
     runs-on: ubuntu-latest
@@ -87,8 +111,17 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          # git describe needs tags and history; the default shallow checkout
+          # has neither, and the image would stamp itself with a bare SHA or
+          # "dev".
+          fetch-depth: 0
       - name: Build image
-        run: docker build -t recipe-reader:ci .
+        run: |
+          echo "VERSION=$(git describe --tags --always --dirty)" >> "$GITHUB_ENV"
+          docker build \
+            --build-arg VERSION="$(git describe --tags --always --dirty)" \
+            -t recipe-reader:ci .
 
       # Building catches Dockerfile drift; running catches what comes after it.
       # The script starts the image against a throwaway Postgres and checks
@@ -97,4 +130,7 @@ jobs:
       # placeholder a build without it embeds - the failure a green build here
       # used to let through.
       - name: Smoke-test the image
-        run: scripts/smoke-test-image.sh recipe-reader:ci
+        # The version is passed through so the script asserts the exact stamp
+        # this build was given, not merely that something other than "dev"
+        # came back.
+        run: scripts/smoke-test-image.sh recipe-reader:ci "$VERSION"

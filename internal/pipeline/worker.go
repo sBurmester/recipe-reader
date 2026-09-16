@@ -56,7 +56,7 @@ type Status struct {
 }
 
 // NewWorker returns a Worker that runs p every interval once Start is called.
-// interval must be positive — Start's ticker panics otherwise.
+// interval must be positive; Start refuses to schedule anything otherwise.
 func NewWorker(p *Pipeline, interval time.Duration) *Worker {
 	return &Worker{pipeline: p, interval: interval}
 }
@@ -69,6 +69,17 @@ func (w *Worker) Start(ctx context.Context) {
 	w.mu.Lock()
 	w.base = ctx
 	w.mu.Unlock()
+
+	// time.NewTicker panics for a non-positive duration, on this goroutine —
+	// so a bad interval used to abort the process with a stack trace at
+	// startup. config.validate rejects one now, which is where an operator's
+	// typo belongs; this is the second line of defence for the callers that do
+	// not come through config, and it refuses loudly rather than crashing.
+	// Trigger still works, so an on-demand import is unaffected.
+	if w.interval <= 0 {
+		slog.Error("import: schedule not started, interval must be positive", "interval", w.interval)
+		return
+	}
 
 	ticker := time.NewTicker(w.interval)
 	w.runs.Add(1)

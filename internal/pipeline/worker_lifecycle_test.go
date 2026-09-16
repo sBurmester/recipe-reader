@@ -60,3 +60,26 @@ func TestWorker_WaitWithNothingRunningReturnsAtOnce(t *testing.T) {
 		t.Errorf("Wait() = %v, want nil with no runs started", err)
 	}
 }
+
+// time.NewTicker panics for a non-positive duration, and it runs on the
+// goroutine that calls Start — main's. config.validate rejects one now, which
+// is where an operator's typo belongs, but NewWorker is exported and takes any
+// duration, so Start refuses rather than taking the process down with it.
+// Trigger still works: an on-demand import does not depend on the schedule.
+func TestWorker_StartRefusesANonPositiveInterval(t *testing.T) {
+	for _, interval := range []time.Duration{0, -time.Second} {
+		w := NewWorker(&Pipeline{Fetcher: &fakeFetcher{}, Extractor: &fakeExtractor{}}, interval)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		w.Start(ctx) // must not panic
+		cancel()
+
+		// Nothing was scheduled, so Wait returns at once rather than blocking
+		// on a loop that never started.
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)
+		if err := w.Wait(waitCtx); err != nil {
+			t.Errorf("Wait() after Start(%v) error = %v, want no scheduled goroutine to wait for", interval, err)
+		}
+		waitCancel()
+	}
+}
