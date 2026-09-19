@@ -1,9 +1,9 @@
 // web/src/main.ts
 //
-// Frontend composition root, mirroring cmd/recipe-reader/main.go on the
-// backend: build the chrome once, then dispatch the hash to a page renderer.
-// A hash router needs no server-side rewrite rules, which matters because the
-// Go binary serves the built assets from a single embedded directory.
+// Frontend composition root, mirroring internal/server on the backend: build
+// the chrome once, then dispatch the hash to a page renderer. A hash router
+// needs no server-side rewrite rules, which matters because the Go binary
+// serves the built assets from a single embedded directory.
 
 import { el } from "./dom";
 import { renderDetailPage } from "./pages/detail";
