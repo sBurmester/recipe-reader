@@ -75,10 +75,10 @@ for _ in $(seq 1 60); do
 done
 $healthy || fail "/api/healthz did not answer ok within 60s"
 
-# The image's own HEALTHCHECK — the binary probing itself with --health-check —
-# is reached by no unit test. A renamed flag, a wrong binary path or a probe
-# that cannot dial the listen address would leave every check above passing
-# while Docker reports the container unhealthy forever.
+# The image's own HEALTHCHECK — the binary probing itself with its healthcheck
+# command — is reached by no unit test. A renamed command, a wrong binary path
+# or a probe that cannot dial the listen address would leave every check above
+# passing while Docker reports the container unhealthy forever.
 health=
 for _ in $(seq 1 45); do
 	health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$app")

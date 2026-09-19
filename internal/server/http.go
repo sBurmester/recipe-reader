@@ -42,7 +42,7 @@ const (
 // until someone opened the page.
 func newHTTPServer(cfg config.Config, deps api.Deps) (*http.Server, error) {
 	// An unauthenticated deployment is reachable only from loopback —
-	// config.Load refuses any other bind without a token — but it is still
+	// config validation refuses any other bind without a token — but it is still
 	// worth naming at boot, because "it works without one" is how it stays
 	// that way when the address later changes.
 	if cfg.APIToken == "" {

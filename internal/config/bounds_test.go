@@ -14,11 +14,11 @@ func TestLoad_RejectsNonPositiveImportInterval(t *testing.T) {
 		t.Setenv("IMPORT_INTERVAL", interval)
 		_, err := loadArgs(nil)
 		if err == nil {
-			t.Errorf("load() with IMPORT_INTERVAL=%s error = nil, want a refusal", interval)
+			t.Errorf("loadArgs() with IMPORT_INTERVAL=%s error = nil, want a refusal", interval)
 			continue
 		}
 		if !strings.Contains(err.Error(), "IMPORT_INTERVAL") {
-			t.Errorf("load() with IMPORT_INTERVAL=%s error = %v, want it to name the setting", interval, err)
+			t.Errorf("loadArgs() with IMPORT_INTERVAL=%s error = %v, want it to name the setting", interval, err)
 		}
 	}
 }
@@ -27,7 +27,7 @@ func TestLoad_AcceptsPositiveImportInterval(t *testing.T) {
 	t.Setenv("IMPORT_INTERVAL", "30m")
 	cfg, err := loadArgs(nil)
 	if err != nil {
-		t.Fatalf("load() error = %v", err)
+		t.Fatalf("loadArgs() error = %v", err)
 	}
 	if cfg.ImportInterval.Minutes() != 30 {
 		t.Errorf("ImportInterval = %v, want 30m", cfg.ImportInterval)
@@ -53,10 +53,10 @@ func TestLoad_RejectsThresholdsOutsideUnitRange(t *testing.T) {
 			t.Setenv(tc.env, tc.value)
 			err := func() error { _, err := loadArgs(nil); return err }()
 			if err == nil {
-				t.Fatalf("load() error = nil, want a refusal")
+				t.Fatalf("loadArgs() error = nil, want a refusal")
 			}
 			if !strings.Contains(err.Error(), tc.env) {
-				t.Errorf("load() error = %v, want it to name %s", err, tc.env)
+				t.Errorf("loadArgs() error = %v, want it to name %s", err, tc.env)
 			}
 		})
 	}
@@ -70,7 +70,7 @@ func TestLoad_AcceptsThresholdEndpoints(t *testing.T) {
 	t.Setenv("EXTRACTION_PUBLISH_THRESHOLD", "1")
 	cfg, err := loadArgs(nil)
 	if err != nil {
-		t.Fatalf("load() error = %v", err)
+		t.Fatalf("loadArgs() error = %v", err)
 	}
 	if cfg.ExtractionThreshold != 0 || cfg.ExtractionPublishThreshold != 1 {
 		t.Errorf("thresholds = %v / %v, want 0 / 1",

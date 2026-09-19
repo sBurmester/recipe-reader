@@ -22,7 +22,7 @@ const healthCheckTimeout = 3 * time.Second
 // Probe asks the server listening on listenAddr whether it is up, and
 // returns nil only when GET /api/healthz answers 200 with {"status":"ok"}.
 //
-// It is what `recipe-reader --health-check` runs, so the image can carry a
+// It is what `recipe-reader healthcheck` runs, so the image can carry a
 // HEALTHCHECK without a curl or wget in it. The body is checked as well as the
 // status so that something else answering on the port does not pass for this
 // server.

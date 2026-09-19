@@ -9,7 +9,7 @@ func TestLoad_ImportBounds(t *testing.T) {
 
 	cfg, err := loadArgs(nil)
 	if err != nil {
-		t.Fatalf("load() error = %v", err)
+		t.Fatalf("loadArgs() error = %v", err)
 	}
 	if cfg.ImportMaxItems != 50 || cfg.ImportMaxPages != 100 {
 		t.Errorf("defaults = %d items / %d pages, want 50 / 100", cfg.ImportMaxItems, cfg.ImportMaxPages)
@@ -18,7 +18,7 @@ func TestLoad_ImportBounds(t *testing.T) {
 	t.Setenv("IMPORT_MAX_ITEMS", "500")
 	cfg, err = loadArgs([]string{"--import-max-pages", "400"})
 	if err != nil {
-		t.Fatalf("load() error = %v", err)
+		t.Fatalf("loadArgs() error = %v", err)
 	}
 	if cfg.ImportMaxItems != 500 || cfg.ImportMaxPages != 400 {
 		t.Errorf("configured = %d items / %d pages, want 500 / 400", cfg.ImportMaxItems, cfg.ImportMaxPages)
@@ -34,7 +34,7 @@ func TestLoad_RejectsImportBoundsBelowOne(t *testing.T) {
 		{"--import-max-pages", "0"},
 	} {
 		if _, err := loadArgs(args); err == nil {
-			t.Errorf("load(%v) error = nil, want a refusal", args)
+			t.Errorf("loadArgs(%v) error = nil, want a refusal", args)
 		}
 	}
 }

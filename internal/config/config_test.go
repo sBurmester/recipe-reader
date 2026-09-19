@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/alecthomas/kong"
 )
 
 // clearEnv unsets the named environment variables for the duration of the test,
@@ -20,16 +22,19 @@ func clearEnv(t *testing.T, keys ...string) {
 	}
 }
 
-// testVersion is what loadArgs stamps as the build version. Only the
-// --version tests care what it is; every other test simply needs load's second
-// argument filled in.
-const testVersion = "v0.0.0-test"
-
-// loadArgs parses args the way Load parses the real command line, with a fixed
-// version stamp. It keeps the version out of the tests that are about
-// something else.
+// loadArgs parses args into a Config the way the serve command does: kong
+// applies defaults and environment, runs BeforeApply, applies the flags, then
+// runs Validate.
 func loadArgs(args []string) (Config, error) {
-	return load(args, testVersion)
+	var cfg Config
+	parser, err := kong.New(&cfg, kong.Name("recipe-reader"))
+	if err != nil {
+		return Config{}, err
+	}
+	if _, err := parser.Parse(args); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 func TestLoad_Defaults(t *testing.T) {
@@ -37,7 +42,7 @@ func TestLoad_Defaults(t *testing.T) {
 
 	cfg, err := loadArgs(nil)
 	if err != nil {
-		t.Fatalf("load() error = %v", err)
+		t.Fatalf("loadArgs() error = %v", err)
 	}
 	// Loopback, not ":8080": the default deployment must not be reachable
 	// from the network while its writes are unauthenticated.
@@ -67,14 +72,14 @@ func TestLoad_Defaults(t *testing.T) {
 func TestLoad_InvalidThreshold(t *testing.T) {
 	t.Setenv("EXTRACTION_CONFIDENCE_THRESHOLD", "not-a-number")
 	if _, err := loadArgs(nil); err == nil {
-		t.Fatal("load() error = nil, want error for invalid threshold")
+		t.Fatal("loadArgs() error = nil, want error for invalid threshold")
 	}
 }
 
 func TestLoad_InvalidImportInterval(t *testing.T) {
 	t.Setenv("IMPORT_INTERVAL", "not-a-duration")
 	if _, err := loadArgs(nil); err == nil {
-		t.Fatal("load() error = nil, want error for invalid import interval")
+		t.Fatal("loadArgs() error = nil, want error for invalid import interval")
 	}
 }
 
@@ -85,7 +90,7 @@ func TestLoad_EnvOverridesDefault(t *testing.T) {
 
 	cfg, err := loadArgs(nil)
 	if err != nil {
-		t.Fatalf("load() error = %v", err)
+		t.Fatalf("loadArgs() error = %v", err)
 	}
 	if cfg.HTTPAddr != "127.0.0.1:9999" {
 		t.Errorf("HTTPAddr = %q, want 127.0.0.1:9999", cfg.HTTPAddr)
@@ -107,7 +112,7 @@ func TestLoad_FlagsOverrideEnv(t *testing.T) {
 		"--import-interval", "30m",
 	})
 	if err != nil {
-		t.Fatalf("load() error = %v", err)
+		t.Fatalf("loadArgs() error = %v", err)
 	}
 	if cfg.HTTPAddr != "127.0.0.1:7777" {
 		t.Errorf("HTTPAddr = %q, want 127.0.0.1:7777 (flag should beat env)", cfg.HTTPAddr)
@@ -122,19 +127,19 @@ func TestLoad_FlagsOverrideEnv(t *testing.T) {
 
 func TestLoad_UnknownFlag(t *testing.T) {
 	if _, err := loadArgs([]string{"--does-not-exist"}); err == nil {
-		t.Fatal("load() error = nil, want error for unknown flag")
+		t.Fatal("loadArgs() error = nil, want error for unknown flag")
 	}
 }
 
 // A network-reachable bind with no token in front of the mutating routes is
 // the combination that makes S1 exploitable from anywhere that can route to
-// the port, so Load refuses to produce it.
+// the port, so Validate refuses it.
 func TestLoad_RejectsNonLoopbackBindWithoutToken(t *testing.T) {
 	clearEnv(t, "API_TOKEN")
 
 	for _, addr := range []string{":8080", "0.0.0.0:8080", "192.168.1.10:8080"} {
 		if _, err := loadArgs([]string{"--http-addr", addr}); err == nil {
-			t.Errorf("load(--http-addr %s) error = nil, want a refusal without API_TOKEN", addr)
+			t.Errorf("loadArgs(--http-addr %s) error = nil, want a refusal without API_TOKEN", addr)
 		}
 	}
 }
@@ -144,7 +149,7 @@ func TestLoad_AllowsNonLoopbackBindWithToken(t *testing.T) {
 
 	cfg, err := loadArgs([]string{"--http-addr", ":8080"})
 	if err != nil {
-		t.Fatalf("load() error = %v, want success once a token is configured", err)
+		t.Fatalf("loadArgs() error = %v, want success once a token is configured", err)
 	}
 	if cfg.APIToken != "s3cret-token" {
 		t.Errorf("APIToken = %q", cfg.APIToken)
@@ -159,7 +164,7 @@ func TestLoad_AllowsLoopbackBindWithoutToken(t *testing.T) {
 
 	for _, addr := range []string{"127.0.0.1:8080", "localhost:8080", "[::1]:8080"} {
 		if _, err := loadArgs([]string{"--http-addr", addr}); err != nil {
-			t.Errorf("load(--http-addr %s) error = %v, want success", addr, err)
+			t.Errorf("loadArgs(--http-addr %s) error = %v, want success", addr, err)
 		}
 	}
 }
@@ -169,7 +174,7 @@ func TestLoad_CORSOriginsSplitOnComma(t *testing.T) {
 
 	cfg, err := loadArgs(nil)
 	if err != nil {
-		t.Fatalf("load() error = %v", err)
+		t.Fatalf("loadArgs() error = %v", err)
 	}
 	if len(cfg.CORSOrigins) != 2 || cfg.CORSOrigins[1] != "https://recipes.example" {
 		t.Errorf("CORSOrigins = %v, want both origins", cfg.CORSOrigins)
@@ -181,18 +186,18 @@ func TestLoad_CORSOriginsSplitOnComma(t *testing.T) {
 // failing. The enum is what makes a wrong value loud.
 func TestLoad_RejectsUnknownExtractionMode(t *testing.T) {
 	if _, err := loadArgs([]string{"--extraction-mode", "banana"}); err == nil {
-		t.Error("load() error = nil, want a refusal for an unknown extraction mode")
+		t.Error("loadArgs() error = nil, want a refusal for an unknown extraction mode")
 	}
 	for _, mode := range []string{"rule", "llm", "hybrid"} {
 		if _, err := loadArgs([]string{"--extraction-mode", mode}); err != nil {
-			t.Errorf("load(--extraction-mode %s) error = %v", mode, err)
+			t.Errorf("loadArgs(--extraction-mode %s) error = %v", mode, err)
 		}
 	}
 }
 
 func TestLoad_RejectsUnknownLLMProvider(t *testing.T) {
 	if _, err := loadArgs([]string{"--llm-provider", "gemini"}); err == nil {
-		t.Error("load() error = nil, want a refusal for an unsupported provider")
+		t.Error("loadArgs() error = nil, want a refusal for an unsupported provider")
 	}
 }
 
@@ -201,7 +206,7 @@ func TestLoad_PublishThresholdDefaultsAboveTheFallbackThreshold(t *testing.T) {
 
 	cfg, err := loadArgs(nil)
 	if err != nil {
-		t.Fatalf("load() error = %v", err)
+		t.Fatalf("loadArgs() error = %v", err)
 	}
 	// Publishing without review must be the stricter of the two questions;
 	// they were one number, which is what made needs_review unreachable.

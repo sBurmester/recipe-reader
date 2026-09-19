@@ -71,7 +71,7 @@ func (w *Worker) Start(ctx context.Context) {
 
 	// time.NewTicker panics for a non-positive duration, on this goroutine —
 	// so a bad interval used to abort the process with a stack trace at
-	// startup. config.validate rejects one now, which is where an operator's
+	// startup. config.Config.Validate rejects one now, which is where an operator's
 	// typo belongs; this is the second line of defence for the callers that do
 	// not come through config, and it refuses loudly rather than crashing.
 	// Trigger still works, so an on-demand import is unaffected.
@@ -81,9 +81,7 @@ func (w *Worker) Start(ctx context.Context) {
 	}
 
 	ticker := time.NewTicker(w.interval)
-	w.runs.Add(1)
-	go func() {
-		defer w.runs.Done()
+	w.runs.Go(func() {
 		defer ticker.Stop()
 		for {
 			select {
@@ -93,7 +91,7 @@ func (w *Worker) Start(ctx context.Context) {
 				w.RunOnce(ctx)
 			}
 		}
-	}()
+	})
 }
 
 // Trigger starts a run in the background and returns at once. The run belongs
@@ -115,11 +113,9 @@ func (w *Worker) Trigger() {
 		ctx = context.Background()
 	}
 
-	w.runs.Add(1)
-	go func() {
-		defer w.runs.Done()
+	w.runs.Go(func() {
 		w.RunOnce(ctx)
-	}()
+	})
 }
 
 // Wait blocks until every goroutine the worker started has returned, or until
