@@ -282,11 +282,11 @@ Entschieden am 2026-09-19: **ein PR pro Milestone**, wie zuletzt im Repo üblich
 ### Aufgabenliste
 
 - [x] **Plan-PR:** diese Datei über `docs/kong-cli-refactor-plan` nach `main` bringen
-- [ ] **M1: Paket `main` entschlackt**
+- [x] **M1: Paket `main` entschlackt**
   - [x] **Vorbereitung:** Branch, Werkzeug-Versionen und Baseline
   - [x] **Task 1:** Health-Probe nach `internal/healthcheck` (S)
   - [x] **Task 2:** Composition Root nach `internal/server` (M)
-  - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
+  - [x] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
 - [ ] **M2: kong-Kommandobaum**
   - [ ] **Task 3:** kong-Kommandobaum in `internal/cli`; `healthcheck` ersetzt `--health-check` (L)
   - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
