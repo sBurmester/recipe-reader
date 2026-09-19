@@ -164,9 +164,8 @@ cmd/recipe-reader/
   main.go                  # var version; CLI (Baum), description; main() → run(); run: newParser, BindTo/Bind,
                            # Parse (CLI.Validate → rejectMisplacedFlags), kctx.Run() (E13)
   main_test.go, migrate_test.go, testmain_test.go (TestMain → testdb.Main)
-internal/cli/              # nur die Kommandos (E13)
-  cli.go                   # Paket-Doc, BuildVersion
-  serve.go                 # ServeCmd → server.Run
+internal/cli/              # nur die Kommandos (E13), eine Datei pro Kommando
+  serve.go                 # Paket-Doc, BuildVersion, ServeCmd → server.Run
   healthcheck.go           # HealthCheckCmd → healthcheck.Probe
   migrate.go               # MigrateCmd → db.Open
 internal/server/
@@ -1587,6 +1586,8 @@ Die Code-Blöcke von Step 1, 5, 6 und 7 oben zeigen den ursprünglichen Stand. T
 - **F2/F3:** Ein neuer Test prüft, dass `serve` die vier Credentials über den Kommandobaum liest, mit und ohne Kommandonamen. Die beiden Ablehnungstests prüfen jetzt den Grund. Der Healthcheck-Test deckt zusätzlich einen `Reset`-Fehler ab (`IMPORT_INTERVAL=banana`). `TestMain_ExitStatus` prüft auch ein fehlschlagendes Kommando, zeigt die Ausgabe des Kindprozesses und bricht nach 30 s ab.
 - **F5/F7/F13:** Kommentare korrigiert. Der `Version`-Kommentar ist korrigiert, die Begründung aus `version.go` steht wieder am `version`-Kommentar, und der `loadArgs`-Kommentar nennt kongs tatsächliche Reihenfolge. Die Testmeldungen sagen `loadArgs(` statt `load(`.
 - **F12/F14:** Kommentar in `scripts/smoke-test-image.sh` umgebrochen; `web/src/main.ts` verweist auf `internal/server` als Composition Root.
+
+**Nachtrag (Nutzerentscheidung vom 2026-09-19, im offenen PR 2/4):** `BuildVersion` zieht mit dem Paket-Doc nach `internal/cli/serve.go`, `internal/cli/cli.go` entfällt. `ServeCmd.Run` ist der einzige Nutzer, und `internal/cli` hat damit eine Datei pro Kommando. In `main.go` kann der Typ nicht liegen: `ServeCmd.Run` nennt ihn in seiner Signatur, kong bindet über den exakten Typ, und das Paket `main` ist nicht importierbar.
 
 ---
 
