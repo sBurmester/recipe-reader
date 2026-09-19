@@ -203,7 +203,7 @@ internal/db/
 
 ### Milestones
 
-Es gibt vier Milestones. Jeder endet in einem **releasefähigen Stand**: Tests, Lint und Build sind grün, und der Stand könnte so nach `main` gehen. Ein Milestone gilt als erreicht, wenn alle seine Tasks das zweistufige Review bestanden haben (siehe „Ablauf der Umsetzung“) und seine Abnahmekriterien abgehakt sind. Der nächste Milestone beginnt erst danach.
+Es gibt vier Milestones. Jeder endet in einem **releasefähigen Stand**: Tests, Lint und Build sind grün, und der Stand könnte so nach `main` gehen. Ein Milestone gilt als erreicht, wenn alle seine Tasks das zweistufige Review bestanden haben, das Milestone-Review durchgeführt und seine Befunde bewertet und abgearbeitet sind (beides siehe „Ablauf der Umsetzung“) und seine Abnahmekriterien abgehakt sind. Der nächste Milestone beginnt erst danach.
 
 | Milestone | Tasks | Ergebnis | Für Betreiber sichtbar |
 | --- | --- | --- | --- |
@@ -274,23 +274,27 @@ Entschieden am 2026-09-19: **ein PR pro Milestone**, wie zuletzt im Repo üblich
 
 - **Plan zuerst:** Diese Datei kommt über einen eigenen Docs-PR vom Branch `docs/kong-cli-refactor-plan` nach `main`, bevor M1 beginnt. So zweigt jeder Milestone-Branch von einem `main` ab, das den Plan zum Abhaken schon enthält, und kein Milestone-PR trägt den Plan-Commit mit. Wie jeder PR wird er erst nach Freigabe durch den Nutzer geöffnet.
 - **Abzweigen:** Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist (für M1 der Plan-PR). Will der Nutzer vor dem Merge weitermachen, wird der Branch auf den vorigen gestapelt (PR-Base = Branch des Vorgängers) und nach dessen Merge auf `main` rebased.
-- **Inhalt:** Ein PR enthält die Task-Commits seines Milestones und einen letzten Commit `docs: mark M<n> done in the kong CLI plan`, der die Häkchen in dieser Datei setzt.
+- **Inhalt:** Ein PR enthält die Task-Commits seines Milestones, die Korrektur-Commits aus dem Milestone-Review und einen letzten Commit `docs: mark M<n> done in the kong CLI plan`, der die Häkchen in dieser Datei setzt.
 - **Beschreibung:** Die PR-Beschreibung nennt das Ergebnis des Milestones, listet seine abgehakten Abnahmekriterien und verlinkt diesen Plan. Sie endet mit dem `Assisted-by`-Footer und `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - **Breaking Change:** PRs werden in diesem Repo per Squash gemergt; der Body des Squash-Commits ist die PR-Beschreibung, die Messages der einzelnen Commits gehen verloren. Der `BREAKING CHANGE:`-Footer im Commit von Task 3 allein erreicht `main` also nicht. Der PR für **M2** trägt den Breaking Change (`--health-check` → `healthcheck`) deshalb zweimal: als Hinweis am Anfang der Beschreibung und als Conventional-Commits-Footer `BREAKING CHANGE: --health-check is replaced by the healthcheck command; external exec probes must be updated.` im letzten Absatz, direkt vor `Assisted-by`. Das `!` im PR-Titel markiert ihn zusätzlich.
 
 ### Aufgabenliste
 
 - [x] **Plan-PR:** diese Datei über `docs/kong-cli-refactor-plan` nach `main` bringen
-- [x] **M1: Paket `main` entschlackt**
+- [ ] **M1: Paket `main` entschlackt**
   - [x] **Vorbereitung:** Branch, Werkzeug-Versionen und Baseline
   - [x] **Task 1:** Health-Probe nach `internal/healthcheck` (S)
   - [x] **Task 2:** Composition Root nach `internal/server` (M)
+  - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
 - [ ] **M2: kong-Kommandobaum**
   - [ ] **Task 3:** kong-Kommandobaum in `internal/cli`; `healthcheck` ersetzt `--health-check` (L)
+  - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
 - [ ] **M3: Konfiguration gruppiert**
   - [ ] **Task 4:** Settings in Optionsgruppen pro Belang (M)
+  - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
 - [ ] **M4: `migrate` und Abschluss**
   - [ ] **Task 5:** Kommando `migrate` (S)
+  - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
   - [ ] **Abschluss-Verifikation**
 
 Jeder Task endet grün (Tests, Lint, Build) und ist einzeln reviewbar. Die Reihenfolge ist zwingend, weil jeder Task auf den Paketen des vorigen aufbaut.
@@ -307,7 +311,13 @@ Entschieden am 2026-09-19. **Start erst nach Freigabe durch den Nutzer.**
   2. **Code-Qualität:** Korrektheit, Tests und Kommentarstil; außerdem müssen Commit-Gate bzw. Docker-Gate nachweislich grün gelaufen sein (Ausgabe gesehen, nicht nur behauptet).
   Befunde behebt ein Subagent vor dem nächsten Task. Ein Task, der das Review nicht besteht, blockiert den nächsten.
 - **Commit:** genau ein Commit pro Task mit der Message aus dem jeweiligen Commit-Step, erst nach bestandenem Review. Ausnahmen sind reine Versions-Bumps (Vorbereitung, Step 2; Task 3, Step 0): Sie bekommen einen eigenen `build:`-Commit vor dem Task-Commit, damit der Refactoring-Commit keine fremde Änderung mitträgt.
-- **Abhaken:** Nach jedem bestandenen Task hakt die Hauptsession dessen Steps und den Eintrag in der Aufgabenliste in dieser Datei ab. Einen Milestone hakt sie erst ab, wenn alle seine Abnahmekriterien nachgewiesen sind.
+- **Abhaken:** Nach jedem bestandenen Task hakt die Hauptsession dessen Steps und den Eintrag in der Aufgabenliste in dieser Datei ab. Einen Milestone hakt sie erst ab, wenn alle seine Abnahmekriterien nachgewiesen sind und sein Milestone-Review abgeschlossen ist.
+- **Milestone-Review (Pflicht, vom Nutzer am 2026-09-19 ergänzt):** Nach jeder Fertigstellung eines Milestones MUSS ein neuer Subagent ein Review durchführen. Ein weiterer Subagent soll die gefundenen Review-Findings bewerten und abarbeiten.
+  1. **Review:** Ein frischer Subagent auf dem stärksten verfügbaren Modell prüft den gesamten Diff des Milestones (`git merge-base main HEAD`..`HEAD`) gegen die Abnahmekriterien des Milestones, die *Global Constraints* und die Entscheidungen E1–E12. Er schreibt jeden Befund mit Schweregrad (Critical/Important/Minor), `Datei:Zeile` und Begründung in eine Datei. Das Review ist rein lesend.
+  2. **Bewertung und Abarbeitung:** Ein zweiter, frischer Subagent bewertet jeden Befund mit Begründung als *berechtigt*, *unberechtigt*, *gehört in einen späteren Task* oder *widerspricht dem Plan*. Die berechtigten behebt er. Danach lässt er das Commit-Gate (bzw. das Docker-Gate, wenn `Dockerfile` oder `scripts/` betroffen sind) laufen und committet die Korrekturen mit Footer. Befunde, die dem Plan widersprechen, behebt er nicht; die Hauptsession legt sie dem Nutzer zur Entscheidung vor.
+  3. Die Hauptsession prüft die Bewertung und die Korrektur-Commits und legt beides zusammen mit der Milestone-Abnahme vor.
+
+  Bei M4 läuft das Milestone-Review nach Task 5 und vor der Abschluss-Verifikation, damit diese die Korrekturen mit abdeckt.
 - **Milestone-Abnahme:** Ist ein Milestone erreicht, hält die Hauptsession an und legt dem Nutzer Ergebnis und Abnahmekriterien vor. Den PR öffnet sie erst nach dessen Freigabe. Der nächste Milestone beginnt erst nach dem Merge oder auf ausdrücklichen Wunsch gestapelt.
 - **Abweichungen:** Muss ein Subagent vom Plan abweichen (z. B. weil kong sich anders verhält als unter R1 verifiziert), hält er an und meldet es. Die Hauptsession entscheidet dann oder fragt den Nutzer und hält die Abweichung im betroffenen Task fest.
 - **PR:** einer pro Milestone, geöffnet erst nach der Milestone-Abnahme durch den Nutzer; Titel und Branch stehen unter „Branches und PRs“.
