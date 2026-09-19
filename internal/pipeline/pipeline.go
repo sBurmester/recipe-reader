@@ -20,7 +20,7 @@ import (
 	"github.com/sBurmester/recipe-reader/internal/repository"
 )
 
-// PostFetcher supplies the saved posts to consider for import. main.go
+// PostFetcher supplies the saved posts to consider for import. internal/server
 // implements it with a small adapter over *instagram.Client that picks
 // between the account's "All Posts" feed and a named collection.
 type PostFetcher interface {

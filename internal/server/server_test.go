@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"net/http"
@@ -131,16 +131,16 @@ func TestLLMSettings_FallbacksAreProviderScoped(t *testing.T) {
 	}
 }
 
-// newServer is the wiring run() has no seam for: a route registered on the
+// newHTTPServer is the wiring Run reaches only with a database: a route registered on the
 // wrong mux, or the frontend shadowing /api/, would otherwise surface only when
 // somebody opened the page.
 func TestNewServer_RoutesAPIAndFrontendSeparately(t *testing.T) {
 	cfg := baseConfig("rule")
 	cfg.CORSOrigins = []string{"http://localhost:5173"}
 
-	server, err := newServer(cfg, api.Deps{})
+	server, err := newHTTPServer(cfg, api.Deps{})
 	if err != nil {
-		t.Fatalf("newServer() error = %v", err)
+		t.Fatalf("newHTTPServer() error = %v", err)
 	}
 	if server.Addr != cfg.HTTPAddr {
 		t.Errorf("Addr = %q, want %q", server.Addr, cfg.HTTPAddr)
@@ -167,9 +167,9 @@ func TestNewServer_AppliesTheConfiguredToken(t *testing.T) {
 	cfg := baseConfig("rule")
 	cfg.APIToken = "s3cret-token"
 
-	server, err := newServer(cfg, api.Deps{})
+	server, err := newHTTPServer(cfg, api.Deps{})
 	if err != nil {
-		t.Fatalf("newServer() error = %v", err)
+		t.Fatalf("newHTTPServer() error = %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/recipes/1", nil)
@@ -188,9 +188,9 @@ func TestNewServer_AppliesTheConfiguredToken(t *testing.T) {
 // starts counting once the headers are read — must outlast the body read that
 // ReadTimeout allows, or a slow legal upload loses its response.
 func TestNewServer_SetsTimeouts(t *testing.T) {
-	server, err := newServer(baseConfig("rule"), api.Deps{})
+	server, err := newHTTPServer(baseConfig("rule"), api.Deps{})
 	if err != nil {
-		t.Fatalf("newServer() error = %v", err)
+		t.Fatalf("newHTTPServer() error = %v", err)
 	}
 
 	if server.ReadHeaderTimeout <= 0 {

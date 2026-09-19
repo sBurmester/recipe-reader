@@ -1,7 +1,8 @@
-package main
+package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/sBurmester/recipe-reader/internal/config"
@@ -38,4 +39,27 @@ func newFetcher(ctx context.Context, cfg config.Config, client *instagram.Client
 			Known:    alreadyImported(recipes),
 		},
 	}, loginErr
+}
+
+// alreadyImported adapts the recipe repository to instagram.FetchOptions.Known,
+// which is what lets the fetcher page past posts it has already imported and
+// reach the backlog behind them.
+//
+// A lookup failure answers "not known" rather than aborting the fetch: the
+// pipeline re-checks authoritatively before writing, so the cost of being
+// wrong here is one redundant extraction, where the cost of failing the run is
+// the whole import. The error is logged, because a repository that is failing
+// every lookup would otherwise show up only as an import that quietly does
+// more work than it needs to.
+func alreadyImported(recipes repository.RecipeRepository) func(context.Context, string) bool {
+	return func(ctx context.Context, source string) bool {
+		_, err := recipes.GetBySource(ctx, source)
+		if err == nil {
+			return true
+		}
+		if !errors.Is(err, repository.ErrNotFound) {
+			slog.Warn("import: dedupe lookup failed; treating post as new", "source", source, "error", err)
+		}
+		return false
+	}
 }
