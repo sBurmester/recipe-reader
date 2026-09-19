@@ -72,21 +72,21 @@
 ### User Stories & Akzeptanzkriterien
 
 **US1: Betreiber mit bestehendem Deployment.** *Als Betreiber möchte ich nach dem Update nichts an meinem Setup ändern müssen.*
-- [ ] `recipe-reader` ohne Argumente startet den Server (Default-Kommando `serve`).
-- [ ] `recipe-reader --http-addr 127.0.0.1:9090` (Flags ohne Kommando) startet den Server mit diesem Flag.
-- [ ] Alle Env-Variablen aus `.env.example` wirken unverändert; `docker compose up` und `make run` funktionieren ohne Änderung.
-- [ ] `recipe-reader --version` gibt die Version aus und beendet sich mit 0.
+- [x] `recipe-reader` ohne Argumente startet den Server (Default-Kommando `serve`).
+- [x] `recipe-reader --http-addr 127.0.0.1:9090` (Flags ohne Kommando) startet den Server mit diesem Flag.
+- [x] Alle Env-Variablen aus `.env.example` wirken unverändert; `docker compose up` und `make run` funktionieren ohne Änderung.
+- [x] `recipe-reader --version` gibt die Version aus und beendet sich mit 0.
 
 **US2: Container-Healthcheck.** *Als Betreiber möchte ich eine Probe, die nur prüft, ob der Server antwortet.*
-- [ ] `recipe-reader healthcheck` endet mit 0, wenn `/api/healthz` `{"status":"ok"}` liefert, sonst mit 1.
-- [ ] `healthcheck` liest nur `HTTP_ADDR`/`--http-addr` und wird durch keine `serve`-Regel abgelehnt.
-- [ ] Der `HEALTHCHECK` im `Dockerfile` nutzt das Kommando; der Smoke-Test meldet das Image als `healthy`.
-- [ ] `--health-check` wird als unbekanntes Flag abgelehnt (laut, Exit 1), statt stillschweigend einen Server zu starten.
-- [ ] Ein Flag vor dem Kommandonamen wird abgelehnt (Exit 1), statt stillschweigend verloren zu gehen: `recipe-reader --http-addr 10.0.0.1:9090 healthcheck` prüft nicht die Default-Adresse, sondern scheitert mit dem Hinweis, Flags hinter das Kommando zu schreiben (Entscheidung E11).
+- [x] `recipe-reader healthcheck` endet mit 0, wenn `/api/healthz` `{"status":"ok"}` liefert, sonst mit 1.
+- [x] `healthcheck` liest nur `HTTP_ADDR`/`--http-addr` und wird durch keine `serve`-Regel abgelehnt.
+- [x] Der `HEALTHCHECK` im `Dockerfile` nutzt das Kommando; der Smoke-Test meldet das Image als `healthy`.
+- [x] `--health-check` wird als unbekanntes Flag abgelehnt (laut, Exit 1), statt stillschweigend einen Server zu starten.
+- [x] Ein Flag vor dem Kommandonamen wird abgelehnt (Exit 1), statt stillschweigend verloren zu gehen: `recipe-reader --http-addr 10.0.0.1:9090 healthcheck` prüft nicht die Default-Adresse, sondern scheitert mit dem Hinweis, Flags hinter das Kommando zu schreiben (Entscheidung E11).
 
 **US3: Entwickler.** *Als Entwickler möchte ich Wiring und CLI ohne `os.Exit` und ohne Datenbank testen können.*
-- [ ] Die Arbeit der Kommandos liegt in `internal/server` und `internal/healthcheck` und ist dort getestet; die dünnen `Run`-Methoden in `internal/cli` testet `cmd/recipe-reader/main_test.go` mit; `cmd/recipe-reader/` enthält nur `main.go` (Kommandobaum, Parsen und Dispatch, E13) und dessen Tests.
-- [ ] `run(args, opts...)` in `main.go` ist ohne Prozess-Exit testbar (kong-`Exit`/`Writers` injizierbar); den Exit-Status von `main()` prüft ein Test in einem Kindprozess (E13).
+- [x] Die Arbeit der Kommandos liegt in `internal/server` und `internal/healthcheck` und ist dort getestet; die dünnen `Run`-Methoden in `internal/cli` testet `cmd/recipe-reader/main_test.go` mit; `cmd/recipe-reader/` enthält nur `main.go` (Kommandobaum, Parsen und Dispatch, E13) und dessen Tests.
+- [x] `run(args, opts...)` in `main.go` ist ohne Prozess-Exit testbar (kong-`Exit`/`Writers` injizierbar); den Exit-Status von `main()` prüft ein Test in einem Kindprozess (E13).
 
 **US4: Betreiber liest die Hilfe.** *Als Betreiber möchte ich schnell finden, was ich einstellen kann.*
 - [ ] `recipe-reader --help` listet die Kommandos.
@@ -233,10 +233,10 @@ Deckt ab: die Vorarbeit für Z3 und US3.
 **Ergebnis:** Der Kern des Auftrags. Das CLI ist ein kong-Kommandobaum mit `Run`-Methoden, Bindings, `Validate` und `BeforeApply`, und `main.go` enthält den Baum, parst und dispatcht; die Kommandos liegen in `internal/cli` (E13).
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US1, US2 und US3 in Teil A sind abgehakt.
-- [ ] `main.go` hat seine Endform nach E13: `main()` ruft nur `run()` und endet bei einem Fehler mit 1; `run()` parst und dispatcht; kein `cli.Main`/`cli.Run`. `version.go` ist entfernt.
-- [ ] Das Docker-Gate ist grün, und der Image-`HEALTHCHECK` meldet mit dem neuen Kommando `healthy`.
-- [ ] Der Breaking Change ist in der README (Abschnitt „Commands“) und als `BREAKING CHANGE:`-Footer in der PR-Beschreibung dokumentiert (siehe „Branches und PRs“).
+- [x] Die Akzeptanzkriterien von US1, US2 und US3 in Teil A sind abgehakt.
+- [x] `main.go` hat seine Endform nach E13: `main()` ruft nur `run()` und endet bei einem Fehler mit 1; `run()` parst und dispatcht; kein `cli.Main`/`cli.Run`. `version.go` ist entfernt.
+- [x] Das Docker-Gate ist grün, und der Image-`HEALTHCHECK` meldet mit dem neuen Kommando `healthy`.
+- [x] Der Breaking Change ist in der README (Abschnitt „Commands“) und als `BREAKING CHANGE:`-Footer in der PR-Beschreibung dokumentiert (siehe „Branches und PRs“).
 
 Deckt ab: Z1 (Kern), Z2, Z3, Z4, Z5 sowie die Entscheidungen E1 bis E8, E10, E11 und E13.
 
@@ -289,9 +289,9 @@ Entschieden am 2026-09-19: **ein PR pro Milestone**, wie zuletzt im Repo üblich
   - [x] **Task 1:** Health-Probe nach `internal/healthcheck` (S)
   - [x] **Task 2:** Composition Root nach `internal/server` (M)
   - [x] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
-- [ ] **M2: kong-Kommandobaum**
+- [x] **M2: kong-Kommandobaum**
   - [x] **Task 3:** kong-Kommandobaum in `internal/cli` (nach E13: Baum in `main.go`, Kommandos in `internal/cli`); `healthcheck` ersetzt `--health-check` (L)
-  - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
+  - [x] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
 - [ ] **M3: Konfiguration gruppiert**
   - [ ] **Task 4:** Settings in Optionsgruppen pro Belang (M)
   - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
