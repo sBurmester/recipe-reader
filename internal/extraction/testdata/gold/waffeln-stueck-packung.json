@@ -1,0 +1,43 @@
+{
+  "id": "waffeln-stueck-packung",
+  "origin": "synthetic",
+  "note": "Countable units: Stück and Packung.",
+  "caption": "Knusprige Waffeln\n\nZutaten:\n- 3 Stück Eier\n- 1 Packung Vanillezucker\n- 250 g Mehl\n- 250 ml Milch\n- 100 g Butter\n\nZubereitung:\nAlle Zutaten zu einem glatten Teig verrühren und 10 Minuten quellen lassen.\nPortionsweise im Waffeleisen goldbraun backen.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Knusprige Waffeln",
+    "ingredients": [
+      {
+        "name": "Eier",
+        "amount": 3,
+        "unit": "Stück"
+      },
+      {
+        "name": "Vanillezucker",
+        "amount": 1,
+        "unit": "Packung"
+      },
+      {
+        "name": "Mehl",
+        "amount": 250,
+        "unit": "g"
+      },
+      {
+        "name": "Milch",
+        "amount": 250,
+        "unit": "ml"
+      },
+      {
+        "name": "Butter",
+        "amount": 100,
+        "unit": "g"
+      }
+    ],
+    "instructions_contain": [
+      "Waffeleisen"
+    ],
+    "rules": {
+      "min_confidence": 0.95
+    }
+  }
+}

@@ -3,10 +3,27 @@
 **Derived from:** the six-reviewer panel of 2026-09-11 ([index](README.md)),
 as adjudicated in the [consensus record](2026-09-11-consensus.md)
 **Source findings:** 66 post-round (72 entering, 1 withdrawn, 5 merged), **62 tasks**
-**Status:** in progress — bands ≥ 4.0 done except T-24, plus T-61 (33 of 62)
+**Status:** in progress — bands ≥ 3.0 done except T-24 and T-43, plus T-61 (44 of 62)
 
 Mark a task `[x]` when it is done. Each task cites the finding IDs it closes.
 
+> **Revision 6 — after Band 3.0–3.9 shipped (2026-09-16).** Eleven of the
+> band's twelve tasks are done: T-42, T-39, T-40, T-44, T-32, T-41, T-45, T-46,
+> T-47, T-26 and T-33. **T-43 is the exception and is blocked, not deferred** —
+> it needs live Instagram credentials and a real saved collection, which no
+> code change supplies. Three tasks diverged from the plan and say so in their
+> entries: **T-33** was implemented rather than kept on file (the deferral was
+> argued on collection size; `2 + 2N` round trips is a per-page cost, not a
+> scale one), **T-46** was done without the fixture T-43 was supposed to supply
+> first (the types are written from the observed shape, and the new drop
+> reasons are what will report a wrong guess), and **T-47** pinned sqlc through
+> a `go.mod` tool directive rather than a version string in two files.
+> **T-42 found a live defect on its first run** — emoji-led ingredient lines
+> scored 0.00 precision and recall — which is the case for an eval made better
+> than E11 made it. Coverage 71.5% → **73.0%**. `golangci-lint`, `go vet`,
+> `govulncheck` and the race-enabled suite are all clean, and the hardened
+> compose stack was verified by running it.
+>
 > **Revision 5 — after Band 4.0–4.9 shipped (2026-09-16).** Nine of the band's
 > ten tasks are done: T-30, T-31, T-34, T-35, T-36, T-37, T-07 and T-38, joining
 > T-25. **T-24 is the exception and is still open on purpose** — ruling R7
@@ -92,17 +109,57 @@ code lives and how much of each task is left.
 
 **S** — under an hour · **M** — half a day · **L** — a day or more
 
+## Blocked on external access
+
+Two tasks cannot be finished from the repository, whatever effort is spent on
+them. They are **blocked on access, not on work** — that is a different problem
+from "not done yet", and the distinction is what tells the next reader they
+cannot fix it by trying harder. Both stay unticked until the access exists.
+
+| Task | Rating | What it needs | Who can supply it | What is blocked behind it |
+| --- | --- | --- | --- | --- |
+| **T-43** — verify the Instagram endpoints against a real account | 3.4 | Live Instagram credentials and a real saved collection, plus the willingness to run an unofficial private API against them (see the README's Terms of Service caveat) | The account owner | **I1's magnitude** — the panel's only recorded open dissent, which ruling notes say *"requires one live run against a real account"*. **T-42's corpus provenance** — its gold captions are written rather than collected until this runs. **T-46's optional-field assumptions** — which response fields are genuinely optional is currently a guess. **T-19's no-progress guard**, verified only against a synthetic feed. |
+| **T-24** — default to Haiku 4.5 for batch extraction | 4.8 | An LLM API key, to run `TestGoldSetLLM` over the gold set for each candidate model | Whoever holds the project's billing | Nothing waits on it, but it is a cost finding: it goes on costing until it lands. |
+
+**T-24 is only half blocked, and it is worth being precise about which half.**
+Ruling R7 gates it on T-42's gold set, and T-42 has shipped — so the harness
+exists and the comparison is now runnable rather than hypothetical. What is
+missing is a key to run the paid half with, and the caveat that the corpus is
+synthetic until T-43 lands, which limits what a model comparison over it
+proves. Run it as:
+
+    RECIPE_READER_EVAL_LLM=1 ANTHROPIC_API_KEY=sk-... LLM_MODEL=<candidate> \
+      go test ./internal/extraction -run GoldSetLLM -v
+
+**Everything else still open is ordinary work.** The remaining 16 tasks in the
+2.0–2.9 and < 2.0 bands need no credential, no live account and no third-party
+approval; nothing in them is waiting on anyone.
+
+**Where the blocked work was routed instead.** Both entries below record what
+was done in place of the access, so its absence costs less while it lasts —
+T-46 shipped without T-43's fixture and made every assumption that fixture
+would have verified *diagnosable* rather than silent, and T-42 shipped with a
+written corpus and a provenance warning at the top of its README rather than
+waiting for captions that may never arrive.
+
 ## Execution order
 
 Rating order is not execution order. The consensus record says why in four
 places, and those four rulings — not the decimals — are what orders the 51
 remaining tasks.
 
+> **Since revision 6 (2026-09-16): every task rated ≥ 3.0 is done but T-24 and
+> T-43.** Stage 4, Stage 7 and Stage 8's ≥ 3.0 tail are complete; Stage 9 has
+> lost T-46. **T-42 has landed, so R7's gate on T-24 is open**: the gold set
+> exists and the model default can now be argued from a measurement rather
+> than guessed — with the caveat, recorded in the corpus, that its captions are
+> written rather than collected until T-43 runs. **T-43 is now the only task
+> left on the board that nobody here can do**, and it remains the most
+> informative: I1's magnitude, T-42's provenance and T-46's optional-field
+> assumptions all wait on its one live run.
+>
 > **Since revision 5 (2026-09-16): every task rated ≥ 4.0 is done but T-24**,
-> which R7 gates behind T-42. **T-42 is now the highest-value task on the
-> board after T-43**: it is the only thing standing between T-24 and T-40 and
-> their remediation, and both are cost findings that go on costing until it
-> lands.
+> which R7 gates behind T-42.
 >
 > **Since revision 4 (2026-09-15): every task rated ≥ 5.0 is done.** That is
 > T-10 and T-27 (Stage 1), T-16 and T-08 (Stage 3), T-20 and T-29 (Stage 4),
@@ -147,6 +204,9 @@ it exercises the `0002` migration T-16 adds rather than only `0001`.
 close the panel's open dissent, and its committed fixture is what makes T-19's
 no-progress guard and T-46's typed structs verifiable against real response
 shapes instead of guessed ones. Out of order by rating, first by value.
+**Still open after revision 6, and blocked on access rather than on work.**
+T-46 shipped ahead of it (see its entry); the fixture is now what would confirm
+the types' optional fields rather than what would have written them.
 
 ### Stage 3 — persistence and the schema (migration-bearing, so it fixes an order)
 
@@ -157,11 +217,10 @@ over-correction from 7.2 to 4.0 was never checked.
 
 ### Stage 4 — one sitting in `internal/extraction`
 
-**T-20** (5.8) → **T-29** (5.0) → **T-35** (4.4) → **T-32** (3.2), then
-**T-42** (3.8, L) and the two it settles, **T-24** (4.8) and **T-40** (3.4),
-then **T-41** (3.2) and **T-51** (2.6). Read the re-cited locations first: the
-LLM code moved into `llm_provider.go` and two of these are now two-transport
-edits.
+~~**T-20** (5.8) → **T-29** (5.0) → **T-35** (4.4) → **T-32** (3.2), then
+**T-42** (3.8, L)~~ **done**, and ~~**T-40** (3.4)~~ and ~~**T-41** (3.2)~~ with
+them. **What is left in this stage: T-24** (4.8), whose gate R7 named — T-42's
+gold set — is now open, and **T-51** (2.6).
 
 ### Stage 5 — one sitting in `internal/config` and the composition root
 
@@ -178,20 +237,21 @@ the timeouts.
 
 ### Stage 7 — one sitting in `internal/repository` and the queries
 
-**T-31** (4.8) → **T-37** (4.2) → **T-45** (3.0) → **T-26** (3.0) → **T-55**
-(2.4) → **T-60** (2.0). **T-33** (3.0) stays on file: the plan's own note says
-keep it until profiling says otherwise.
+~~**T-31** (4.8) → **T-37** (4.2) → **T-45** (3.0) → **T-26** (3.0)~~ **done**,
+and **T-33** (3.0) with them — taken off file rather than deferred, for the
+reason its entry gives. **What is left: T-55** (2.4) → **T-60** (2.0).
 
 ### Stage 8 — delivery and CI sweep
 
-**T-22** (5.6) first — it now *guards* the finished T-05 rather than covering
-it. Then **T-36** (4.4) → **T-38** (4.0) → **T-39** (3.6) → **T-44** (3.4) →
-**T-47** (3.0) → **T-50** (2.8) → **T-59** (2.2).
+~~**T-22** (5.6) → **T-36** (4.4) → **T-38** (4.0) → **T-39** (3.6) → **T-44**
+(3.4) → **T-47** (3.0)~~ **done**. **What is left: T-50** (2.8) → **T-59**
+(2.2).
 
 ### Stage 9 — `internal/instagram` cleanup (after Stage 2's fixture)
 
-**T-19** (5.8, half already done) → **T-46** (3.0) → **T-52** (2.5) → **T-53**
-(2.5) → **T-13** (2.5) → **T-56** (2.4).
+~~**T-19** (5.8, half already done) → **T-46** (3.0)~~ **done** — T-46 without
+Stage 2's fixture, which has still not been produced. **What is left: T-52**
+(2.5) → **T-53** (2.5) → **T-13** (2.5) → **T-56** (2.4).
 
 ### Stage 10 — nits
 
@@ -692,12 +752,21 @@ re-opens a settled one or assumes a live one is settled:
       publish threshold below the confidence threshold is odd but not incoherent,
       and the plan asked for range checks.
 - [ ] **T-24 · 4.8 · S** — Default to Haiku 4.5 for batch extraction — `extraction` E4
-      **NOT DONE — gated, deliberately.** Ruling R7 settles E4 "with T-42's gold
-      set", and the execution order puts T-42 (3.8, L) ahead of it in Stage 4.
-      T-42 has not been done, so the evidence the ruling requires does not exist
-      and flipping the default now would be the guess the eval was commissioned
-      to replace. Everything else in this band shipped. **When T-42 lands, three
-      places change, not two** — see the re-citation below.
+      **NOT DONE — the gate opened in revision 6, the access did not.** See
+      [Blocked on external access](#blocked-on-external-access). Ruling R7
+      settles E4 "with T-42's gold set", and **T-42 shipped**: the harness and
+      the corpus now exist, so the comparison is runnable rather than
+      hypothetical. Two things still stand between that and flipping the
+      default. It needs **an LLM API key** to run the paid `TestGoldSetLLM`
+      half over each candidate model, which nobody working from the repository
+      has. And T-42's captions are **written rather than collected** until T-43
+      runs, so a model comparison over them measures the extractors against
+      expected captions, not against the feed — read
+      `internal/extraction/testdata/gold/README.md` before drawing a
+      conclusion from the numbers.
+      Flipping it without running that is still the guess the eval was
+      commissioned to replace. **When it is run, three places change, not two**
+      — see the re-citation below.
       **Lowered in round 2** by its own reviewer: this is the only cost finding
       whose failure announces itself, on the first invoice. Settle the model
       choice with T-42's gold set (ruling R7).
@@ -783,27 +852,205 @@ re-opens a settled one or assumes a live one is settled:
 
 ## Band 3.0 – 3.9 (12 tasks)
 
-- [ ] **T-42 · 3.8 · L** — Gold-set eval for extraction — `extraction` E11. Settles T-24 and T-40.
-- [ ] **T-39 · 3.6 · S** — Harden the compose Postgres defaults — `security` S6 — `docker-compose.yml:4-11`
+- [x] **T-42 · 3.8 · L** — Gold-set eval for extraction — `extraction` E11. Settles T-24 and T-40.
+      **Shipped, with one caveat recorded in the corpus itself.** 24 cases in
+      `internal/extraction/testdata/gold/`, one JSON file each, scored by
+      `gold_test.go` on ingredient-level precision and recall rather than exact
+      equality. `TestGoldSetRules` is hermetic and runs in CI;
+      `TestGoldSetLLM` runs the same corpus through the configured provider and
+      is skipped unless `RECIPE_READER_EVAL_LLM=1` and a key are both set, so
+      CI never pays for it. Gated: a `no_recipe` caption must score exactly 0, a
+      recipe caption must score above 0, per-case confidence bounds where set,
+      and corpus-wide floors on mean precision, mean recall and title accuracy.
+      Reported but not gated: per-case F1 and amount/unit exactness — gating
+      those turns an improvement into a test edit. Current: **mean precision
+      0.976, recall 0.985, titles 21/21, amounts and units 1.000 over 95
+      matched ingredients**; floors sit at 0.95.
+      **The caveat: the captions are written, not collected.** T-43 has not
+      run, so no real saved post is in the corpus. It measures the extractors
+      against captions someone expected, not against the feed —
+      `testdata/gold/README.md` says so at the top and says what to do when
+      T-43 lands.
+      **It found a live defect on its first run**, which is the argument for
+      E11 better than E11 made it: emoji-led ingredient lines
+      (`🥥 400 ml Kokosmilch`) scored **0.00 precision and recall** — the line
+      regex knew `-`, `*` and `•` only, so the amount and unit were lost and the
+      emoji became part of the ingredient name, and thence a row in the shared
+      ingredients table. Fixed in `parseIngredientLine`. Two misses are left in
+      the corpus deliberately, as recorded gaps rather than failures: amount
+      ranges (`2-3 EL`) and `Würfel` not being in the unit table.
+- [x] **T-39 · 3.6 · S** — Harden the compose Postgres defaults — `security` S6 — `docker-compose.yml:4-11`
+      Both halves. `POSTGRES_PASSWORD` has no default and compose refuses to
+      start without it (`${POSTGRES_PASSWORD:?…}`), matching how `API_TOKEN`
+      and the Instagram and Anthropic credentials were already handled. The
+      published port is bound to `127.0.0.1` rather than dropped: the `app`
+      service never needed it, but `make db-up` does — it exists to serve a
+      binary running on the host.
+      **Wider than the finding:** `POSTGRES_USER` and `POSTGRES_DB` became
+      variables too and `DB_DSN` is now built from all three, so the app and the
+      database cannot be given different credentials. `DB_DSN` stays overridable
+      wholesale, which is also the answer for a password carrying characters a
+      URL would have to percent-encode.
+      Verified by running it: the stack builds, the migrations run, a
+      database-backed route answers, and `docker compose ps` shows Postgres on
+      `127.0.0.1:5432` and nothing else.
 - [ ] **T-43 · 3.4 · M** — Verify the Instagram endpoints against a real account — `integration` I11
       **Promoted in importance by the round:** this is what settles T-01's unresolved magnitude. Commit the response as a fixture; it also gives T-18 a realistic case.
-- [ ] **T-40 · 3.4 · S** — Continuous rule-confidence score — `extraction` E9 — `internal/extraction/rules.go:116-125`
-- [ ] **T-44 · 3.4 · S** — Include the frontend in `make check` — `delivery` D9
-- [ ] **T-32 · 3.2 · S** — Delimit the untrusted caption in the prompt — `security` S5
+      **STILL OPEN — it cannot be done from here.** See
+      [Blocked on external access](#blocked-on-external-access). It needs live
+      Instagram credentials and a real saved collection, which no amount of
+      code changes supplies. It is the one task in this band that is blocked on access
+      rather than on work, and it stays the most informative task on the board:
+      I1's magnitude, T-42's corpus provenance and T-46's field-optionality
+      assumptions all wait on its fixture.
+      **What was done instead, so its absence costs less:** T-46 made every
+      assumption it would verify *diagnosable*. A response that is not a feed
+      page is `ErrSchemaDrift`; an item that does not decode is counted with a
+      named reason. When this task runs, a wrong guess will now say which guess
+      was wrong.
+- [x] **T-40 · 3.4 · S** — Continuous rule-confidence score — `extraction` E9 — `internal/extraction/rules.go:116-125`
+      `confidenceFor` now weighs four things instead of returning one of three
+      values: how many ingredients were found, what fraction of the ingredient
+      section's lines actually parsed (coverage), how many carried an amount,
+      and how long the instructions are.
+      **The three boundaries callers were tuned against are preserved
+      deliberately**, and are pinned by a test: neither section is still
+      exactly `0` (the pipeline reads that as "no recipe"), one section alone
+      still cannot exceed `0.5` (so a half recipe still falls back to the LLM),
+      and a clean full caption still reaches `1.0`. Inside those bounds the
+      score now moves, so the two float flags do something between `0.6` and
+      `0.9` instead of nothing.
+      **Coverage needed a parse change to mean anything:** a line with no
+      amount, no known unit and more than six words is no longer an ingredient,
+      so prose that drifted under `Zutaten:` now parses badly instead of
+      parsing perfectly.
+      **Partly addressed, stated plainly:** E9's companion case — both headers
+      present, garbage under them that nonetheless parses — is *reduced*, not
+      closed. A garbage line with no amount still costs the amounts term, but
+      three short garbage lines still score around 0.83. Closing it properly
+      needs semantics the rules do not have; T-42's corpus is where that would
+      now be measured.
+- [x] **T-44 · 3.4 · S** — Include the frontend in `make check` — `delivery` D9
+      New `frontend-check` target running `npm run typecheck` and `npm run
+      build`, exactly what `ci.yml`'s `frontend` job runs, added to `check`.
+      Gated on the existing `$(NODE_MODULES)` target — the lockfile-keyed
+      dependency `frontend` already uses — so it costs an `npm ci` only when
+      `web/package-lock.json` changed. `check` is ordered `lint frontend-check
+      vuln test`: the static checks fail in seconds, the test run starts
+      Postgres containers.
+- [x] **T-32 · 3.2 · S** — Delimit the untrusted caption in the prompt — `security` S5
       Also validate returned categories against the seeded set. *Found in the round:* injected captions pollute **three** shared lookup tables, not one.
-      **The prompt moved under this task.** `systemPrompt` is in
-      `internal/extraction/llm.go` and is now shared verbatim by both
-      transports, so delimiting it is one edit that covers both. T-04 also gave
-      the model a `confidence` field to fill in — worth reading as an injection
-      surface of its own, since a caption that talks the score up publishes
-      without review.
-- [ ] **T-41 · 3.2 · S** — Better recipe title than "first line" — `extraction` E10 — `internal/extraction/rules.go:61,75-82`
-- [ ] **T-45 · 3.0 · S** — Replace the search `DISTINCT` with a semi-join — `persistence` P8
-- [ ] **T-46 · 3.0 · M** — Typed structs for Instagram responses — `go` #14 — `pageMedia` and `extractMedia` in `internal/instagram/saved.go` still walk `map[string]any`. **Do it after T-43:** its committed fixture is what tells you which fields are actually optional, and T-15's `ErrSchemaDrift` gives the typed version somewhere to report a mismatch.
-- [ ] **T-47 · 3.0 · S** — Pin `sqlc` — `delivery` D11 **(narrowed)**
+      **All three halves shipped.**
+      *The prompt.* `systemPrompt` states that everything between `<caption>`
+      and `</caption>` is untrusted data, never instructions, and names the
+      `confidence` field explicitly — a caption that talks the score up is a
+      caption that publishes without review. `wrapCaption` applies the span in
+      `LLMExtractor.Extract`, on the line every transport passes through, so it
+      is one edit for both. Order matters and is commented: the caption is
+      capped *before* it is wrapped, so truncation can never cut the closing
+      tag off.
+      *The delimiter's own attack surface.* A caption carrying `</caption>` —
+      in any case or spacing — could otherwise close the span early and have
+      the rest read as prompt. `captionTagRe` neutralises it first, and a test
+      asserts exactly one opening and one closing tag survive.
+      *The categories.* The vocabulary an import may attach is now closed to
+      what is already in the database — the seeded set plus anything a human
+      has created — read once per run through a narrow `CategoryLister`, matched
+      case- and whitespace-insensitively, and stored under the vocabulary's own
+      spelling so "vegetarisch" does not become a second row beside
+      "Vegetarisch". Dropped names are logged once per run, not per post. A
+      failed read does not fail the import: the recipes are the point, the
+      categories are an annotation.
+      **Wider than the finding, on the other two tables.** Ingredients and units
+      cannot be a closed set — no list enumerates every ingredient — so they are
+      bounded instead: a name is collapsed to one line, control characters
+      stripped, and truncated (200/120/32 runes for recipe, ingredient, unit).
+      That keeps a row a label rather than a payload. Stated as a deliberate
+      partial: it bounds what an injected caption can write, it does not stop it
+      writing.
+      **On the confidence surface the task raised:** already structurally
+      defended before this task — `parseToolInput` takes the *minimum* of the
+      model's self-reported score and what the result physically contains, so
+      talking the score up cannot get a threadbare extraction published. This
+      task closes the other half, which is the model's to hold.
+- [x] **T-41 · 3.2 · S** — Better recipe title than "first line" — `extraction` E10 — `internal/extraction/rules.go:61,75-82`
+      `recipeTitle` replaces `firstNonEmptyLine`. It scans only as far as the
+      first section header — everything past `Zutaten:` is content — skips
+      hashtag blocks, and prefers a line that reads like a name: 3–60 runes,
+      carrying a letter, not itself a header ending in `:`. Whatever it picks is
+      stripped of its leading emoji run and trailing hashtag block, with closing
+      brackets and quotes kept so `Bananenbrot (vegan)` is not left unbalanced.
+      Failing all that it falls back to the first cleaned line, which is the old
+      behaviour minus the noise.
+      **E10's second half is in too:** `Unbenanntes Rezept` now multiplies the
+      confidence by 0.75, because a nameless caption is weak evidence of a
+      recipe and the row it produces is the one a human most needs to see.
+      Title accuracy on T-42's corpus is 21/21.
+- [x] **T-45 · 3.0 · S** — Replace the search `DISTINCT` with a semi-join — `persistence` P8
+      `SearchRecipes` and `CountRecipes` are `SELECT r.*` / `COUNT(*)` over an
+      `EXISTS` subquery instead of `SELECT DISTINCT r.*` / `COUNT(DISTINCT
+      r.id)` over an always-present `LEFT JOIN`. The `DISTINCT` over the full
+      row width is gone from the unfiltered listing that loads first, and the
+      planner can skip the subquery entirely when no category is given. Tested
+      three ways: a recipe in three categories appears once, the count agrees
+      with the page, and the filter still selects by any one of its categories.
+- [x] **T-46 · 3.0 · M** — Typed structs for Instagram responses — `go` #14
+      **Done without T-43's fixture**, which the plan wanted first. That
+      changes what could be claimed, not whether it was worth doing: the types
+      are written from the endpoint's shape as observed, every optional nested
+      object is a pointer, and the code comment says so. What the fixture would
+      have settled — which fields are genuinely optional — is now the thing the
+      drop reasons will report rather than the thing a guess has to get right.
+      `savedFeedPage`, `savedFeedItem`, `mediaObject`, `captionObject`,
+      `imageVersions` and `imageCandidate` replace the `map[string]any` walk.
+      The embedded `mediaObject` covers both shapes the feeds are known to use
+      — media under a `media` key, and the media object returned directly — in
+      one decode, so the old `media = item` hedge is gone.
+      **Items are held as `json.RawMessage` and decoded one at a time**, so one
+      malformed item drops on its own instead of taking the page with it. Three
+      signals now exist where there were none: a page that does not decode at
+      all is `ErrSchemaDrift`; each dropped item is counted under a named reason
+      (`no media code` vs `undecodable item` — different upstream changes); and
+      the existing "items returned, none readable" error carries the reason
+      tally with it.
+      *Cost:* the dependency hands back `map[string]any` and exposes no raw
+      body, so the page is re-marshalled before decoding. One extra marshal per
+      page, against a request the dependency paces at one second.
+- [x] **T-47 · 3.0 · S** — Pin `sqlc` — `delivery` D11 **(narrowed)**
       The golangci-lint and govulncheck halves are withdrawn as policy-aligned. What holds: `Makefile:11` regenerates with an unpinned local binary while `ci.yml:33` uses `sqlc@latest` and fails on any byte difference. The project already pins Go at `ci.yml:26`, so this is consistent with its own practice.
-- [ ] **T-26 · 3.0 · S** — Clamp `page` before the `int32` conversion — `go` #1 — `internal/repository/recipe_repository.go:198`. Overflow begins at `page=107374184` with the default page size.
-- [ ] **T-33 · 3.0 · M** — Batch the search's child queries — `persistence` P4 — `= ANY($1::bigint[])`. Keep on file until profiling says so.
+      **Pinned through `go.mod`, not through a version string in two files.**
+      `go get -tool github.com/sqlc-dev/sqlc/cmd/sqlc` adds a `tool` directive;
+      `make sqlc-generate` and CI's drift gate both now run `go tool sqlc`, so
+      they cannot resolve to different versions. Verified: the pinned v1.31.1
+      reproduces the committed `internal/db/sqlc` byte for byte. Bumping it is
+      `go get -tool …@latest`, which is a commit you can see and revert.
+      *Side effect, recorded:* adding the tool dependency upgraded four shared
+      indirect modules (grpc, protobuf, genproto, `golang.org/x/exp`).
+      `govulncheck` is unchanged at 0 reachable vulnerabilities.
+      golangci-lint and govulncheck stay on `@latest`, as the narrowed finding
+      and the project's own policy both ask.
+- [x] **T-26 · 3.0 · S** — Clamp `page` before the `int32` conversion — `go` #1 — `internal/repository/recipe_repository.go:198`. Overflow begins at `page=107374184` with the default page size.
+      Clamped in `Search`, beside the existing guards. The guard **divides
+      rather than multiplying** (`page-1 > math.MaxInt32/pageSize`), so the
+      product that would overflow is never computed — the fix as written in the
+      finding still multiplies two `int64`s and overflows for `page` near
+      `math.MaxInt64`, which `strconv.Atoi` will happily produce. Past the last
+      addressable page returns an empty page with the real total, not an error:
+      it is an empty page of a real result set. Tested at `214748365`,
+      `3000000000`, `MaxInt32`, `MaxInt64/50` and `MaxInt64`.
+- [x] **T-33 · 3.0 · M** — Batch the search's child queries — `persistence` P4 — `= ANY($1::bigint[])`. ~~Keep on file until profiling says so.~~
+      **Done rather than deferred**, against the plan's own note, for one
+      reason: the deferral was argued on scale and the cost is not a scale
+      question. `2 + 2N` round trips is 42 on the default page size and 202 at
+      the maximum, paid on the listing the app opens on, whatever the
+      collection size. Two new queries take the page's ids at once
+      (`ListIngredientsForRecipes`, `ListCategoriesForRecipes`) and
+      `assemblePage` groups them in Go, so a page costs four queries at any
+      size. `GetByID` and `GetBySource` keep the single-row `assemble`, as P4
+      recommends.
+      Tested for the two failures a map keyed by id can have that per-row
+      assembly cannot: a page row must carry exactly what `GetByID` returns for
+      it, and associations must not leak between rows.
 
 ## Band 2.0 – 2.9 (15 tasks)
 
@@ -856,7 +1103,14 @@ a finding. The GO-2026-5932 provenance note lives in the security review's
 | 6.0 – 6.9 | 4 | 4 |
 | 5.0 – 5.9 | 12 | 12 |
 | 4.0 – 4.9 | 10 | 9 |
-| 3.0 – 3.9 | 12 | 0 |
+| 3.0 – 3.9 | 12 | 11 |
 | 2.0 – 2.9 | 15 | 1 |
 | < 2.0 | 2 | 0 |
-| **Total** | **62** | **33** |
+| **Total** | **62** | **44** |
+
+**The two tasks rated ≥ 3.0 that are not done** are the two in
+[Blocked on external access](#blocked-on-external-access): **T-24** (4.8, needs
+an LLM API key to run the eval that settles it) and **T-43** (3.4, needs live
+Instagram credentials). Neither is waiting on work. Everything else still open
+is in the 2.0–2.9 and < 2.0 bands and needs nothing from outside the
+repository.

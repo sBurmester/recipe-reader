@@ -2,15 +2,28 @@ services:
   db:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: recipes
-      POSTGRES_USER: recipes
-      POSTGRES_PASSWORD: recipes
+      POSTGRES_DB: ${POSTGRES_DB:-recipes}
+      POSTGRES_USER: ${POSTGRES_USER:-recipes}
+      # No default, deliberately. This used to be the literal "recipes" for
+      # user "recipes" on database "recipes" — a convenience on a laptop, and
+      # an internet-exposed database with a three-way-guessable credential the
+      # moment a working compose file is copied to a VPS. Compose now refuses
+      # to start without one, which is how API_TOKEN and the Instagram and
+      # Anthropic credentials are already handled below.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD - there is no default}
     volumes:
       - db-data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      # Loopback, not every interface. The app reaches db by name over the
+      # compose network and needs no published port at all; this one exists
+      # only so `make db-up` can serve a locally run binary, and binding it to
+      # 0.0.0.0 published the database to the network on the same command.
+      # sslmode=disable in the DSN below is correct for the compose network and
+      # wrong the moment the database is not local, which is the other reason
+      # not to publish it.
+      - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U recipes"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-recipes}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -28,7 +41,11 @@ services:
       db:
         condition: service_healthy
     environment:
-      DB_DSN: "postgres://recipes:recipes@db:5432/recipes?sslmode=disable"
+      # Built from the same variables the db service uses, so the two cannot
+      # drift. Set DB_DSN yourself to override it wholesale — which is also the
+      # answer for a password carrying characters a URL would have to
+      # percent-encode.
+      DB_DSN: ${DB_DSN:-postgres://${POSTGRES_USER:-recipes}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-recipes}?sslmode=disable}
       # The container has to bind every interface for the published port to
       # reach it, which is exactly the network-reachable case the server
       # refuses to start in without a token. Compose fails first, with a

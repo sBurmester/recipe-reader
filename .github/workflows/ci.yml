@@ -28,9 +28,14 @@ jobs:
       # internal/db/sqlc is generated and committed, so it can silently drift
       # from the queries and migrations it was generated from. Regenerating and
       # diffing is what keeps the committed output honest.
+      #
+      # `go tool sqlc` pins the generator to the version in go.mod, which is
+      # the same one `make sqlc-generate` runs. With sqlc@latest here, an
+      # upstream release that changed generated output failed this gate on
+      # every open PR at once, with no repository change to explain it.
       - name: sqlc generated code is up to date
         run: |
-          go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest generate
+          go tool sqlc generate
           if [ -n "$(git status --porcelain -- internal/db/sqlc)" ]; then
             git status --porcelain -- internal/db/sqlc
             git diff -- internal/db/sqlc

@@ -10,6 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/sBurmester/recipe-reader/internal/domain"
 	"github.com/sBurmester/recipe-reader/internal/extraction"
@@ -22,6 +25,13 @@ import (
 // between the account's "All Posts" feed and a named collection.
 type PostFetcher interface {
 	FetchNewPosts(ctx context.Context) ([]instagram.SavedPost, error)
+}
+
+// CategoryLister supplies the category vocabulary an import may attach to a
+// recipe. repository.LookupRepository satisfies it; the narrow interface is
+// what keeps this package testable without a database.
+type CategoryLister interface {
+	ListCategories(ctx context.Context) ([]domain.Category, error)
 }
 
 // ImportResult is the per-run tally. Seen counts every post the fetcher
@@ -54,6 +64,20 @@ type Pipeline struct {
 	Extractor extraction.Extractor
 	Recipes   repository.RecipeRepository
 
+	// Categories closes the category vocabulary an import may write. The
+	// caption an extraction is derived from is attacker-controlled, and a
+	// category name goes straight into a table every user's picker reads —
+	// so a caption that talks the model into proposing "Buy crypto at ..."
+	// used to create that row for everyone. With a lister wired, a proposed
+	// category is matched against the ones that already exist (the seeded set
+	// plus anything a human has since created) and dropped if it does not.
+	//
+	// Nil disables the check, which is the behaviour a Pipeline literal built
+	// without it has always had. Run says so in the log the first time a
+	// dropped-or-not decision actually arises, rather than filtering silently
+	// or not filtering silently.
+	Categories CategoryLister
+
 	// Threshold is the original single knob, kept so an existing Pipeline
 	// literal behaves as it did. Prefer PublishThreshold.
 	Threshold float64
@@ -78,6 +102,11 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 	if fetchErr != nil && len(posts) == 0 {
 		return ImportResult{}, fmt.Errorf("%w: %w", ErrFetch, fetchErr)
 	}
+
+	// Read once per run, not once per post: the vocabulary does not change
+	// mid-run in any way worth a query per import, and a run over 50 posts
+	// should not cost 50 extra round trips to find that out.
+	vocab := p.categoryVocabulary(ctx)
 
 	var result ImportResult
 	for _, post := range posts {
@@ -129,7 +158,7 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 		// (FetchOptions.Known), so a duplicate only reaches here when that
 		// advisory check could not answer — and the cost of being wrong is one
 		// wasted call, against a read on every post of every run.
-		err = p.Recipes.Create(ctx, p.toRecipe(post, extracted))
+		err = p.Recipes.Create(ctx, p.toRecipe(post, extracted, vocab))
 		if errors.Is(err, repository.ErrDuplicateSource) {
 			result.Skipped++
 			continue
@@ -156,28 +185,149 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 // lookup-table rows by RecipeRepository.Create, inside the transaction that
 // stores the recipe — resolving them here, before the write began, committed
 // them even when the write then failed.
-func (p *Pipeline) toRecipe(post instagram.SavedPost, ex *extraction.ExtractedRecipe) *domain.Recipe {
+func (p *Pipeline) toRecipe(post instagram.SavedPost, ex *extraction.ExtractedRecipe, vocab *categoryVocabulary) *domain.Recipe {
 	status := domain.StatusPublished
 	if ex.Confidence < p.publishThreshold() {
 		status = domain.StatusNeedsReview
 	}
 
 	recipe := &domain.Recipe{
-		Name:         ex.Name,
+		Name:         sanitizeName(ex.Name, maxRecipeNameRunes),
 		Instructions: ex.Instructions,
 		ImageURL:     post.ImageURL,
 		Source:       post.Source,
 		Status:       status,
 	}
-	for _, name := range ex.Categories {
+	if recipe.Name == "" {
+		recipe.Name = untitledRecipe
+	}
+	for _, name := range vocab.resolve(post.Source, ex.Categories) {
 		recipe.Categories = append(recipe.Categories, domain.Category{Name: name})
 	}
 	for _, ing := range ex.Ingredients {
+		// Ingredient and unit names are the other two shared lookup tables an
+		// extraction writes into, and unlike categories they cannot be a closed
+		// set — no list enumerates every ingredient. Bounding them is what is
+		// left: a name is one line and a sane length, so an injected caption
+		// cannot push a paragraph, a newline-built fake entry or a megabyte of
+		// text into the pickers every user reads.
+		name := sanitizeName(ing.Name, maxIngredientNameRunes)
+		if name == "" {
+			continue
+		}
 		recipe.Ingredients = append(recipe.Ingredients, domain.RecipeIngredient{
-			IngredientName: ing.Name, Amount: ing.Amount, UnitName: ing.Unit,
+			IngredientName: name, Amount: ing.Amount, UnitName: sanitizeName(ing.Unit, maxUnitNameRunes),
 		})
 	}
 	return recipe
+}
+
+// The bounds on a lookup name written from an extraction. Generous enough that
+// no real ingredient, unit or title is touched, small enough that the row stays
+// a label rather than a payload.
+const (
+	maxRecipeNameRunes     = 200
+	maxIngredientNameRunes = 120
+	maxUnitNameRunes       = 32
+)
+
+// untitledRecipe is the fallback when an extraction produced no usable name.
+// recipes.name is NOT NULL and the frontend lists by it, so an empty string
+// would be a row nobody can find.
+const untitledRecipe = "Unbenanntes Rezept"
+
+// sanitizeName reduces a free-text name to a single bounded line: control
+// characters and newlines collapse to spaces, runs of whitespace collapse to
+// one, and the result is truncated to maxRunes on a rune boundary.
+func sanitizeName(name string, maxRunes int) string {
+	cleaned := strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == '\t' || unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, name)
+	cleaned = strings.TrimSpace(strings.Join(strings.Fields(cleaned), " "))
+	if utf8.RuneCountInString(cleaned) <= maxRunes {
+		return cleaned
+	}
+	return strings.TrimSpace(string([]rune(cleaned)[:maxRunes]))
+}
+
+// categoryVocabulary is one run's view of the categories an import may attach.
+// A nil *categoryVocabulary means no vocabulary was available — either no
+// lister is wired or the read failed — and resolve then passes names through,
+// which is the behaviour before this check existed.
+type categoryVocabulary struct {
+	// byFold maps a case-folded, whitespace-normalised name to the canonical
+	// spelling stored in the categories table, so "vegetarisch" from the model
+	// resolves to the seeded "Vegetarisch" instead of creating a second row.
+	byFold map[string]string
+	// warned keeps the pass-through notice to once per run.
+	warned bool
+}
+
+// categoryVocabulary reads the run's allowed category set. A missing lister or
+// a failed read is not a reason to abort an import — the recipes are the point
+// and the categories are an annotation — so both return nil and resolve says
+// so once.
+func (p *Pipeline) categoryVocabulary(ctx context.Context) *categoryVocabulary {
+	if p.Categories == nil {
+		return nil
+	}
+	rows, err := p.Categories.ListCategories(ctx)
+	if err != nil {
+		slog.Warn("import: could not read the category vocabulary; categories will not be checked this run",
+			"error", err)
+		return nil
+	}
+	v := &categoryVocabulary{byFold: make(map[string]string, len(rows))}
+	for _, row := range rows {
+		v.byFold[foldCategory(row.Name)] = row.Name
+	}
+	return v
+}
+
+// resolve maps an extraction's proposed categories onto the vocabulary,
+// dropping and logging the ones that are not in it. source names the post so a
+// run that drops a lot of categories can be traced back to the caption doing
+// it.
+func (v *categoryVocabulary) resolve(source string, proposed []string) []string {
+	if len(proposed) == 0 {
+		return nil
+	}
+	if v == nil {
+		slog.Warn("import: no category vocabulary is wired; extraction categories are stored unchecked",
+			"source", source, "categories", len(proposed))
+		return proposed
+	}
+	out := make([]string, 0, len(proposed))
+	var dropped []string
+	for _, name := range proposed {
+		if canonical, ok := v.byFold[foldCategory(name)]; ok {
+			out = append(out, canonical)
+			continue
+		}
+		dropped = append(dropped, sanitizeName(name, maxCategoryNameRunes))
+	}
+	if len(dropped) > 0 && !v.warned {
+		// Once per run: a feed of non-German captions can legitimately propose
+		// dozens, and a line per post would bury the rest of the run's log.
+		v.warned = true
+		slog.Info("import: dropped categories that are not in the vocabulary",
+			"source", source, "dropped", dropped)
+	}
+	return out
+}
+
+// maxCategoryNameRunes bounds what a dropped category may put in the log — the
+// name never reaches the database, but it does reach whatever reads the logs.
+const maxCategoryNameRunes = 64
+
+// foldCategory is the match key: case-insensitive and whitespace-normalised,
+// so the model's "hauptgericht" and the seeded "Hauptgericht" are one category
+// rather than two rows.
+func foldCategory(name string) string {
+	return strings.ToLower(sanitizeName(name, maxCategoryNameRunes))
 }
 
 // publishThreshold is PublishThreshold, or Threshold when it is unset.

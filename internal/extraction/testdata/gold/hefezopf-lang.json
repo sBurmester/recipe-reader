@@ -1,0 +1,63 @@
+{
+  "id": "hefezopf-lang",
+  "origin": "synthetic",
+  "note": "A long ingredient list — the count term should be saturated well before the end.",
+  "caption": "Hefezopf\n\nZutaten:\n- 500 g Mehl\n- 250 ml Milch\n- 1 Würfel Hefe\n- 80 g Zucker\n- 80 g Butter\n- 1 Ei\n- 1 Prise Salz\n- 1 TL Vanillezucker\n- 2 EL Hagelzucker\n\nZubereitung:\nMilch lauwarm erwärmen und die Hefe darin auflösen.\nAlle Zutaten zu einem glatten Teig verkneten und eine Stunde gehen lassen.\nDen Teig dritteln, zu einem Zopf flechten und mit Hagelzucker bestreuen.\n35 Minuten bei 180 Grad backen.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Hefezopf",
+    "ingredients": [
+      {
+        "name": "Mehl",
+        "amount": 500,
+        "unit": "g"
+      },
+      {
+        "name": "Milch",
+        "amount": 250,
+        "unit": "ml"
+      },
+      {
+        "name": "Hefe",
+        "amount": 1,
+        "unit": "Würfel"
+      },
+      {
+        "name": "Zucker",
+        "amount": 80,
+        "unit": "g"
+      },
+      {
+        "name": "Butter",
+        "amount": 80,
+        "unit": "g"
+      },
+      {
+        "name": "Ei",
+        "amount": 1,
+        "unit": ""
+      },
+      {
+        "name": "Salz",
+        "amount": 1,
+        "unit": "Prise"
+      },
+      {
+        "name": "Vanillezucker",
+        "amount": 1,
+        "unit": "TL"
+      },
+      {
+        "name": "Hagelzucker",
+        "amount": 2,
+        "unit": "EL"
+      }
+    ],
+    "instructions_contain": [
+      "flechten"
+    ],
+    "rules": {
+      "min_confidence": 0.95
+    }
+  }
+}

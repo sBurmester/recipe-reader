@@ -1,0 +1,44 @@
+{
+  "id": "kuerbis-risotto",
+  "origin": "synthetic",
+  "note": "The layout the rules were written for: emoji title, bulleted amounts, a hashtag tail.",
+  "caption": "Cremiger Kürbis-Risotto 🎃\n\nZutaten:\n- 300 g Risottoreis\n- 1 Zwiebel\n- 400 g Kürbis\n- 2 EL Olivenöl\n- 1 Prise Salz\n\nZubereitung:\nZwiebel fein hacken und in Olivenöl andünsten.\nKürbis würfeln und dazugeben.\nReis zugeben und mit Brühe ablöschen, unter Rühren garen.\nMit Salz abschmecken.\n\n#rezept #herbstküche",
+  "expect": {
+    "no_recipe": false,
+    "name": "Cremiger Kürbis-Risotto",
+    "ingredients": [
+      {
+        "name": "Risottoreis",
+        "amount": 300,
+        "unit": "g"
+      },
+      {
+        "name": "Zwiebel",
+        "amount": 1,
+        "unit": ""
+      },
+      {
+        "name": "Kürbis",
+        "amount": 400,
+        "unit": "g"
+      },
+      {
+        "name": "Olivenöl",
+        "amount": 2,
+        "unit": "EL"
+      },
+      {
+        "name": "Salz",
+        "amount": 1,
+        "unit": "Prise"
+      }
+    ],
+    "instructions_contain": [
+      "andünsten",
+      "abschmecken"
+    ],
+    "rules": {
+      "min_confidence": 0.95
+    }
+  }
+}

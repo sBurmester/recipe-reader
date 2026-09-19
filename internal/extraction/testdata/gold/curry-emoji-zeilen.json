@@ -1,0 +1,40 @@
+{
+  "id": "curry-emoji-zeilen",
+  "origin": "synthetic",
+  "note": "Emoji leading every ingredient line, which is common and must not eat the amount.",
+  "caption": "Rotes Linsen-Curry 🌶️\n\nZutaten:\n🥥 400 ml Kokosmilch\n🍅 200 g rote Linsen\n🧅 1 Zwiebel\n🧄 2 Knoblauchzehen\n🥄 2 EL Currypaste\n\nZubereitung:\nZwiebel und Knoblauch anbraten, Currypaste zugeben.\nLinsen und Kokosmilch zugeben und 20 Minuten köcheln lassen.\nMit Reis servieren.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Rotes Linsen-Curry",
+    "ingredients": [
+      {
+        "name": "Kokosmilch",
+        "amount": 400,
+        "unit": "ml"
+      },
+      {
+        "name": "rote Linsen",
+        "amount": 200,
+        "unit": "g"
+      },
+      {
+        "name": "Zwiebel",
+        "amount": 1,
+        "unit": ""
+      },
+      {
+        "name": "Knoblauchzehen",
+        "amount": 2,
+        "unit": ""
+      },
+      {
+        "name": "Currypaste",
+        "amount": 2,
+        "unit": "EL"
+      }
+    ],
+    "instructions_contain": [
+      "köcheln"
+    ]
+  }
+}

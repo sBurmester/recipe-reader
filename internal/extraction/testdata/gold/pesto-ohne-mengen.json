@@ -1,0 +1,43 @@
+{
+  "id": "pesto-ohne-mengen",
+  "origin": "synthetic",
+  "note": "Ingredients with no amounts at all — the amounts term should notice.",
+  "caption": "Bärlauchpesto\n\nZutaten:\n- Bärlauch\n- Pinienkerne\n- Parmesan\n- Olivenöl\n- Salz\n\nZubereitung:\nAlles zusammen im Mixer fein pürieren und mit Salz abschmecken.\nIn ein sauberes Glas füllen und mit Öl bedecken.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Bärlauchpesto",
+    "ingredients": [
+      {
+        "name": "Bärlauch",
+        "amount": 0,
+        "unit": ""
+      },
+      {
+        "name": "Pinienkerne",
+        "amount": 0,
+        "unit": ""
+      },
+      {
+        "name": "Parmesan",
+        "amount": 0,
+        "unit": ""
+      },
+      {
+        "name": "Olivenöl",
+        "amount": 0,
+        "unit": ""
+      },
+      {
+        "name": "Salz",
+        "amount": 0,
+        "unit": ""
+      }
+    ],
+    "instructions_contain": [
+      "pürieren"
+    ],
+    "rules": {
+      "max_confidence": 0.95
+    }
+  }
+}

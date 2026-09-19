@@ -1,0 +1,38 @@
+{
+  "id": "tomatensuppe-nummeriert",
+  "origin": "synthetic",
+  "note": "Numbered instruction steps, which must not be mistaken for ingredient amounts.",
+  "caption": "Tomatensuppe wie bei Oma\n\nZutaten:\n- 800 g Tomaten\n- 1 Zwiebel\n- 2 Knoblauchzehen\n- 200 ml Sahne\n\nZubereitung:\n1. Zwiebel und Knoblauch andünsten.\n2. Tomaten zugeben und 15 Minuten köcheln.\n3. Pürieren und die Sahne einrühren.\n4. Mit Basilikum servieren.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Tomatensuppe wie bei Oma",
+    "ingredients": [
+      {
+        "name": "Tomaten",
+        "amount": 800,
+        "unit": "g"
+      },
+      {
+        "name": "Zwiebel",
+        "amount": 1,
+        "unit": ""
+      },
+      {
+        "name": "Knoblauchzehen",
+        "amount": 2,
+        "unit": ""
+      },
+      {
+        "name": "Sahne",
+        "amount": 200,
+        "unit": "ml"
+      }
+    ],
+    "instructions_contain": [
+      "Pürieren"
+    ],
+    "rules": {
+      "min_confidence": 0.95
+    }
+  }
+}

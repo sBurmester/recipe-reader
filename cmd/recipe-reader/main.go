@@ -73,7 +73,13 @@ func run() error {
 	if fetcher != nil {
 		p := &pipeline.Pipeline{
 			Fetcher: fetcher, Extractor: extractor,
-			Recipes:          recipes,
+			Recipes: recipes,
+			// The same lookup repository the API serves the category picker
+			// from, which is the point: an import may only attach a category
+			// the picker already offers. Without it an attacker-authored
+			// caption can talk the model into proposing any string and the
+			// import creates that row for every user.
+			Categories:       lookups,
 			Threshold:        cfg.ExtractionThreshold,
 			PublishThreshold: cfg.ExtractionPublishThreshold,
 		}
