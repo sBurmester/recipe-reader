@@ -38,6 +38,12 @@ type CLI struct {
 	HealthCheck cli.HealthCheckCmd `cmd:"" name:"healthcheck" help:"Probe the server already listening on HTTP_ADDR; exit 0 if /api/healthz answers ok, 1 otherwise. For container health checks."`
 }
 
+// Validate is a kong hook on the root of the tree, so every parser newParser
+// builds refuses a misplaced flag, whether or not the command then runs.
+func (c *CLI) Validate(kctx *kong.Context) error {
+	return rejectMisplacedFlags(kctx)
+}
+
 // description is the --help preamble. It names the credentials because kong
 // cannot: they are not flags, so it has no entry to list them under.
 const description = "Imports recipes from Instagram saved posts, extracts structured data, and serves a searchable web UI.\n\n" +
@@ -79,9 +85,6 @@ func run(args []string, opts ...kong.Option) error {
 	if err != nil {
 		return err
 	}
-	if err := rejectMisplacedFlags(kctx); err != nil {
-		return err
-	}
 	return kctx.Run()
 }
 
@@ -104,7 +107,7 @@ func newParser(root *CLI, opts ...kong.Option) (*kong.Kong, error) {
 // not X, and `--db-dsn X migrate` would migrate the default database. Both
 // parse cleanly, so nothing else would say that the flag went nowhere.
 //
-// run calls it between parsing and running.
+// CLI.Validate calls it while kong parses.
 func rejectMisplacedFlags(kctx *kong.Context) error {
 	onPath := map[*kong.Flag]bool{}
 	for node := kctx.Selected(); node != nil; node = node.Parent {
@@ -117,7 +120,7 @@ func rejectMisplacedFlags(kctx *kong.Context) error {
 	}
 	for _, path := range kctx.Path {
 		if path.Flag != nil && !onPath[path.Flag] {
-			return fmt.Errorf("--%s is not a flag of %s; put flags after the command name", path.Flag.Name, kctx.Command())
+			return fmt.Errorf("--%s was given before the command %s; put flags after the command name", path.Flag.Name, kctx.Command())
 		}
 	}
 	return nil
