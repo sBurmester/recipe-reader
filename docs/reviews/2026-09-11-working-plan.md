@@ -679,8 +679,10 @@ re-opens a settled one or assumes a live one is settled:
       zero with the default, so `IMPORT_MAX_ITEMS=0` — plausibly meant as
       "pause imports" — would have imported fifty posts. Tested: defaults, env
       and flag overrides, the refusal, and the values reaching the fetcher.
-      **Still open:** `.env.example` does not list them, and could not be
-      edited in this session; it needs a manual update.
+      ~~**Still open:** `.env.example` does not list them, and could not be
+      edited in this session; it needs a manual update.~~ **Done by hand:**
+      `.env.example` now lists both, together with the `LLM_*` keys and
+      `EXTRACTION_PUBLISH_THRESHOLD`.
 - [x] **T-17 · 5.0 · S** — Lifecycle owner for the detached import goroutine — `go` #4 — `internal/api/handlers_import.go` (`context.WithoutCancel` + `go d.Worker.RunOnce`)
       **CORRECTED in round 2:** this is *not* a use-after-close. `puddle/v2@v2.2.2/pool.go:179-195` destroys only idle resources, leaving an in-flight connection untouched, and the process usually exits first. The rating holds at 5.0 on different reasoning — high likelihood, small blast radius, **zero diagnosability**, since the truncated run is never reported.
       **DONE — the worker owns its runs, and shutdown stops them and waits.**
