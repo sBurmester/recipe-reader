@@ -217,11 +217,11 @@ Es gibt vier Milestones. Jeder endet in einem **releasefähigen Stand**: Tests, 
 **Ergebnis:** Die Logik verlässt das Paket `main`, noch ohne kong-Umbau. Das ist die risikoärmste Hälfte der Aufgabe: reine Verschiebungen, abgesichert durch die mitwandernden Tests.
 
 Abnahmekriterien:
-- [ ] `cmd/recipe-reader/` enthält nur noch `main.go` und `version.go`; `main.go` lädt nur noch die Config und dispatcht.
-- [ ] `internal/healthcheck` und `internal/server` enthalten die verschobenen Tests, und alle sind grün.
-- [ ] `TestRun_ServesUntilCancelledThenReturnsNil` (Task 2) ist grün: `server.Run` migriert eine leere Datenbank, antwortet auf `/api/healthz` und gibt nach dem Abbruch seines Kontexts `nil` zurück.
-- [ ] Die Laufzeit-Stichprobe aus Task 2, Step 7 ist bestanden: Die gebaute Binary antwortet gegen eine Wegwerf-Datenbank, und nach `SIGTERM` endet der Prozess mit Exit 0.
-- [ ] Das Verhalten ist unverändert: Die Flag-Liste von `--help` ist identisch mit der Baseline, `--health-check` eingeschlossen.
+- [x] `cmd/recipe-reader/` enthält nur noch `main.go` und `version.go`; `main.go` lädt nur noch die Config und dispatcht.
+- [x] `internal/healthcheck` und `internal/server` enthalten die verschobenen Tests, und alle sind grün.
+- [x] `TestRun_ServesUntilCancelledThenReturnsNil` (Task 2) ist grün: `server.Run` migriert eine leere Datenbank, antwortet auf `/api/healthz` und gibt nach dem Abbruch seines Kontexts `nil` zurück.
+- [x] Die Laufzeit-Stichprobe aus Task 2, Step 7 ist bestanden: Die gebaute Binary antwortet gegen eine Wegwerf-Datenbank, und nach `SIGTERM` endet der Prozess mit Exit 0.
+- [x] Das Verhalten ist unverändert: Die Flag-Liste von `--help` ist identisch mit der Baseline, `--health-check` eingeschlossen.
 
 Deckt ab: die Vorarbeit für Z3 und US3.
 
@@ -280,11 +280,11 @@ Entschieden am 2026-09-19: **ein PR pro Milestone**, wie zuletzt im Repo üblich
 
 ### Aufgabenliste
 
-- [ ] **Plan-PR:** diese Datei über `docs/kong-cli-refactor-plan` nach `main` bringen
-- [ ] **M1: Paket `main` entschlackt**
-  - [ ] **Vorbereitung:** Branch, Werkzeug-Versionen und Baseline
-  - [ ] **Task 1:** Health-Probe nach `internal/healthcheck` (S)
-  - [ ] **Task 2:** Composition Root nach `internal/server` (M)
+- [x] **Plan-PR:** diese Datei über `docs/kong-cli-refactor-plan` nach `main` bringen
+- [x] **M1: Paket `main` entschlackt**
+  - [x] **Vorbereitung:** Branch, Werkzeug-Versionen und Baseline
+  - [x] **Task 1:** Health-Probe nach `internal/healthcheck` (S)
+  - [x] **Task 2:** Composition Root nach `internal/server` (M)
 - [ ] **M2: kong-Kommandobaum**
   - [ ] **Task 3:** kong-Kommandobaum in `internal/cli`; `healthcheck` ersetzt `--health-check` (L)
 - [ ] **M3: Konfiguration gruppiert**
@@ -316,7 +316,7 @@ Entschieden am 2026-09-19. **Start erst nach Freigabe durch den Nutzer.**
 
 ### Vorbereitung: Branch, Werkzeug-Versionen und Baseline
 
-- [ ] **Step 1: Branch für M1 anlegen.** Voraussetzung ist, dass der Plan-PR gemerged ist (siehe „Branches und PRs“). Ist die Datei noch nicht auf `main`, hier anhalten und den Nutzer fragen, statt von einem anderen Branch abzuzweigen.
+- [x] **Step 1: Branch für M1 anlegen.** Voraussetzung ist, dass der Plan-PR gemerged ist (siehe „Branches und PRs“). Ist die Datei noch nicht auf `main`, hier anhalten und den Nutzer fragen, statt von einem anderen Branch abzuzweigen.
 
 ```bash
 git switch main && git pull --ff-only
@@ -326,7 +326,7 @@ git switch -c refactor/kong-cli-extract-main
 
 (Die Branches für M2 bis M4 entstehen nach demselben Muster zu Beginn des jeweiligen Milestones; siehe „Branches und PRs“.)
 
-- [ ] **Step 2: Werkzeug-Versionen prüfen** (Pflicht laut `~/.claude/CLAUDE.md`: immer die neueste stabile Go- und golangci-lint-Version)
+- [x] **Step 2: Werkzeug-Versionen prüfen** (Pflicht laut `~/.claude/CLAUDE.md`: immer die neueste stabile Go- und golangci-lint-Version)
 
 ```bash
 go version
@@ -341,7 +341,7 @@ Erwartet (Stand 2026-09-19): `go1.27.1` lokal, in `go.mod` und als neueste Versi
 - Ist golangci-lint veraltet: mit dem Install-Befehl aus `~/.claude/CLAUDE.md` aktualisieren. Das ändert nur das Werkzeug, es gibt keinen Commit.
 - Gibt es eine neuere stabile Go-Version: lokal installieren, dann die `go`-Direktive (`go mod edit -go=<version>`), das `golang:<major.minor>-alpine`-Image im `Dockerfile` und `go-version` in `.github/workflows/ci.yml` anheben. Danach laufen Commit-Gate und Docker-Gate, und es folgt ein eigener Commit `build: bump Go to <version>` vor Task 1.
 
-- [ ] **Step 3: Ausgangszustand prüfen**
+- [x] **Step 3: Ausgangszustand prüfen**
 
 ```bash
 go test ./... 2>&1 | tail -n 20
@@ -371,7 +371,7 @@ Reine Verschiebung. `probeHealth` wird zu `healthcheck.Probe`, weil es außerhal
 - Consumes: —
 - Produces: `func healthcheck.Probe(ctx context.Context, listenAddr string) error` (Semantik unverändert: nil nur bei 200 und `{"status":"ok"}`; loopback für unspezifizierte Hosts; 3-s-Timeout)
 
-- [ ] **Step 1: Test verschieben und umstellen**
+- [x] **Step 1: Test verschieben und umstellen**
 
 ```bash
 mkdir -p internal/healthcheck
@@ -381,12 +381,12 @@ sed -i 's/^package main$/package healthcheck/; s/probeHealth/Probe/g' internal/h
 
 (`s/probeHealth/Probe/g` ist case-sensitiv; Testnamen wie `TestProbeHealth_…` bleiben erhalten.)
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test ./internal/healthcheck/`
 Expected: FAIL, `undefined: Probe` und `undefined: dialAddr`
 
-- [ ] **Step 3: Implementierung verschieben**
+- [x] **Step 3: Implementierung verschieben**
 
 ```bash
 git mv cmd/recipe-reader/healthcheck.go internal/healthcheck/healthcheck.go
@@ -402,7 +402,7 @@ Dann in `internal/healthcheck/healthcheck.go` die Zeile `package main` ersetzen 
 package healthcheck
 ```
 
-- [ ] **Step 4: `main.go` umstellen**
+- [x] **Step 4: `main.go` umstellen**
 
 In `cmd/recipe-reader/main.go` den Import `"github.com/sBurmester/recipe-reader/internal/healthcheck"` ergänzen (alphabetisch nach `.../internal/extraction`) und in `run()` ersetzen:
 
@@ -424,12 +424,12 @@ durch
 	}
 ```
 
-- [ ] **Step 5: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 5: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go test ./internal/healthcheck/ ./cmd/recipe-reader/ && go build ./...`
 Expected: PASS für beide Pakete, Build ohne Fehler.
 
-- [ ] **Step 6: Commit-Gate und Commit**
+- [x] **Step 6: Commit-Gate und Commit**
 
 ```bash
 git add -A cmd/recipe-reader internal/healthcheck
@@ -459,7 +459,7 @@ Reine Verschiebung von `run()` (ohne Config-Laden und Signal-Handling), `newExtr
 - Consumes: `healthcheck.Probe` (Task 1), `config.Config`/`config.Load` (unverändert), `testdb.NewDatabase(t, name) string`, `testdb.Main(m)`
 - Produces: `func server.Run(ctx context.Context, cfg config.Config, version string) error`. Serviert, bis `ctx` abgebrochen wird, und wartet vor der Rückkehr auf Shutdown und Import. Intern: `newExtractor(cfg config.Config) (extraction.Extractor, error)`, `newHTTPServer(cfg config.Config, deps api.Deps) (*http.Server, error)`, `newFetcher(...)`, `alreadyImported(...)`, jeweils mit unveränderter Signatur.
 
-- [ ] **Step 1: Tests verschieben und umstellen**
+- [x] **Step 1: Tests verschieben und umstellen**
 
 ```bash
 mkdir -p internal/server
@@ -558,12 +558,12 @@ func freeLoopbackAddr(t *testing.T) string {
 }
 ```
 
-- [ ] **Step 2: Tests laufen lassen, sie müssen fehlschlagen**
+- [x] **Step 2: Tests laufen lassen, sie müssen fehlschlagen**
 
 Run: `go test ./internal/server/`
 Expected: FAIL, `undefined: newExtractor`, `undefined: newHTTPServer`, `undefined: newFetcher`, `undefined: Run`
 
-- [ ] **Step 3: Funktionen aus `main.go` extrahieren** (vor Step 5, weil `main.go` dort überschrieben wird)
+- [x] **Step 3: Funktionen aus `main.go` extrahieren** (vor Step 5, weil `main.go` dort überschrieben wird)
 
 ```bash
 {
@@ -608,7 +608,7 @@ sed -i 's/^package main$/package server/; s/^\t"context"$/\t"context"\n\t"errors
 
 Prüfen: `http.go` enthält den `const (...)`-Block mit den vier Timeouts **und** `func newHTTPServer`. In den Kommentaren steht jetzt „separated from Run“ bzw. „Run needs a database and a socket“. „Run itself has no seam at all“ wäre mit `run_test.go` aus Step 1 nicht mehr wahr.
 
-- [ ] **Step 4: `internal/server/server.go` anlegen**
+- [x] **Step 4: `internal/server/server.go` anlegen**
 
 ```go
 // Package server is the composition root of the long-running process: it
@@ -730,7 +730,7 @@ func Run(ctx context.Context, cfg config.Config, version string) error {
 }
 ```
 
-- [ ] **Step 5: `cmd/recipe-reader/main.go` durch den Dispatcher ersetzen**
+- [x] **Step 5: `cmd/recipe-reader/main.go` durch den Dispatcher ersetzen**
 
 ```go
 // Command recipe-reader loads its configuration and hands over to the server —
@@ -783,12 +783,12 @@ sed -i "s/Worker\.Start, which is main's —/Worker.Start, which is server.Run's
 grep -rn "main\.go\|main's" internal   # Expected: keine Treffer
 ```
 
-- [ ] **Step 6: Tests laufen lassen, sie müssen grün sein** (Docker muss laufen: `run_test.go` braucht Postgres)
+- [x] **Step 6: Tests laufen lassen, sie müssen grün sein** (Docker muss laufen: `run_test.go` braucht Postgres)
 
 Run: `go build ./... && go test ./internal/server/ ./internal/healthcheck/ ./cmd/recipe-reader/`
 Expected: PASS für `internal/server` (einschließlich `TestRun_ServesUntilCancelledThenReturnsNil`) und `internal/healthcheck`; `cmd/recipe-reader` meldet `[no test files]`.
 
-- [ ] **Step 7: Laufzeit-Stichprobe** (die gebaute Binary einmal echt starten und per `SIGTERM` beenden; das prüft die Signal-Verdrahtung in `main`, die `run_test.go` nicht erreicht)
+- [x] **Step 7: Laufzeit-Stichprobe** (die gebaute Binary einmal echt starten und per `SIGTERM` beenden; das prüft die Signal-Verdrahtung in `main`, die `run_test.go` nicht erreicht)
 
 Die Stichprobe läuft gegen eine Wegwerf-Datenbank, **nicht** über `make db-up`. Das würde den `db`-Dienst des echten Compose-Projekts mit dem Volume `db-data` starten. Postgres setzt das Passwort nur bei der ersten Initialisierung; bei einem bestehenden Volume mit anderem Passwort scheitert die Anmeldung, und die Stichprobe liefe gegen echte Daten. Port `18080` muss frei sein.
 
@@ -814,7 +814,7 @@ docker rm -f "$db" >/dev/null
 
 Expected: `probe ok`, danach `exit=0` und kein `graceful shutdown failed` im Log. Die Binary wird direkt gestartet und nicht über `go run`, damit das `SIGTERM` den Prozess selbst erreicht. Statt `sleep` wird gepollt, und zwar mit der Probe der Binary selbst. `docker rm -f` auch dann ausführen, wenn ein Schritt davor scheitert.
 
-- [ ] **Step 8: Commit-Gate und Commit**
+- [x] **Step 8: Commit-Gate und Commit**
 
 ```bash
 git add -A cmd/recipe-reader internal
