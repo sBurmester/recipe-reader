@@ -85,7 +85,7 @@
 - [ ] Ein Flag vor dem Kommandonamen wird abgelehnt (Exit 1), statt stillschweigend verloren zu gehen: `recipe-reader --http-addr 10.0.0.1:9090 healthcheck` prüft nicht die Default-Adresse, sondern scheitert mit dem Hinweis, Flags hinter das Kommando zu schreiben (Entscheidung E11).
 
 **US3: Entwickler.** *Als Entwickler möchte ich Wiring und CLI ohne `os.Exit` und ohne Datenbank testen können.*
-- [ ] Die Logik der Kommandos liegt in `internal/cli`, `internal/server` und `internal/healthcheck` und ist dort getestet; `cmd/recipe-reader/` enthält nur `main.go` (Kommandobaum, Parsen und Dispatch, E13) und dessen Tests.
+- [ ] Die Arbeit der Kommandos liegt in `internal/server` und `internal/healthcheck` und ist dort getestet; die dünnen `Run`-Methoden in `internal/cli` testet `cmd/recipe-reader/main_test.go` mit; `cmd/recipe-reader/` enthält nur `main.go` (Kommandobaum, Parsen und Dispatch, E13) und dessen Tests.
 - [ ] `run(args, opts...)` in `main.go` ist ohne Prozess-Exit testbar (kong-`Exit`/`Writers` injizierbar); den Exit-Status von `main()` prüft ein Test in einem Kindprozess (E13).
 
 **US4: Betreiber liest die Hilfe.** *Als Betreiber möchte ich schnell finden, was ich einstellen kann.*
@@ -112,9 +112,9 @@
 | E8 | DI über kong-Bindings: `kong.BindTo(ctx, (*context.Context)(nil))` und `kong.Bind(BuildVersion(v))` | kong bindet über den **konkreten** Typ (`callbacks.go`, `bindings.add`). Ein `kong.Bind(ctx)` würde einen `context.Context`-Parameter also nicht bedienen. |
 | E9 | `migrate` ist im Scope, ein einmaliges `import` landet im Backlog | `migrate` ist ein bereits existierender, klar abgegrenzter Schritt und kostet wenig. `import` teilt sich die Session-Datei und die Login-Rationierung (15-Minuten-Floor) mit einem laufenden Server und braucht ein eigenes Design. |
 | E10 | `Dockerfile` bekommt `CMD ["serve"]` | Macht den Default sichtbar; `docker run <image> migrate` bzw. `--version` überschreiben `CMD` wie gewohnt. |
-| E11 | `run` in `main.go` lehnt nach dem Parsen jedes Flag ab, das nicht zu einem Knoten auf dem gewählten Kommandopfad gehört (`rejectMisplacedFlags`; ursprünglich in `cli.Run`, siehe E13) | Wegen `withargs` liest kong ein Flag vor dem Kommandonamen als `serve`-Flag und wechselt erst danach das Kommando. `recipe-reader --http-addr X healthcheck` prüfte so still die Default-Adresse, `--db-dsn X migrate` würde die Default-Datenbank migrieren. Im Review vom 2026-09-19 per Prototyp gegen kong v1.16.1 nachgewiesen, ebenso der Guard. |
+| E11 | `CLI.Validate` in `main.go` lehnt beim Parsen jedes Flag ab, das nicht zu einem Knoten auf dem gewählten Kommandopfad gehört (`rejectMisplacedFlags` als kong-Hook am Wurzelknoten, sodass jeder Parser aus `newParser` ihn anwendet; ursprünglich ein eigener Aufruf in `cli.Run` bzw. `run`, siehe E13 und Milestone-Review M2, F10) | Wegen `withargs` liest kong ein Flag vor dem Kommandonamen als `serve`-Flag und wechselt erst danach das Kommando. `recipe-reader --http-addr X healthcheck` prüfte so still die Default-Adresse, `--db-dsn X migrate` würde die Default-Datenbank migrieren. Im Review vom 2026-09-19 per Prototyp gegen kong v1.16.1 nachgewiesen, ebenso der Guard. |
 | E12 | Die Gruppen werden über `kong.ExplicitGroups(config.Groups())` deklariert; die Beschreibungen von HTTP, Instagram und LLM nennen die env-only Credentials der Gruppe | `serve --help` zeigt die App-Beschreibung nicht (Prototyp), also dort, wo die Flags stehen, bisher auch keine Credentials. Die Beschreibungen liegen in `internal/config` neben den Feldern. Der API_TOKEN-Satz wandert aus dem Help-Text von `Listen` in die HTTP-Beschreibung, damit `healthcheck --help` nicht behauptet, die Probe brauche einen Token. |
-| E13 | **Kommandobaum, Parsen und Dispatch liegen in `cmd/recipe-reader/main.go`; `internal/cli` enthält nur die Kommandos** (Nutzerentscheidungen vom 2026-09-19, während M2). `main.go` enthält den Baum `CLI` (Felder `cli.ServeCmd`, `cli.HealthCheckCmd`, ab Task 5 `cli.MigrateCmd`), `description`, `rejectMisplacedFlags` (E11), `newParser` und `run`. `main()` ruft `run(os.Args[1:])`, loggt einen Fehler als eine Zeile und endet mit 1. `run` bindet den Signal-Kontext (`BindTo`, E8) und `cli.BuildVersion`, parst, ruft `rejectMisplacedFlags` und `kctx.Run()`. `internal/cli` enthält die Kommando-Typen mit ihren `Run`-Methoden und `BuildVersion`. Die Tests der Kommandozeile liegen in `cmd/recipe-reader/main_test.go` | Der Nutzer will `run` in `main.go` und kein `cli.Main`, das `main` aufruft. Den kong-Parser baut `main.go` selbst (Variante „alles in main.go“ statt eines `cli.Parse`-Helfers). Ein eigenes Paket für Baum und Dispatch ergibt keinen Sinn, in `internal/cli` gehören nur die Kommandos. Ersetzt die ursprüngliche Endform aus Task 3 (`main.go` ≤ 25 Zeilen, Imports `os` + `internal/cli`, `cli.Main`/`cli.Run`). `newParser` ist gegenüber der Skizze des Nutzers ausgelagert, damit die Parse-Tests denselben Parser nutzen, ohne ein Kommando auszuführen. |
+| E13 | **Kommandobaum, Parsen und Dispatch liegen in `cmd/recipe-reader/main.go`; `internal/cli` enthält nur die Kommandos** (Nutzerentscheidungen vom 2026-09-19, während M2). `main.go` enthält den Baum `CLI` (Felder `cli.ServeCmd`, `cli.HealthCheckCmd`, ab Task 5 `cli.MigrateCmd`), `description`, `rejectMisplacedFlags` (E11), `newParser` und `run`. `main()` ruft `run(os.Args[1:])`, loggt einen Fehler als eine Zeile und endet mit 1. `run` bindet den Signal-Kontext (`BindTo`, E8) und `cli.BuildVersion`, parst (kong ruft dabei `CLI.Validate` → `rejectMisplacedFlags`, E11) und ruft `kctx.Run()`. `internal/cli` enthält die Kommando-Typen mit ihren `Run`-Methoden und `BuildVersion`. Die Tests der Kommandozeile liegen in `cmd/recipe-reader/main_test.go` | Der Nutzer will `run` in `main.go` und kein `cli.Main`, das `main` aufruft. Den kong-Parser baut `main.go` selbst (Variante „alles in main.go“ statt eines `cli.Parse`-Helfers). Ein eigenes Paket für Baum und Dispatch ergibt keinen Sinn, in `internal/cli` gehören nur die Kommandos. Ersetzt die ursprüngliche Endform aus Task 3 (`main.go` ≤ 25 Zeilen, Imports `os` + `internal/cli`, `cli.Main`/`cli.Run`). `newParser` ist gegenüber der Skizze des Nutzers ausgelagert, damit die Parse-Tests denselben Parser nutzen, ohne ein Kommando auszuführen. |
 
 ### Risiken
 
@@ -161,7 +161,7 @@
 ```
 cmd/recipe-reader/
   main.go                  # var version; CLI (Baum), description; main() → run(); run: newParser, BindTo/Bind,
-                           # Parse, rejectMisplacedFlags, kctx.Run() (E13)
+                           # Parse (CLI.Validate → rejectMisplacedFlags), kctx.Run() (E13)
   main_test.go, migrate_test.go, testmain_test.go (TestMain → testdb.Main)
 internal/cli/              # nur die Kommandos (E13)
   cli.go                   # Paket-Doc, BuildVersion
@@ -238,7 +238,7 @@ Abnahmekriterien:
 - [ ] Das Docker-Gate ist grün, und der Image-`HEALTHCHECK` meldet mit dem neuen Kommando `healthy`.
 - [ ] Der Breaking Change ist in der README (Abschnitt „Commands“) und als `BREAKING CHANGE:`-Footer in der PR-Beschreibung dokumentiert (siehe „Branches und PRs“).
 
-Deckt ab: Z1 (Kern), Z2, Z3, Z4, Z5 sowie die Entscheidungen E1 bis E8, E10 und E11.
+Deckt ab: Z1 (Kern), Z2, Z3, Z4, Z5 sowie die Entscheidungen E1 bis E8, E10, E11 und E13.
 
 #### M3: Konfiguration gruppiert
 
@@ -308,7 +308,7 @@ Entschieden am 2026-09-19. **Start erst nach Freigabe durch den Nutzer.**
 
 - **Orchestrierung:** Die Hauptsession führt die Umsetzung mit `superpowers:subagent-driven-development`. Sie selbst schreibt keinen Produktionscode, sondern verteilt die Tasks und prüft die Ergebnisse.
 - **Ein frischer Subagent pro Task**, in der Reihenfolge Vorbereitung → Task 1 → 2 → 3 → 4 → 5 → Abschluss-Verifikation. **Strikt nacheinander, nie parallel:** Jeder Task baut auf den Paketen des vorigen auf. Die Tasks eines Milestones arbeiten auf dessen Branch (siehe „Branches und PRs“).
-- **Auftrag an den Subagent:** der vollständige Task-Abschnitt aus dieser Datei samt Files- und Interfaces-Block, dazu die *Global Constraints*, die Tabelle *Entscheidungen* (E1–E12) und die Zeile R1 aus *Risiken* in Teil A. Mehr Kontext bekommt er nicht. Was er aus früheren Tasks braucht, steht in deren „Produces“. Die Entscheidungen gehören dazu, weil die Tasks auf ihnen beruhen, ohne sie zu wiederholen: Wer E4, E6 oder E8 nicht kennt, „verbessert“ `BeforeApply` zu `AfterApply`, `BindTo` zu `Bind` oder `Main` zu `FatalIfErrorf` und bricht damit, was die Tests absichern. R1 ist die Referenz, an der er eine Abweichung erkennt (siehe unten).
+- **Auftrag an den Subagent:** der vollständige Task-Abschnitt aus dieser Datei samt Files- und Interfaces-Block, dazu die *Global Constraints*, die Tabelle *Entscheidungen* (E1–E13) und die Zeile R1 aus *Risiken* in Teil A. Mehr Kontext bekommt er nicht. Was er aus früheren Tasks braucht, steht in deren „Produces“. Die Entscheidungen gehören dazu, weil die Tasks auf ihnen beruhen, ohne sie zu wiederholen: Wer E4, E6 oder E8 nicht kennt, „verbessert“ `BeforeApply` zu `AfterApply`, `BindTo` zu `Bind` oder `main` zu `FatalIfErrorf` und bricht damit, was die Tests absichern. R1 ist die Referenz, an der er eine Abweichung erkennt (siehe unten).
 - **Zweistufiges Review nach jedem Task**, bevor der nächste startet:
   1. **Plan-Treue:** Wurden alle Steps umgesetzt, Kommentare beim Verschieben wortgleich übernommen, Flag- und Env-Namen unverändert gelassen, keine Arbeit aus späteren Tasks vorgezogen?
   2. **Code-Qualität:** Korrektheit, Tests und Kommentarstil; außerdem müssen Commit-Gate bzw. Docker-Gate nachweislich grün gelaufen sein (Ausgabe gesehen, nicht nur behauptet).
@@ -316,7 +316,7 @@ Entschieden am 2026-09-19. **Start erst nach Freigabe durch den Nutzer.**
 - **Commit:** genau ein Commit pro Task mit der Message aus dem jeweiligen Commit-Step, erst nach bestandenem Review. Ausnahmen sind reine Versions-Bumps (Vorbereitung, Step 2; Task 3, Step 0): Sie bekommen einen eigenen `build:`-Commit vor dem Task-Commit, damit der Refactoring-Commit keine fremde Änderung mitträgt.
 - **Abhaken:** Nach jedem bestandenen Task hakt die Hauptsession dessen Steps und den Eintrag in der Aufgabenliste in dieser Datei ab. Einen Milestone hakt sie erst ab, wenn alle seine Abnahmekriterien nachgewiesen sind und sein Milestone-Review abgeschlossen ist.
 - **Milestone-Review (Pflicht, vom Nutzer am 2026-09-19 ergänzt):** Nach jeder Fertigstellung eines Milestones MUSS ein neuer Subagent ein Review durchführen. Ein weiterer Subagent soll die gefundenen Review-Findings bewerten und abarbeiten.
-  1. **Review:** Ein frischer Subagent auf dem stärksten verfügbaren Modell prüft den gesamten Diff des Milestones (`git merge-base main HEAD`..`HEAD`) gegen die Abnahmekriterien des Milestones, die *Global Constraints* und die Entscheidungen E1–E12. Er schreibt jeden Befund mit Schweregrad (Critical/Important/Minor), `Datei:Zeile` und Begründung in eine Datei. Das Review ist rein lesend.
+  1. **Review:** Ein frischer Subagent auf dem stärksten verfügbaren Modell prüft den gesamten Diff des Milestones (`git merge-base main HEAD`..`HEAD`) gegen die Abnahmekriterien des Milestones, die *Global Constraints* und die Entscheidungen E1–E13. Er schreibt jeden Befund mit Schweregrad (Critical/Important/Minor), `Datei:Zeile` und Begründung in eine Datei. Das Review ist rein lesend.
   2. **Bewertung und Abarbeitung:** Ein zweiter, frischer Subagent bewertet jeden Befund mit Begründung als *berechtigt*, *unberechtigt*, *gehört in einen späteren Task* oder *widerspricht dem Plan*. Die berechtigten behebt er. Danach lässt er das Commit-Gate (bzw. das Docker-Gate, wenn `Dockerfile` oder `scripts/` betroffen sind) laufen und committet die Korrekturen mit Footer. Befunde, die dem Plan widersprechen, behebt er nicht; die Hauptsession legt sie dem Nutzer zur Entscheidung vor.
   3. Die Hauptsession prüft die Bewertung und die Korrektur-Commits und legt beides zusammen mit der Milestone-Abnahme vor.
 
@@ -1580,6 +1580,13 @@ Beides steckt in einem Commit (`refactor: parse and dispatch in main.go`). Der P
 
 Die Code-Blöcke von Step 1, 5, 6 und 7 oben zeigen den ursprünglichen Stand. Task 4 und Task 5 sind auf E13 umgestellt.
 
+**Abweichungen aus dem Milestone-Review von M2** (Nutzerentscheidungen vom 2026-09-19; eigene Commits nach dem E13-Commit):
+- **F10:** Der Guard gegen verirrte Flags läuft als kong-Hook `CLI.Validate` am Wurzelknoten statt als eigener Aufruf in `run`. Damit wendet ihn jeder Parser aus `newParser` an. Sein Test ist jetzt ein reiner Parse-Test (`TestParse_FlagBeforeAnotherCommandIsRefused`) und kann auch bei einem Rückschritt nichts ausführen (F4).
+- **F6:** Die Meldung lautet `--<flag> was given before the command <cmd>; put flags after the command name`, weil das Kommando das Flag durchaus haben kann.
+- **F2/F3:** Ein neuer Test prüft, dass `serve` die vier Credentials über den Kommandobaum liest, mit und ohne Kommandonamen. Die beiden Ablehnungstests prüfen jetzt den Grund. Der Healthcheck-Test deckt zusätzlich einen `Reset`-Fehler ab (`IMPORT_INTERVAL=banana`). `TestMain_ExitStatus` prüft auch ein fehlschlagendes Kommando, zeigt die Ausgabe des Kindprozesses und bricht nach 30 s ab.
+- **F5/F7/F13:** Kommentare korrigiert. Der `Version`-Kommentar ist korrigiert, die Begründung aus `version.go` steht wieder am `version`-Kommentar, und der `loadArgs`-Kommentar nennt kongs tatsächliche Reihenfolge. Die Testmeldungen sagen `loadArgs(` statt `load(`.
+- **F12/F14:** Kommentar in `scripts/smoke-test-image.sh` umgebrochen; `web/src/main.ts` verweist auf `internal/server` als Composition Root.
+
 ---
 
 ### Task 4: Settings in Optionsgruppen pro Belang
@@ -1591,7 +1598,7 @@ Die Code-Blöcke von Step 1, 5, 6 und 7 oben zeigen den ursprünglichen Stand. T
 - Modify: `internal/config/config_test.go` (`TestLLMSettings_Precedence`, plus `TestLLMSettings_FallbacksAreProviderScoped` aus `internal/server/server_test.go`), plus `sed` über alle Config-Tests
 - Modify: `internal/server/*.go` (`sed`, einschließlich `run_test.go` aus Task 2), `internal/server/server_test.go` (`baseConfig`; `TestLLMSettings_FallbacksAreProviderScoped` zieht nach `internal/config`)
 - Modify: `internal/cli/healthcheck.go` (bettet `config.Listen` ein), `cmd/recipe-reader/main.go` (`kong.ExplicitGroups` in `newParser`, E13), `cmd/recipe-reader/main_test.go` (`sed` + zwei neue Help-Tests)
-- Modify (nur Kommentare): `internal/pipeline/worker.go:74`, `internal/pipeline/worker_lifecycle_test.go:65`, `internal/api/middleware.go:173` (`config.Config.Validate` → die Gruppe, die die Regel jetzt trägt)
+- Modify (nur Kommentare): `internal/pipeline/worker.go:74`, `internal/pipeline/worker_lifecycle_test.go:65`, `internal/api/middleware.go:172` (`config.Config.Validate` → die Gruppe, die die Regel jetzt trägt)
 - Modify: `README.md` (Configuration)
 
 **Interfaces:**
@@ -2114,7 +2121,7 @@ In `## Configuration`:
 - [ ] **Step 8: Commit-Gate und Commit**
 
 ```bash
-git add -A internal README.md
+git add -A cmd internal README.md
 git commit -m "refactor(config): split settings into per-concern kong groups" -m "Config becomes an aggregate of embedded groups, each validating itself and reading its own env-only credentials in BeforeApply. Flag and environment names are unchanged; serve --help now shows one heading per group, whose description names the env-only credentials the group reads, and healthcheck shares config.Listen instead of redeclaring the flag."
 ```
 
@@ -2130,7 +2137,7 @@ Führt Migration und Seed aus und beendet sich. `serve` und `migrate` teilen sic
 - Modify: `internal/server/server.go` (nutzt `db.Open`)
 - Create: `internal/cli/migrate.go`, `cmd/recipe-reader/migrate_test.go`, `cmd/recipe-reader/testmain_test.go` (Dateiname wie in den anderen Paketen mit `testdb.Main`; die Tests liegen nach E13 bei `run` in `package main`)
 - Modify: `cmd/recipe-reader/main.go` (Feld `Migrate` in `CLI`; E13)
-- Modify: `cmd/recipe-reader/main_test.go` (`migrate`-Fall in `TestRun_FlagBeforeAnotherCommandIsRefused`)
+- Modify: `cmd/recipe-reader/main_test.go` (`migrate`-Fall in `TestParse_FlagBeforeAnotherCommandIsRefused`)
 - Modify: `README.md` (Commands, Architecture)
 
 **Interfaces:**
@@ -2246,7 +2253,7 @@ func TestParse_MigrateIgnoresServeValidation(t *testing.T) {
 }
 ```
 
-In `cmd/recipe-reader/main_test.go` die Tabelle von `TestRun_FlagBeforeAnotherCommandIsRefused` um den Fall ergänzen, der ohne E11 der gefährlichere wäre, weil er still die Default-Datenbank migrieren würde:
+In `cmd/recipe-reader/main_test.go` die Tabelle von `TestParse_FlagBeforeAnotherCommandIsRefused` um den Fall ergänzen, der ohne E11 der gefährlichere wäre, weil er still die Default-Datenbank migrieren würde. Der Test parst nur und führt nichts aus (Milestone-Review M2, F4/F10), sodass auch ein Rückschritt des Guards keine Datenbank anfasst:
 
 ```go
 		{"--db-dsn", unreachableDSN, "migrate"},
@@ -2255,7 +2262,7 @@ In `cmd/recipe-reader/main_test.go` die Tabelle von `TestRun_FlagBeforeAnotherCo
 - [ ] **Step 3: Tests laufen lassen, sie müssen fehlschlagen**
 
 Run: `go test ./internal/db/ ./cmd/recipe-reader/`
-Expected: FAIL, `undefined: db.Open`. In `cmd/recipe-reader` scheitert `parse(migrate)` mit `unexpected argument migrate`, und der neue Fall in `TestRun_FlagBeforeAnotherCommandIsRefused` scheitert mit derselben Meldung statt mit dem Hinweis „after the command name“.
+Expected: FAIL, `undefined: db.Open`. In `cmd/recipe-reader` scheitert `parse(migrate)` mit `unexpected argument migrate`, und der neue Fall in `TestParse_FlagBeforeAnotherCommandIsRefused` scheitert mit derselben Meldung statt mit dem Hinweis „after the command name“.
 
 - [ ] **Step 4: `db.Open` implementieren** (`internal/db/connect.go`, nach `Connect`)
 
@@ -2367,7 +2374,7 @@ In `## Architecture` im Absatz aus Task 3: `\`healthcheck\` to \`internal/health
 - [ ] **Step 9: Commit-Gate und Commit**
 
 ```bash
-git add -A internal README.md
+git add -A cmd internal README.md
 git commit -m "feat(cli): add a migrate command" -m "Runs Migrate, Connect and Seed and exits, reading only DB_DSN. db.Open now holds that order for serve and migrate alike."
 ```
 
