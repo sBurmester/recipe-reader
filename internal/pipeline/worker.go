@@ -105,8 +105,8 @@ func (w *Worker) Start(ctx context.Context) {
 // Detaching the run from the request was right — the request's context ends
 // the moment the handler answers 202. Detaching it from everything was not:
 // nothing owned that goroutine, so shutdown drained the HTTP server, returned
-// from run() and closed the database pool beneath it, and the truncated run was
-// never reported because the process was already gone.
+// from run() (now server.Run) and closed the database pool beneath it, and the
+// truncated run was never reported because the process was already gone.
 func (w *Worker) Trigger() {
 	w.mu.Lock()
 	ctx := w.base
