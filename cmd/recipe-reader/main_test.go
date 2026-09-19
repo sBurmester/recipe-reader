@@ -308,10 +308,9 @@ func TestMain_ExitStatus(t *testing.T) {
 		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestMain_ExitStatus$")
 		cmd.Env = append(os.Environ(), "RECIPE_READER_MAIN_ARGS="+tc.args)
 		code := 0
-		var exitErr *exec.ExitError
 		out, err := cmd.CombinedOutput()
 		cancel()
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			code = exitErr.ExitCode()
 		} else if err != nil {
 			t.Fatalf("run the test binary: %v", err)

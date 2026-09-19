@@ -180,11 +180,11 @@ func TestClient_Run_HonoursCallerCancellation(t *testing.T) {
 }
 
 func TestAuthErrorClassification(t *testing.T) {
-	loginRequired := &igerrors.LoginRequired{ClientError: igerrors.ClientError{Status: http.StatusUnauthorized}}
-	challenge := &igerrors.ChallengeRequired{ClientError: igerrors.ClientError{Message: "challenge_required"}}
+	loginRequired := &igerrors.LoginRequired{Status: http.StatusUnauthorized}
+	challenge := &igerrors.ChallengeRequired{Message: "challenge_required"}
 	twoFactor := &igerrors.TwoFactorRequired{ClientError: igerrors.ClientError{}}
 	badPassword := &igerrors.BadPassword{ClientError: igerrors.ClientError{}}
-	throttled := &igerrors.ClientThrottled{ClientError: igerrors.ClientError{Status: http.StatusTooManyRequests}}
+	throttled := &igerrors.ClientThrottled{Status: http.StatusTooManyRequests}
 
 	// Only an expired session is worth a re-login. A challenge, a second
 	// factor or a rejected password needs a human, and spending a login
