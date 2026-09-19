@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net/http/httptest"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alecthomas/kong"
 
@@ -132,6 +134,7 @@ func TestParse_HealthCheckIgnoresServeValidation(t *testing.T) {
 	t.Setenv("HTTP_ADDR", ":8080")
 	t.Setenv("IMPORT_MAX_ITEMS", "0")
 	t.Setenv("EXTRACTION_MODE", "banana")
+	t.Setenv("IMPORT_INTERVAL", "banana")
 
 	root, kctx, err := parse(t, "healthcheck")
 	if err != nil {
@@ -151,8 +154,8 @@ func TestParse_ServeStillValidates(t *testing.T) {
 	t.Setenv("API_TOKEN", "")
 	t.Setenv("HTTP_ADDR", ":8080")
 
-	if _, _, err := parse(t); err == nil {
-		t.Error("parse() error = nil, want serve to refuse a non-loopback bind without API_TOKEN")
+	if _, _, err := parse(t); err == nil || !strings.Contains(err.Error(), "API_TOKEN") {
+		t.Errorf("parse() error = %v, want serve to refuse a non-loopback bind without API_TOKEN", err)
 	}
 }
 
@@ -190,8 +193,8 @@ func TestParse_ServeReadsCredentialsFromTheEnvironment(t *testing.T) {
 // must fail loudly — not fall through to the default command and start a server.
 func TestParse_LegacyHealthCheckFlagIsRefused(t *testing.T) {
 	clearEnv(t)
-	if _, _, err := parse(t, "--health-check"); err == nil {
-		t.Error("parse(--health-check) error = nil, want an unknown-flag refusal")
+	if _, _, err := parse(t, "--health-check"); err == nil || !strings.Contains(err.Error(), "unknown flag") {
+		t.Errorf("parse(--health-check) error = %v, want an unknown-flag refusal", err)
 	}
 }
 
@@ -199,14 +202,14 @@ func TestParse_LegacyHealthCheckFlagIsRefused(t *testing.T) {
 // another command as serve's and only then switches commands. Unguarded,
 // `--http-addr X healthcheck` probed the default address instead of X, and
 // reported on whatever answered there. It has to be refused instead (E11).
-func TestRun_FlagBeforeAnotherCommandIsRefused(t *testing.T) {
+func TestParse_FlagBeforeAnotherCommandIsRefused(t *testing.T) {
 	clearEnv(t)
 	for _, args := range [][]string{
 		{"--http-addr", "127.0.0.1:1", "healthcheck"},
 	} {
-		err := run(args)
+		_, _, err := parse(t, args...)
 		if err == nil || !strings.Contains(err.Error(), "after the command name") {
-			t.Errorf("run(%q) error = %v, want a refusal saying where the flag goes", args, err)
+			t.Errorf("parse(%q) error = %v, want a refusal saying where the flag goes", args, err)
 		}
 	}
 }
@@ -296,19 +299,25 @@ func TestMain_ExitStatus(t *testing.T) {
 		want int
 	}{
 		{"--does-not-exist", 1},
+		{"healthcheck --http-addr 127.0.0.1:1", 1},
 		{"healthcheck --http-addr " + srv.Listener.Addr().String(), 0},
 	} {
-		cmd := exec.Command(os.Args[0], "-test.run=^TestMain_ExitStatus$")
+		// A child that started serve by mistake would never exit on its own;
+		// the deadline turns that into a failure instead of a hung test binary.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestMain_ExitStatus$")
 		cmd.Env = append(os.Environ(), "RECIPE_READER_MAIN_ARGS="+tc.args)
 		code := 0
 		var exitErr *exec.ExitError
-		if err := cmd.Run(); errors.As(err, &exitErr) {
+		out, err := cmd.CombinedOutput()
+		cancel()
+		if errors.As(err, &exitErr) {
 			code = exitErr.ExitCode()
 		} else if err != nil {
 			t.Fatalf("run the test binary: %v", err)
 		}
 		if code != tc.want {
-			t.Errorf("recipe-reader %s exited %d, want %d", tc.args, code, tc.want)
+			t.Errorf("recipe-reader %s exited %d, want %d; output:\n%s", tc.args, code, tc.want, out)
 		}
 	}
 }
