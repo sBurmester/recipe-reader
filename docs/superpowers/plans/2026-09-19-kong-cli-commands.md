@@ -138,6 +138,7 @@
 
 - `import`-Kommando für einen einmaligen Importlauf ohne Server. Offene Fragen: gleichzeitiger Betrieb mit laufendem `serve` (Session-Datei, Login-Floor) und Ausgabeformat.
 - `--log-level` / `--log-format` als globale Flags.
+- `server.Run` soll auch bei einem Fehler drainen (aus dem Milestone-Review von M1, F2). Heute kehrt `Run` sofort zurück, wenn `newHTTPServer` oder `ListenAndServe` scheitert (z. B. Port belegt). Der Pool ist dann geschlossen, aber der bereits gestartete Import-Zeitplan und die Shutdown-Goroutine laufen unter `ctx` weiter, bis der Aufrufer ihn abbricht. Das Verhalten ist nicht neu; beide Aufrufer beenden den Prozess danach mit 1. Seit M1 steht es im Doc-Kommentar. Vorschlag: am Anfang `ctx, cancel := context.WithCancel(ctx)` mit `defer cancel()`, `worker.Start` erst nach erfolgreichem `newHTTPServer`, und im Fehlerpfad von `ListenAndServe` `cancel()` gefolgt von `<-shutdownDone`. Danach den Absatz im Doc-Kommentar kürzen.
 
 ---
 
@@ -831,6 +832,14 @@ git add -A cmd/recipe-reader internal
 git commit -m "refactor: move the composition root into internal/server" -m "run(), newExtractor, newServer (now newHTTPServer), the server timeouts, newFetcher and alreadyImported move out of package main unchanged; main only loads config and dispatches."
 ```
 
+**Abweichungen aus dem Milestone-Review von M1** (vom Nutzer am 2026-09-19 entschieden, eigene Commits nach dem Task-Commit):
+- Der grep in Step 5 (`main\.go\|main's`) trifft auch `domain's` in `internal/api/handlers_recipes.go` und `handlers_recipes_test.go`. Das sind zwei erwartete Fehltreffer; künftige greps dieser Art nutzen Wortgrenzen (`\bmain's`).
+- **F1:** Der Doc-Kommentar von `run_test.go` versprach, die Shutdown-Reihenfolge abzusichern. Das kann der Test nicht: Ohne Instagram-Account gibt es keinen Worker, und auch ohne `<-shutdownDone` bleibt er grün. Deshalb konfiguriert der Test jetzt einen Account ohne Passwort, sodass ein Worker existiert, und prüft, dass `GET /api/import/status` den abgelehnten Login als `instagram_auth` meldet. Das ist der erste Test des `pipeline.ErrLogin`-Wraps in `Run`. Der Kommentar sagt jetzt ausdrücklich, dass die Drain-Reihenfolge nicht geprüft wird.
+- **F2:** Der Doc-Kommentar von `Run` beschreibt jetzt auch den Fehlerpfad, der ohne Drain zurückkehrt. Die Verhaltenskorrektur steht im Backlog in Teil A.
+- **F3/F5:** In `http.go` ist die Begründung für `newHTTPServer` korrigiert (`Run` hat keinen Signal-Handler mehr). Die per `sed` verlängerten Kommentarzeilen in `server_test.go`, `http.go` und `bounds_test.go` sind auf 80 Spalten umgebrochen. `worker_lifecycle_test.go` folgt in Task 4, Step 5c.
+- **F6:** Die drei Tests von `newHTTPServer` heißen jetzt `TestNewHTTPServer_*`, weil `\bnewServer\b` nicht in `TestNewServer_` greift. `TestLLMSettings_FallbacksAreProviderScoped` zieht in Task 4 nach `internal/config`.
+- **F4/F7** (ohne Planbezug): In `internal/pipeline` und `.github/workflows/ci.yml` sind veraltete Kommentare korrigiert.
+
 ---
 
 ### Task 3: kong-Kommandobaum in `internal/cli`; `healthcheck` ersetzt `--health-check`
@@ -844,8 +853,8 @@ Kern des Umbaus. `config.Load` entfällt. kong parst jetzt einen Baum `CLI{Versi
 - Modify: `internal/config/credentials_test.go` (Description-Test zieht nach `cli`)
 - Delete: `internal/config/version_test.go` (zieht nach `cli`), `cmd/recipe-reader/version.go` (geht in `main.go` auf)
 - Modify: `cmd/recipe-reader/main.go` (Endform)
-- Modify: `internal/healthcheck/healthcheck.go:22` (Doc-Kommentar)
-- Modify (nur Kommentare, die `config.validate` nennen): `internal/pipeline/worker.go:74`, `internal/pipeline/worker_lifecycle_test.go:65`, `internal/api/middleware.go:173`
+- Modify: `internal/healthcheck/healthcheck.go:25` (Doc-Kommentar)
+- Modify (nur Kommentare, die `config.validate` bzw. `config.Load` nennen): `internal/pipeline/worker.go:74`, `internal/pipeline/worker_lifecycle_test.go:65`, `internal/api/middleware.go:15,173`
 - Modify: `Dockerfile:46-55`, `docker-compose.yml:53`, `scripts/smoke-test-image.sh:78-81`, `README.md`
 - Evtl. Modify (Step 0, eigener Commit): `Dockerfile` (`FROM`-Zeilen), `.github/workflows/ci.yml` (`node-version`)
 
@@ -1408,10 +1417,15 @@ sed -i 's/see Config\.validate for when/see Config.Validate for when/' internal/
 sed -i 's/config\.validate rejects one now/config.Config.Validate rejects one now/' \
   internal/pipeline/worker.go internal/pipeline/worker_lifecycle_test.go
 sed -i 's/by Config\.validate, so it cannot/by config.Config.Validate, so it cannot/' internal/api/middleware.go
-grep -rn 'config\.Load\|Load refuses\|onfig\.validate' internal cmd   # Expected: keine Treffer
+sed -i 's/which config\.Load only permits on a loopback/which config validation only permits on a loopback/' internal/api/middleware.go
+grep -rn 'config\.Load\|Load refuses\|onfig\.validate' internal   # Expected: keine Treffer
 ```
 
+Danach in `internal/api/middleware.go` den Absatz von `// Token is the bearer token` bis `// UI.` auf 80 Spalten umbrechen, ohne Wörter zu ändern; die neue Formulierung macht die Zeile länger. Der grep läuft hier nur über `internal`, weil `cmd/recipe-reader/main.go` `config.Load` bis Step 7 noch aufruft; Step 7 wiederholt ihn über `internal cmd`.
+
 (Task 4 zieht die drei `config.Config.Validate` auf die Gruppe nach, die die Regel dann trägt.)
+
+*Nachgetragen im Milestone-Review von M1 (F9):* Die `middleware.go:15`-Zeile, die Aufteilung des grep und die Zeilennummer `healthcheck.go:25` fehlten in der ursprünglichen Fassung. Ohne sie hätte der grep garantiert zwei Treffer geliefert.
 
 - [ ] **Step 7: `main.go` in die Endform bringen**
 
@@ -1442,6 +1456,12 @@ var version = "dev"
 func main() {
 	os.Exit(cli.Main(os.Args[1:], version))
 }
+```
+
+Danach den grep aus Step 6 über beide Verzeichnisse wiederholen:
+
+```bash
+grep -rn 'config\.Load\|Load refuses\|onfig\.validate' internal cmd   # Expected: keine Treffer
 ```
 
 - [ ] **Step 8: Tests laufen lassen, sie müssen grün sein**
@@ -1550,8 +1570,8 @@ Der Footer hier dokumentiert den Commit. `main` erreicht er nur über die PR-Bes
 
 **Files:**
 - Modify: `internal/config/config.go` (komplett ersetzt, Code in Step 4)
-- Modify: `internal/config/config_test.go` (`TestLLMSettings_Precedence`), plus `sed` über alle Config-Tests
-- Modify: `internal/server/*.go` (`sed`, einschließlich `run_test.go` aus Task 2), `internal/server/server_test.go` (`baseConfig`, `TestLLMSettings_FallbacksAreProviderScoped`)
+- Modify: `internal/config/config_test.go` (`TestLLMSettings_Precedence`, plus `TestLLMSettings_FallbacksAreProviderScoped` aus `internal/server/server_test.go`), plus `sed` über alle Config-Tests
+- Modify: `internal/server/*.go` (`sed`, einschließlich `run_test.go` aus Task 2), `internal/server/server_test.go` (`baseConfig`; `TestLLMSettings_FallbacksAreProviderScoped` zieht nach `internal/config`)
 - Modify: `internal/cli/healthcheck.go` (bettet `config.Listen` ein), `internal/cli/cli.go` (`kong.ExplicitGroups`), `internal/cli/cli_test.go` (`sed` + zwei neue Help-Tests)
 - Modify (nur Kommentare): `internal/pipeline/worker.go:74`, `internal/pipeline/worker_lifecycle_test.go:65`, `internal/api/middleware.go:173` (`config.Config.Validate` → die Gruppe, die die Regel jetzt trägt)
 - Modify: `README.md` (Configuration)
@@ -1651,7 +1671,7 @@ EOF
 sed -i -f "$fields" internal/server/*.go internal/config/*_test.go internal/cli/*_test.go
 ```
 
-Struct-Literale erfasst `sed` nicht. Diese drei Stellen von Hand ersetzen:
+Struct-Literale erfasst `sed` nicht. Diese drei Stellen von Hand ersetzen (die zweite zieht dabei um):
 
 `internal/server/server_test.go`, `baseConfig`:
 
@@ -1665,20 +1685,22 @@ func baseConfig(mode string) config.Config {
 }
 ```
 
-`internal/server/server_test.go`, `TestLLMSettings_FallbacksAreProviderScoped`, Rumpf:
+`TestLLMSettings_FallbacksAreProviderScoped` samt Doc-Kommentar aus `internal/server/server_test.go` löschen und in `internal/config/config_test.go` direkt nach `TestLLMSettings_Precedence` einfügen. Er testet eine Methode aus `internal/config` und gehört neben seinen Geschwistertest. Kommentar und Name bleiben, der Rumpf lautet dort (ohne Paketpräfix):
 
 ```go
-	anthropic := config.LLM{Provider: "anthropic", AnthropicAPIKey: "sk-ant", AnthropicModel: "claude-x"}
+	anthropic := LLM{Provider: "anthropic", AnthropicAPIKey: "sk-ant", AnthropicModel: "claude-x"}
 	settings, ok := anthropic.Settings()
 	if !ok || settings.APIKey != "sk-ant" || settings.Model != "claude-x" {
 		t.Errorf("anthropic settings = %+v, ok = %v", settings, ok)
 	}
 
-	openAI := config.LLM{Provider: "openai", AnthropicAPIKey: "sk-ant"}
+	openAI := LLM{Provider: "openai", AnthropicAPIKey: "sk-ant"}
 	if settings, ok := openAI.Settings(); ok {
 		t.Errorf("openai settings = %+v, ok = %v — ANTHROPIC_API_KEY must not carry over", settings, ok)
 	}
 ```
+
+(*Nachgetragen im Milestone-Review von M1, F6.* In `package main` war die Trennung von seinem Geschwistertest harmlos; seit Task 2 liegt eine echte Paketgrenze dazwischen.)
 
 `internal/config/config_test.go`, `TestLLMSettings_Precedence`, Rumpf:
 
@@ -2049,6 +2071,8 @@ sed -i 's/config\.Config\.Validate rejects one now/config.Import.Validate reject
 sed -i 's/by config\.Config\.Validate, so it cannot/by config.HTTP.Validate, so it cannot/' internal/api/middleware.go
 grep -rn 'config\.Config\.Validate\|Config\.Validate for' internal   # Expected: keine Treffer
 ```
+
+Danach die beiden Absätze mit `config.Import.Validate rejects one now` (`internal/pipeline/worker.go` und `internal/pipeline/worker_lifecycle_test.go`) und den Absatz mit `config.HTTP.Validate` in `internal/api/middleware.go` auf 80 Spalten umbrechen, ohne Wörter zu ändern. Das geht erst jetzt, weil die `sed`s von Task 3 und Task 4 jeweils auf eine ganze Zeile zielen (*nachgetragen im Milestone-Review von M1, F5*).
 
 - [ ] **Step 6: Tests laufen lassen, sie müssen grün sein**
 
