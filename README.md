@@ -572,12 +572,13 @@ provides the empty database for that.
 
 ## Architecture
 
-The binary's own layering is deliberately thin. `cmd/recipe-reader` holds only `main.go`, which
-hands the command line and the link-time version to `internal/cli`. That package is the kong
-command tree, and each command's `Run` delegates at once: `serve` to `internal/server`, the
-composition root that wires database, extraction, Instagram, import worker and HTTP API;
-`healthcheck` to `internal/healthcheck`. The settings are declared and validated in
-`internal/config`.
+The binary's own layering is deliberately thin. `cmd/recipe-reader/main.go` holds the kong command
+tree and parses the command line against it, refusing a flag placed before a command it does not
+belong to; `main` turns any failure into one log line and exit status 1. The commands themselves
+live in `internal/cli`, one type per command whose fields are its flags, and each command's `Run`
+delegates at once: `serve` to `internal/server`, the composition root that wires database,
+extraction, Instagram, import worker and HTTP API; `healthcheck` to `internal/healthcheck`. The
+settings are declared and validated in `internal/config`.
 
 See
 [the implementation plan](docs/superpowers/plans/2026-09-05-recipe-reader-implementation.md)

@@ -1,20 +1,18 @@
-package cli
+package main
 
 import (
 	"bytes"
-	"context"
+	"errors"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/alecthomas/kong"
 
 	"github.com/sBurmester/recipe-reader/internal/api"
 )
-
-const testVersion = "v0.0.0-test"
 
 // credentialEnvs are the four settings with no flag form. The model cannot
 // list them — they are not flags — so they are named here, once, for clearEnv
@@ -36,7 +34,7 @@ const unreachableDSN = "postgres://recipes:x@127.0.0.1:1/recipes?sslmode=disable
 func clearEnv(t *testing.T) {
 	t.Helper()
 	var root CLI
-	parser, err := newParser(&root, testVersion)
+	parser, err := newParser(&root)
 	if err != nil {
 		t.Fatalf("newParser() error = %v", err)
 	}
@@ -83,12 +81,12 @@ func exitOf(f func()) (code exitCode, exited bool) {
 	return 0, false
 }
 
-// parse builds the parser the way Run does and parses args without running
+// parse builds the parser the way run does and parses args without running
 // the selected command.
 func parse(t *testing.T, args ...string) (*CLI, *kong.Context, error) {
 	t.Helper()
 	var root CLI
-	parser, err := newParser(&root, testVersion, panicOnExit())
+	parser, err := newParser(&root, panicOnExit())
 	if err != nil {
 		t.Fatalf("newParser() error = %v", err)
 	}
@@ -176,9 +174,9 @@ func TestRun_FlagBeforeAnotherCommandIsRefused(t *testing.T) {
 	for _, args := range [][]string{
 		{"--http-addr", "127.0.0.1:1", "healthcheck"},
 	} {
-		err := Run(context.Background(), args, testVersion)
+		err := run(args)
 		if err == nil || !strings.Contains(err.Error(), "after the command name") {
-			t.Errorf("Run(%q) error = %v, want a refusal saying where the flag goes", args, err)
+			t.Errorf("run(%q) error = %v, want a refusal saying where the flag goes", args, err)
 		}
 	}
 }
@@ -187,13 +185,15 @@ func TestRun_FlagBeforeAnotherCommandIsRefused(t *testing.T) {
 // including the default one, which would otherwise start a server.
 func TestRun_VersionPrintsTheStampedVersionAndExits(t *testing.T) {
 	clearEnv(t)
+	defer func(v string) { version = v }(version)
+	version = "v1.2.3-4-gabc1234"
+
 	var out bytes.Buffer
 	code, exited := exitOf(func() {
-		_ = Run(context.Background(), []string{"--version"}, "v1.2.3-4-gabc1234",
-			kong.Writers(&out, &out), panicOnExit())
+		_ = run([]string{"--version"}, kong.Writers(&out, &out), panicOnExit())
 	})
 	if !exited {
-		t.Fatal("Run(--version) returned; it must exit before any command runs")
+		t.Fatal("run(--version) returned; it must exit before any command runs")
 	}
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
@@ -218,48 +218,68 @@ func TestParse_VersionIsFlagOnly(t *testing.T) {
 	}
 }
 
-// Run reaches serve's Run with ctx and BuildVersion bound. mode=llm without a
+// run reaches serve's Run with ctx and BuildVersion bound. mode=llm without a
 // key is the one serve failure that happens before the database is touched, so
 // it proves the dispatch without Postgres; a missing binding would fail with a
-// kong error instead. unreachableDSN and the deadline are the safety net should
-// that ever stop being true: without them serve would migrate the default
-// database and then serve until the test binary times out.
+// kong error instead. unreachableDSN is the safety net should that ever stop
+// being true: without it serve would migrate the default database and then
+// serve until the test binary times out.
 func TestRun_ServeIsDispatchedWithItsBindings(t *testing.T) {
 	clearEnv(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
 	args := []string{"--extraction-mode", "llm", "--db-dsn", unreachableDSN}
-	err := Run(ctx, args, testVersion)
+	err := run(args)
 	if err == nil || !strings.Contains(err.Error(), "needs an API key") {
-		t.Errorf("Run(--extraction-mode llm) error = %v, want serve's missing-key refusal", err)
+		t.Errorf("run(--extraction-mode llm) error = %v, want serve's missing-key refusal", err)
 	}
 }
 
-// Run dispatches healthcheck to the probe, against the real API router.
+// run dispatches healthcheck to the probe, against the real API router.
 func TestRun_HealthCheckProbesARunningServer(t *testing.T) {
 	clearEnv(t)
 	srv := httptest.NewServer(api.NewRouter(api.Deps{}, api.Security{}))
 	defer srv.Close()
 
 	args := []string{"healthcheck", "--http-addr", srv.Listener.Addr().String()}
-	if err := Run(context.Background(), args, testVersion); err != nil {
-		t.Errorf("Run(healthcheck) error = %v, want nil against a healthy server", err)
+	if err := run(args); err != nil {
+		t.Errorf("run(healthcheck) error = %v, want nil against a healthy server", err)
 	}
 }
 
-// Every failure exits 1 — a rejected command line as much as a failed
-// command — because 0 and 1 are what a container HEALTHCHECK understands.
+// Every failure exits 1 — a rejected command line as much as a failed command
+// — because 0 and 1 are what a container HEALTHCHECK understands. Only main
+// turns an error into a status, and it ends the process doing so, so each
+// case runs main in a child: this test binary, re-executed with the command
+// line in RECIPE_READER_MAIN_ARGS.
 func TestMain_ExitStatus(t *testing.T) {
-	clearEnv(t)
-	if code := Main([]string{"--does-not-exist"}, testVersion); code != 1 {
-		t.Errorf("Main(--does-not-exist) = %d, want 1", code)
+	if args, ok := os.LookupEnv("RECIPE_READER_MAIN_ARGS"); ok {
+		os.Args = append([]string{"recipe-reader"}, strings.Fields(args)...)
+		main()
+		os.Exit(0)
 	}
-
+	clearEnv(t)
 	srv := httptest.NewServer(api.NewRouter(api.Deps{}, api.Security{}))
 	defer srv.Close()
-	if code := Main([]string{"healthcheck", "--http-addr", srv.Listener.Addr().String()}, testVersion); code != 0 {
-		t.Errorf("Main(healthcheck) = %d, want 0 against a healthy server", code)
+
+	for _, tc := range []struct {
+		args string
+		want int
+	}{
+		{"--does-not-exist", 1},
+		{"healthcheck --http-addr " + srv.Listener.Addr().String(), 0},
+	} {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestMain_ExitStatus$")
+		cmd.Env = append(os.Environ(), "RECIPE_READER_MAIN_ARGS="+tc.args)
+		code := 0
+		var exitErr *exec.ExitError
+		if err := cmd.Run(); errors.As(err, &exitErr) {
+			code = exitErr.ExitCode()
+		} else if err != nil {
+			t.Fatalf("run the test binary: %v", err)
+		}
+		if code != tc.want {
+			t.Errorf("recipe-reader %s exited %d, want %d", tc.args, code, tc.want)
+		}
 	}
 }
 
