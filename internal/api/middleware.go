@@ -11,12 +11,11 @@ import (
 
 // Security carries the API's access controls.
 //
-// Token is the bearer token every state-changing request must present; an
-// empty Token disables the check, which config.Load only permits on a loopback
-// bind. AllowedOrigins is the set of browser origins allowed to read this
-// API's responses — the bundled frontend is same-origin and needs none of
-// them, so this exists for the Vite dev server and for any separately hosted
-// UI.
+// Token is the bearer token every state-changing request must present; an empty
+// Token disables the check, which config validation only permits on a loopback
+// bind. AllowedOrigins is the set of browser origins allowed to read this API's
+// responses — the bundled frontend is same-origin and needs none of them, so
+// this exists for the Vite dev server and for any separately hosted UI.
 type Security struct {
 	Token          string
 	AllowedOrigins []string
@@ -170,7 +169,7 @@ func withCORS(allowed []string, next http.Handler) http.Handler {
 // using the user's own network position as the credential.
 //
 // An empty token disables the check entirely. That combination is confined to
-// a loopback bind by Config.validate, so it cannot be the accidental state of
+// a loopback bind by config.Config.Validate, so it cannot be the accidental state of
 // a network-reachable deployment.
 func withAuth(token string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1,5 +1,7 @@
-// Package config loads runtime configuration from command-line flags and
-// environment variables using github.com/alecthomas/kong.
+// Package config declares recipe-reader's settings as kong flags and validates
+// them. It parses nothing itself: internal/cli embeds Config into the serve
+// command, and kong fills it — and calls BeforeApply and Validate — only when
+// serve is the command being run.
 package config
 
 import (
@@ -7,8 +9,6 @@ import (
 	"net"
 	"os"
 	"time"
-
-	"github.com/alecthomas/kong"
 )
 
 // Config holds all runtime configuration for the recipe-reader service.
@@ -17,24 +17,13 @@ import (
 // environment variable, then the built-in default. The four credentials are the
 // exception — they have no flag form at all; see readCredentials.
 type Config struct {
-	// Version is not a setting: it is kong's --version flag, which prints the
-	// version Load was given and exits before anything else is parsed. It is
-	// declared here because kong has no other place to hang a flag.
-	Version kong.VersionFlag `name:"version" help:"Print the version and exit."`
-
-	// HealthCheck is not a setting either: it turns the binary into a probe of
-	// an already running server, for the image's HEALTHCHECK. The runtime image
-	// has no curl or wget, and adding one only to probe ourselves would grow it
-	// for the sake of one GET.
-	HealthCheck bool `name:"health-check" help:"Probe the server already listening on HTTP_ADDR and exit 0 if /api/healthz answers ok, 1 otherwise. For container health checks."`
-
 	// HTTPAddr defaults to loopback rather than all interfaces: the insecure
 	// combination (no token, network-reachable) is then something an operator
 	// has to ask for, not something they get by leaving a field unset.
 	HTTPAddr string `name:"http-addr" env:"HTTP_ADDR" default:"127.0.0.1:8080" help:"Address the HTTP server listens on. Binding beyond loopback requires API_TOKEN."`
 	DBDSN    string `name:"db-dsn" env:"DB_DSN" default:"postgres://recipes:recipes@localhost:5432/recipes?sslmode=disable" help:"PostgreSQL connection string."`
 
-	// APIToken guards the mutating routes; see Config.validate for when it is
+	// APIToken guards the mutating routes; see Config.Validate for when it is
 	// mandatory. It is read from API_TOKEN only. CORSOrigins is the
 	// browser-origin allowlist — the bundled frontend is same-origin and needs
 	// no entry, so the default covers only the Vite dev server.
@@ -85,13 +74,6 @@ type Config struct {
 	ImportMaxPages int `name:"import-max-pages" env:"IMPORT_MAX_PAGES" default:"100" help:"Most feed pages one import run walks, whether or not they held anything new."`
 }
 
-// description is the --help preamble. It names the credentials because kong
-// cannot: they are not flags, so it has no entry to list them under.
-const description = "Imports recipes from Instagram saved posts, extracts structured data, and serves a searchable web UI.\n\n" +
-	"Credentials are read from the environment only, never from flags: API_TOKEN (bearer token for writes; " +
-	"required on a non-loopback HTTP_ADDR), INSTAGRAM_PASSWORD, LLM_API_KEY, and ANTHROPIC_API_KEY " +
-	"(fallback for LLM_API_KEY with the anthropic provider)."
-
 // LLMSettings is the resolved configuration for the LLM extractor, after the
 // ANTHROPIC_* fallbacks have been applied.
 type LLMSettings struct {
@@ -130,39 +112,13 @@ func (c Config) LLMSettings() (LLMSettings, bool) {
 	return s, s.APIKey != ""
 }
 
-// Load parses configuration from the process command-line arguments and the
-// environment. See Config for the precedence rules.
-//
-// version is what --version prints. It is passed in rather than read here
-// because it is stamped into the binary at link time, which only the main
-// package can own.
-func Load(version string) (Config, error) {
-	return load(os.Args[1:], version)
-}
-
-// load is the testable core of Load, taking an explicit argument slice.
-//
-// opts are appended to the parser's own. Load passes none; it exists so a test
-// can supply kong.Exit, which --version calls after printing and which would
-// otherwise take the test binary down with it.
-func load(args []string, version string, opts ...kong.Option) (Config, error) {
-	var cfg Config
-	parser, err := kong.New(&cfg, append([]kong.Option{
-		kong.Name("recipe-reader"),
-		kong.Description(description),
-		kong.Vars{"version": version},
-	}, opts...)...)
-	if err != nil {
-		return Config{}, fmt.Errorf("config: %w", err)
-	}
-	if _, err := parser.Parse(args); err != nil {
-		return Config{}, fmt.Errorf("config: %w", err)
-	}
-	cfg.readCredentials()
-	if err := cfg.validate(); err != nil {
-		return Config{}, err
-	}
-	return cfg, nil
+// BeforeApply is a kong hook. It runs once defaults and environment variables
+// have been applied and before Validate — which is why the credentials are read
+// here and not in AfterApply: kong validates before AfterApply runs, and the
+// API_TOKEN rule in Validate has to see the token.
+func (c *Config) BeforeApply() error {
+	c.readCredentials()
+	return nil
 }
 
 // readCredentials fills in the four secrets from the environment.
@@ -181,8 +137,8 @@ func (c *Config) readCredentials() {
 	c.LLMAPIKey = os.Getenv("LLM_API_KEY")
 }
 
-// validate rejects configurations that parse but cannot be what the operator
-// meant.
+// Validate is called by kong after parsing. It rejects configurations that
+// parse but cannot be what the operator meant.
 //
 // The first is insecure by construction: a listener reachable from the network
 // with nothing in front of the mutating routes. Loopback without a token stays
@@ -205,7 +161,7 @@ func (c *Config) readCredentials() {
 // send every recipe to needs_review, and EXTRACTION_CONFIDENCE_THRESHOLD=80
 // would call the LLM for every post — on a paid API, indefinitely, with nothing
 // in the logs pointing at the configuration.
-func (c Config) validate() error {
+func (c Config) Validate() error {
 	if c.APIToken == "" && !isLoopbackAddr(c.HTTPAddr) {
 		return fmt.Errorf(
 			"config: API_TOKEN is required when HTTP_ADDR (%q) is not loopback — "+

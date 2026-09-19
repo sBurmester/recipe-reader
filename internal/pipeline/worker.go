@@ -71,7 +71,7 @@ func (w *Worker) Start(ctx context.Context) {
 
 	// time.NewTicker panics for a non-positive duration, on this goroutine —
 	// so a bad interval used to abort the process with a stack trace at
-	// startup. config.validate rejects one now, which is where an operator's
+	// startup. config.Config.Validate rejects one now, which is where an operator's
 	// typo belongs; this is the second line of defence for the callers that do
 	// not come through config, and it refuses loudly rather than crashing.
 	// Trigger still works, so an on-demand import is unaffected.

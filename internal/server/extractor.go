@@ -75,7 +75,7 @@ func newExtractor(cfg config.Config) (extraction.Extractor, error) {
 		return extraction.NewHybridExtractor(rules, llm, cfg.ExtractionThreshold), nil
 
 	default:
-		// Unreachable through config.Load — the kong enum rejects it first —
+		// Unreachable from the command line — the kong enum rejects it first —
 		// but newExtractor is also called with hand-built values in tests, and
 		// a silent fallthrough here is the defect this function exists to fix.
 		return nil, fmt.Errorf("unknown extraction mode %q (want rule, llm or hybrid)", cfg.ExtractionMode)

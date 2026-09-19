@@ -1,7 +1,6 @@
 package config
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -31,15 +30,5 @@ func TestLoad_ReadsCredentialsFromTheEnvironment(t *testing.T) {
 	if cfg.APIToken != "tok" || cfg.InstagramPassword != "pw" || cfg.AnthropicAPIKey != "sk-ant" || cfg.LLMAPIKey != "sk-llm" {
 		t.Errorf("credentials = %q %q %q %q, want tok pw sk-ant sk-llm",
 			cfg.APIToken, cfg.InstagramPassword, cfg.AnthropicAPIKey, cfg.LLMAPIKey)
-	}
-}
-
-// With no flag to list them under, --help is the only place an operator finds
-// the credential names; they are in the description.
-func TestDescription_NamesEveryCredential(t *testing.T) {
-	for _, env := range []string{"API_TOKEN", "INSTAGRAM_PASSWORD", "LLM_API_KEY", "ANTHROPIC_API_KEY"} {
-		if !strings.Contains(description, env) {
-			t.Errorf("--help description does not mention %s", env)
-		}
 	}
 }

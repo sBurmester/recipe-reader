@@ -1,37 +1,20 @@
-// Command recipe-reader loads its configuration and hands over to the server —
-// or, with --health-check, probes one that is already running.
+// Command recipe-reader imports recipes from Instagram saved posts and serves
+// them through a searchable web UI. Everything it does lives behind
+// internal/cli; this file hands over the command line and the version.
 package main
 
 import (
-	"context"
-	"log/slog"
 	"os"
-	"os/signal"
-	"syscall"
 
-	"github.com/sBurmester/recipe-reader/internal/config"
-	"github.com/sBurmester/recipe-reader/internal/healthcheck"
-	"github.com/sBurmester/recipe-reader/internal/server"
+	"github.com/sBurmester/recipe-reader/internal/cli"
 )
 
-func main() {
-	if err := run(); err != nil {
-		slog.Error("fatal", "error", err)
-		os.Exit(1)
-	}
-}
+// version identifies this build. It is stamped at link time — the Makefile and
+// the Dockerfile both pass `-ldflags "-X main.version=..."` from `git describe`
+// — and stays "dev" for a plain `go build` or `go run`. It is surfaced as
+// `recipe-reader --version` and as the version field of GET /api/healthz.
+var version = "dev"
 
-func run() error {
-	cfg, err := config.Load(version)
-	if err != nil {
-		return err
-	}
-	// A probe of another process, not a server: it touches no database and
-	// starts nothing. See healthcheck.Probe.
-	if cfg.HealthCheck {
-		return healthcheck.Probe(context.Background(), cfg.HTTPAddr)
-	}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	return server.Run(ctx, cfg, version)
+func main() {
+	os.Exit(cli.Main(os.Args[1:], version))
 }

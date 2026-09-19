@@ -30,12 +30,35 @@ and serves a searchable web UI. Single Go binary with the frontend embedded; Pos
 `POSTGRES_PASSWORD` has no default and compose refuses to start without it. Put the same password
 in your `.env` `DB_DSN` so the locally run binary can reach the container.
 
+## Commands
+
+The binary is a small [kong](https://github.com/alecthomas/kong) command tree. `serve` is the
+default: it runs when no command is named and takes its flags without one, so `recipe-reader` and
+`recipe-reader --http-addr 127.0.0.1:9090` start the server exactly as they always have.
+
+| Command | What it does |
+| --- | --- |
+| `serve` (default) | Runs the HTTP API, the embedded frontend and the background import worker. Takes every setting under [Configuration](#configuration). |
+| `healthcheck` | Probes the server already listening on `HTTP_ADDR` and exits 0 if `/api/healthz` answers ok, 1 otherwise. Reads `HTTP_ADDR` and nothing else. |
+
+`recipe-reader --help` lists the commands; `recipe-reader <command> --help` lists a command's flags
+and the environment variable behind each. `--version` works with or without a command. Flags go
+after the command name: `recipe-reader healthcheck --http-addr 127.0.0.1:9090`. Because `serve`
+takes its flags unnamed, a flag in front of another command would otherwise be read as a `serve`
+flag and silently dropped, so it is refused instead. Every failure, a rejected command line as
+much as a failed command, exits 1.
+
+`healthcheck` replaces the `--health-check` flag of earlier versions, which is now refused as an
+unknown flag. The image's own `HEALTHCHECK` ships in the same image as the binary and was switched
+with it; only a probe configured outside the image, such as an orchestrator's exec probe, needs
+updating.
+
 ## Configuration
 
-Configuration is handled by [kong](https://github.com/alecthomas/kong): settings can be supplied
-as a command-line flag or an environment variable, with flags taking precedence over the
-environment and the environment over the built-in defaults. Run `recipe-reader --help` for the
-full list. See `.env.example` for the environment-variable names and their defaults.
+Configuration is handled by [kong](https://github.com/alecthomas/kong): settings can be supplied as
+a command-line flag or an environment variable, with flags taking precedence over the environment
+and the environment over the built-in defaults. Run `recipe-reader serve --help` for the full list.
+See `.env.example` for the environment-variable names and their defaults.
 
 **Credentials are environment-only.** `API_TOKEN`, `INSTAGRAM_PASSWORD`, `LLM_API_KEY` and
 `ANTHROPIC_API_KEY` have no flag form: a value passed on the command line is visible to every user
@@ -423,7 +446,7 @@ table leaves the app nothing to migrate, and the ID sequences carry on from wher
 
 The image declares a `HEALTHCHECK`, and the probe is the binary itself:
 
-    recipe-reader --health-check     # exit 0 if /api/healthz on HTTP_ADDR answers {"status":"ok"}
+    recipe-reader healthcheck       # exit 0 if /api/healthz on HTTP_ADDR answers {"status":"ok"}
 
 The runtime image has no `curl` or `wget`, and adding one to probe ourselves would grow it for one
 `GET`. The probe dials loopback when `HTTP_ADDR` names every interface (`:8080`, as in the
@@ -548,6 +571,13 @@ previous version, writes the rows that need transforming, and migrates over them
 provides the empty database for that.
 
 ## Architecture
+
+The binary's own layering is deliberately thin. `cmd/recipe-reader` holds only `main.go`, which
+hands the command line and the link-time version to `internal/cli`. That package is the kong
+command tree, and each command's `Run` delegates at once: `serve` to `internal/server`, the
+composition root that wires database, extraction, Instagram, import worker and HTTP API;
+`healthcheck` to `internal/healthcheck`. The settings are declared and validated in
+`internal/config`.
 
 See
 [the implementation plan](docs/superpowers/plans/2026-09-05-recipe-reader-implementation.md)

@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/alecthomas/kong"
 )
 
 // clearEnv unsets the named environment variables for the duration of the test,
@@ -20,16 +22,18 @@ func clearEnv(t *testing.T, keys ...string) {
 	}
 }
 
-// testVersion is what loadArgs stamps as the build version. Only the
-// --version tests care what it is; every other test simply needs load's second
-// argument filled in.
-const testVersion = "v0.0.0-test"
-
-// loadArgs parses args the way Load parses the real command line, with a fixed
-// version stamp. It keeps the version out of the tests that are about
-// something else.
+// loadArgs parses args into a Config the way the serve command does: kong
+// applies flags, environment and defaults, then runs BeforeApply and Validate.
 func loadArgs(args []string) (Config, error) {
-	return load(args, testVersion)
+	var cfg Config
+	parser, err := kong.New(&cfg, kong.Name("recipe-reader"))
+	if err != nil {
+		return Config{}, err
+	}
+	if _, err := parser.Parse(args); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 func TestLoad_Defaults(t *testing.T) {
@@ -128,7 +132,7 @@ func TestLoad_UnknownFlag(t *testing.T) {
 
 // A network-reachable bind with no token in front of the mutating routes is
 // the combination that makes S1 exploitable from anywhere that can route to
-// the port, so Load refuses to produce it.
+// the port, so Validate refuses it.
 func TestLoad_RejectsNonLoopbackBindWithoutToken(t *testing.T) {
 	clearEnv(t, "API_TOKEN")
 

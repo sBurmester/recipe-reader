@@ -43,13 +43,16 @@ COPY --from=backend /recipe-reader /usr/local/bin/recipe-reader
 USER appuser
 WORKDIR /app
 EXPOSE 8080
-# The binary is its own probe: --health-check dials /api/healthz on HTTP_ADDR
-# with the container's own environment. This image has no curl or wget, and
-# adding one to probe ourselves would grow it for the sake of one GET. The
-# probe gives up after 3s, inside --timeout, so a hung server fails it with a
-# message rather than being killed by Docker without one. --start-interval
+# The binary is its own probe: `recipe-reader healthcheck` dials /api/healthz
+# on HTTP_ADDR with the container's own environment. This image has no curl or
+# wget, and adding one to probe ourselves would grow it for the sake of one GET.
+# The probe gives up after 3s, inside --timeout, so a hung server fails it with
+# a message rather than being killed by Docker without one. --start-interval
 # polls quickly while the server starts, so a healthy container reports so in
 # seconds rather than after the first 30s interval.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=2s --retries=3 \
-    CMD ["/usr/local/bin/recipe-reader", "--health-check"]
+    CMD ["/usr/local/bin/recipe-reader", "healthcheck"]
 ENTRYPOINT ["/usr/local/bin/recipe-reader"]
+# serve is the default command either way; naming it makes the default visible,
+# and `docker run <image> migrate` or `--version` replaces it as usual.
+CMD ["serve"]
