@@ -2,7 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"net"
+	"net/http"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -13,12 +16,22 @@ import (
 // Run is the composition root, and cancelling its context is how the process
 // stops: SIGTERM from Docker, Ctrl-C in a terminal. Against an empty database it
 // has to migrate, seed and serve, and once cancelled it has to drain and return
-// nil — not an error, and not never. Nothing else reaches the shutdown sequence,
-// whose order (server, then import, then pool) is the subtle part.
+// nil — not an error, and not never. The account it is given cannot log in, so
+// the worker exists: the refused login has to reach the import status as an
+// authentication failure, which only Run's pipeline.ErrLogin wrap makes it, and
+// the import half of the drain runs. The order of the drain (server, then
+// import, then pool) is not checked: a Run that returned without waiting for
+// it would pass as well.
 func TestRun_ServesUntilCancelledThenReturnsNil(t *testing.T) {
 	cfg := baseConfig("rule")
 	cfg.HTTPAddr = freeLoopbackAddr(t)
 	cfg.DBDSN = testdb.NewDatabase(t, "server_run")
+	// An account with no password: instago refuses the startup login before
+	// any request, so the worker exists without the test touching the network.
+	// ImportInterval is set because a zero one leaves the schedule unstarted.
+	cfg.InstagramUsername = "someone"
+	cfg.InstagramSessionPath = filepath.Join(t.TempDir(), "session.json")
+	cfg.ImportInterval = time.Hour
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -36,6 +49,22 @@ func TestRun_ServesUntilCancelledThenReturnsNil(t *testing.T) {
 			t.Fatal("GET /api/healthz did not answer ok within 30s")
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+
+	resp, err := http.Get("http://" + cfg.HTTPAddr + "/api/import/status")
+	if err != nil {
+		t.Fatalf("GET /api/import/status: %v", err)
+	}
+	var status struct {
+		Error string `json:"error"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&status)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("decode /api/import/status: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK || status.Error != "instagram_auth" {
+		t.Errorf("GET /api/import/status = %d, error %q; want 200, instagram_auth", resp.StatusCode, status.Error)
 	}
 
 	cancel()
