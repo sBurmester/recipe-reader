@@ -6,6 +6,13 @@
   "expect": {
     "no_recipe": false,
     "name": "Knusprige Waffeln",
+    "categories": [
+      "Frühstück",
+      "Dessert",
+      "Snack",
+      "Vegetarisch",
+      "Backen"
+    ],
     "ingredients": [
       {
         "name": "Eier",

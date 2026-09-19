@@ -1,4 +1,3 @@
-// internal/pipeline/worker.go
 package pipeline
 
 import (
@@ -143,26 +142,28 @@ func (w *Worker) Wait(ctx context.Context) error {
 	}
 }
 
-// RunOnce runs the pipeline synchronously and records the outcome. If a run
-// is already in progress, or Instagram is still being waited out after a rate
-// limit, it returns the previous result immediately without starting a second
-// one. The pipeline runs outside the lock so that Status stays responsive
-// during a long import.
-func (w *Worker) RunOnce(ctx context.Context) ImportResult {
+// RunOnce runs the pipeline synchronously, records the outcome, and returns it
+// with ran set. If a run is already in progress, or Instagram is still being
+// waited out after a rate limit, it starts nothing and returns ran false with
+// a zero result. The pipeline runs outside the lock so that Status stays
+// responsive during a long import.
+//
+// A skip used to return the previous run's result, so a caller could not tell
+// "ran and produced this" from "was busy, here is old data" — and old data is
+// exactly what a tally that looks healthy is made of. Status is where the last
+// run's outcome is read; RunOnce reports only its own.
+func (w *Worker) RunOnce(ctx context.Context) (result ImportResult, ran bool) {
 	w.mu.Lock()
 	if w.running {
-		result := w.lastResult
 		w.mu.Unlock()
-		return result
+		return ImportResult{}, false
 	}
 	if remaining := time.Until(w.cooldownUntil); remaining > 0 {
-		result := w.lastResult
 		w.mu.Unlock()
 		// Logged rather than skipped silently: a worker that declines to run
-		// looks identical to one that ran and found nothing, and the tally it
-		// returns is the previous run's.
+		// looks, from the outside, identical to one that ran and found nothing.
 		slog.Warn("import: skipped, still cooling down after a rate limit", "retry_in", remaining.Round(time.Second))
-		return result
+		return ImportResult{}, false
 	}
 	w.running = true
 	w.mu.Unlock()
@@ -188,7 +189,7 @@ func (w *Worker) RunOnce(ctx context.Context) ImportResult {
 			slog.Warn("import: run failed", "error", err, "result", result)
 		}
 	}
-	return result
+	return result, true
 }
 
 // Cooldown reports how long the worker will refuse to start a run, and is zero

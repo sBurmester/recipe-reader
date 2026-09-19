@@ -6,6 +6,10 @@
   "expect": {
     "no_recipe": false,
     "name": "Gemüseauflauf",
+    "categories": [
+      "Hauptgericht",
+      "Vegetarisch"
+    ],
     "ingredients": [
       {
         "name": "Kartoffeln",

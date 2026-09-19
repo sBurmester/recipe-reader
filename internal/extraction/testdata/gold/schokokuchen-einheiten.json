@@ -6,6 +6,11 @@
   "expect": {
     "no_recipe": false,
     "name": "Saftiger Schokokuchen",
+    "categories": [
+      "Dessert",
+      "Backen",
+      "Vegetarisch"
+    ],
     "ingredients": [
       {
         "name": "Mehl",

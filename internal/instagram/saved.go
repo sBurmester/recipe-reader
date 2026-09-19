@@ -1,4 +1,3 @@
-// internal/instagram/saved.go
 package instagram
 
 import (
@@ -91,13 +90,13 @@ type requester func(ctx context.Context, opts ig.PrivateRequestOpts) (map[string
 // See the Task 11 header note: the endpoint is unofficial and unverified —
 // run Step 6 against a real account before depending on this in production.
 func (c *Client) FetchSavedPosts(ctx context.Context, opts FetchOptions) ([]SavedPost, error) {
-	return pageMedia(ctx, c.do, "feed/saved/posts/", opts)
+	return pageMedia(ctx, c.send, "feed/saved/posts/", opts)
 }
 
 // ListCollections returns the account's saved-posts collections (the
 // auto "All Posts" collection plus any user-created ones).
 func (c *Client) ListCollections(ctx context.Context) ([]Collection, error) {
-	res, err := c.do(ctx, ig.PrivateRequestOpts{
+	res, err := c.send(ctx, ig.PrivateRequestOpts{
 		Endpoint: "collections/list/",
 		Params:   url.Values{"collection_types": {`["ALL_MEDIA_AUTO_COLLECTION","MEDIA"]`}},
 	})
@@ -136,7 +135,7 @@ func (c *Client) ResolveCollectionID(ctx context.Context, name string) (string, 
 
 // FetchCollectionPosts pages through the saved posts in one collection.
 func (c *Client) FetchCollectionPosts(ctx context.Context, collectionID string, opts FetchOptions) ([]SavedPost, error) {
-	return pageMedia(ctx, c.do, fmt.Sprintf("feed/collection/%s/posts/", collectionID), opts)
+	return pageMedia(ctx, c.send, fmt.Sprintf("feed/collection/%s/posts/", collectionID), opts)
 }
 
 // pageMedia walks the feed from its head, collecting posts opts.Known does not

@@ -3,10 +3,32 @@
 **Derived from:** the six-reviewer panel of 2026-09-11 ([index](README.md)),
 as adjudicated in the [consensus record](2026-09-11-consensus.md)
 **Source findings:** 66 post-round (72 entering, 1 withdrawn, 5 merged), **62 tasks**
-**Status:** in progress — bands ≥ 3.0 done except T-24 and T-43, plus T-61 (44 of 62)
+**Status:** done except the two tasks blocked on external access, T-24 and T-43 (60 of 62)
 
 Mark a task `[x]` when it is done. Each task cites the finding IDs it closes.
 
+> **Revision 7 — after Bands 2.0–2.9 and < 2.0 shipped (2026-09-19).** All
+> sixteen remaining tasks are done: T-48, T-49, T-50, T-54, T-51, T-13, T-52,
+> T-53, T-55, T-56, T-57, T-58, T-59, T-60, T-62 and T-63. **Every task that
+> can be done from the repository is now done**; T-24 and T-43 are the whole
+> of what is left, and both are blocked on access, not on work. Four diverged
+> from the plan and say so in their entries. **T-60** was done rather than kept
+> optional, because T-08 had changed its premise: lookups now run inside the
+> recipe transaction, so the row lock `DO UPDATE` took on every existing row
+> was held until the recipe committed. **T-55** was decided *against* the
+> constraint P9 offered (a recipe may list an ingredient twice) and for the
+> other one (positions are unique), in a new migration `0003`. **T-56**
+> re-resolves on more than a not-found error, because what the endpoint
+> answers for a deleted collection is exactly what T-43 would have told us.
+> **T-50** gives the compose service the image's health check by inheritance
+> rather than restating it. Two things were found and fixed on the way:
+> **every handler `500` discarded its error** (T-49's status alone would have
+> said a request failed but never why), and **logging sat inside recovery**, so
+> a request that panicked left no request line at all. Coverage 73.0% →
+> **75.8%**. Each new test was shown to fail with its fix reverted.
+> `golangci-lint`, `go vet`, `govulncheck` and the race-enabled suite are
+> clean; the image was built and smoke-tested, and the compose stack was run.
+>
 > **Revision 6 — after Band 3.0–3.9 shipped (2026-09-16).** Eleven of the
 > band's twelve tasks are done: T-42, T-39, T-40, T-44, T-32, T-41, T-45, T-46,
 > T-47, T-26 and T-33. **T-43 is the exception and is blocked, not deferred** —
@@ -131,9 +153,9 @@ proves. Run it as:
     RECIPE_READER_EVAL_LLM=1 ANTHROPIC_API_KEY=sk-... LLM_MODEL=<candidate> \
       go test ./internal/extraction -run GoldSetLLM -v
 
-**Everything else still open is ordinary work.** The remaining 16 tasks in the
-2.0–2.9 and < 2.0 bands need no credential, no live account and no third-party
-approval; nothing in them is waiting on anyone.
+**Nothing else is open.** The sixteen tasks that were ordinary work — the
+2.0–2.9 and < 2.0 bands — shipped in revision 7. These two are the whole of
+what remains, and no further work in the repository moves either of them.
 
 **Where the blocked work was routed instead.** Both entries below record what
 was done in place of the access, so its absence costs less while it lasts —
@@ -148,6 +170,11 @@ Rating order is not execution order. The consensus record says why in four
 places, and those four rulings — not the decimals — are what orders the 51
 remaining tasks.
 
+> **Since revision 7 (2026-09-19): every task is done but T-24 and T-43**, the
+> two blocked on access. Stages 1, 3, 5, 6, 7, 8 and 10 are complete; Stage 4
+> waits only on T-24, Stage 9 only on the fixture Stage 2 would produce, and
+> Stage 2 is T-43 itself.
+>
 > **Since revision 6 (2026-09-16): every task rated ≥ 3.0 is done but T-24 and
 > T-43.** Stage 4, Stage 7 and Stage 8's ≥ 3.0 tail are complete; Stage 9 has
 > lost T-46. **T-42 has landed, so R7's gate on T-24 is open**: the gold set
@@ -210,8 +237,8 @@ the types' optional fields rather than what would have written them.
 
 ### Stage 3 — persistence and the schema (migration-bearing, so it fixes an order)
 
-**T-16** (5.5, both halves, adds `0002`) → **T-54** (2.6, up→down→up across both
-migrations) → **T-08** (5.0) → **T-07** (4.0). The last two are the open
+**T-16** (5.5, both halves, adds `0002`) → ~~**T-54** (2.6, up→down→up across both
+migrations)~~ **done, across all three** → **T-08** (5.0) → **T-07** (4.0). The last two are the open
 `persistence` challenges from round 2: R1 is ratified by `go` only, and P1's
 over-correction from 7.2 to 4.0 was never checked.
 
@@ -220,7 +247,8 @@ over-correction from 7.2 to 4.0 was never checked.
 ~~**T-20** (5.8) → **T-29** (5.0) → **T-35** (4.4) → **T-32** (3.2), then
 **T-42** (3.8, L)~~ **done**, and ~~**T-40** (3.4)~~ and ~~**T-41** (3.2)~~ with
 them. **What is left in this stage: T-24** (4.8), whose gate R7 named — T-42's
-gold set — is now open, and **T-51** (2.6).
+gold set — is now open, and ~~**T-51** (2.6)~~ **done**, measured on that gold
+set.
 
 ### Stage 5 — one sitting in `internal/config` and the composition root
 
@@ -231,31 +259,33 @@ requires.
 
 ### Stage 6 — one sitting in `internal/api`
 
-**T-30** (4.8) → **T-48** (2.8) → **T-49** (2.8) → **T-58** (2.2) → **T-61**
-(2.0). T-25's `MaxBytesReader` half is no longer waiting here; it shipped with
+~~**T-30** (4.8) → **T-48** (2.8) → **T-49** (2.8) → **T-58** (2.2) → **T-61**
+(2.0)~~ **done.** T-25's `MaxBytesReader` half is no longer waiting here; it shipped with
 the timeouts.
 
 ### Stage 7 — one sitting in `internal/repository` and the queries
 
 ~~**T-31** (4.8) → **T-37** (4.2) → **T-45** (3.0) → **T-26** (3.0)~~ **done**,
 and **T-33** (3.0) with them — taken off file rather than deferred, for the
-reason its entry gives. **What is left: T-55** (2.4) → **T-60** (2.0).
+reason its entry gives. ~~**T-55** (2.4) → **T-60** (2.0)~~ **done** — the stage
+is complete.
 
 ### Stage 8 — delivery and CI sweep
 
 ~~**T-22** (5.6) → **T-36** (4.4) → **T-38** (4.0) → **T-39** (3.6) → **T-44**
-(3.4) → **T-47** (3.0)~~ **done**. **What is left: T-50** (2.8) → **T-59**
-(2.2).
+(3.4) → **T-47** (3.0)~~ **done**, and ~~**T-50** (2.8) → **T-59** (2.2)~~ with
+them — the stage is complete.
 
 ### Stage 9 — `internal/instagram` cleanup (after Stage 2's fixture)
 
 ~~**T-19** (5.8, half already done) → **T-46** (3.0)~~ **done** — T-46 without
-Stage 2's fixture, which has still not been produced. **What is left: T-52**
-(2.5) → **T-53** (2.5) → **T-13** (2.5) → **T-56** (2.4).
+Stage 2's fixture, which has still not been produced. ~~**T-52** (2.5) → **T-53**
+(2.5) → **T-13** (2.5) → **T-56** (2.4)~~ **done**, also without it; T-56's
+entry says what that cost.
 
 ### Stage 10 — nits
 
-**T-57** (2.2) → **T-62** (1.5) → **T-63** (1.2).
+~~**T-57** (2.2) → **T-62** (1.5) → **T-63** (1.2)~~ **done.**
 
 ## Open panel questions
 
@@ -649,8 +679,10 @@ re-opens a settled one or assumes a live one is settled:
       zero with the default, so `IMPORT_MAX_ITEMS=0` — plausibly meant as
       "pause imports" — would have imported fifty posts. Tested: defaults, env
       and flag overrides, the refusal, and the values reaching the fetcher.
-      **Still open:** `.env.example` does not list them, and could not be
-      edited in this session; it needs a manual update.
+      ~~**Still open:** `.env.example` does not list them, and could not be
+      edited in this session; it needs a manual update.~~ **Done by hand:**
+      `.env.example` now lists both, together with the `LLM_*` keys and
+      `EXTRACTION_PUBLISH_THRESHOLD`.
 - [x] **T-17 · 5.0 · S** — Lifecycle owner for the detached import goroutine — `go` #4 — `internal/api/handlers_import.go` (`context.WithoutCancel` + `go d.Worker.RunOnce`)
       **CORRECTED in round 2:** this is *not* a use-after-close. `puddle/v2@v2.2.2/pool.go:179-195` destroys only idle resources, leaving an in-flight connection untouched, and the process usually exits first. The rating holds at 5.0 on different reasoning — high likelihood, small blast radius, **zero diagnosability**, since the truncated run is never reported.
       **DONE — the worker owns its runs, and shutdown stops them and waits.**
@@ -1054,29 +1086,171 @@ re-opens a settled one or assumes a live one is settled:
 
 ## Band 2.0 – 2.9 (15 tasks)
 
-- [ ] **T-48 · 2.8 · S** — Security headers on the frontend handler — `security` S7
-- [ ] **T-49 · 2.8 · S** — Log the response status in `withLogging` — `go` #12
-- [ ] **T-50 · 2.8 · S** — `HEALTHCHECK` in the image and on the compose `app` service — `delivery` D13
-- [ ] **T-54 · 2.6 · S** — Test the down migration (up → down → up) — `persistence` P11 + `delivery` D12
+- [x] **T-48 · 2.8 · S** — Security headers on the frontend handler — `security` S7
+      **DONE, as S7 wrote it with one tightening.** `webui.Handler` wraps
+      everything it serves — index, assets, the fallback, the redirect — in
+      `withSecurityHeaders`: `nosniff`, `Referrer-Policy: no-referrer`,
+      `X-Frame-Options: DENY` beside `frame-ancestors 'none'` for older
+      browsers, and S7's CSP **without `img-src https:`**, which S7 said was
+      needed only if `image_url` were ever rendered; it is not, and T-57 now
+      records why. `form-action 'self'` added. The policy holds because the
+      bundle is one same-origin script and stylesheet with no inline code —
+      checked against a real `make frontend` build — and
+      `TestHandler_IndexHasNothingThePolicyWouldBlock` fails if `index.html`
+      ever gains an inline script, style or handler, rather than leaving the
+      browser to block it silently. Verified in the compose stack: the headers
+      on `/`, none on `/api/`.
+- [x] **T-49 · 2.8 · S** — Log the response status in `withLogging` — `go` #12
+      **DONE, and two defects next to it with it.** A `statusRecorder` records
+      the first final status (a 1xx is passed on unrecorded; a handler that
+      writes nothing is logged as the 200 net/http sends), with `Unwrap` so
+      `http.ResponseController` still reaches the real writer.
+      *Found on the way:* (1) **logging sat inside recovery**, so a panicking
+      handler unwound past it and the request left no line at all — the order
+      is now `CORS → logging → recovery → auth → JSON`, and a panic logs its
+      `500`; (2) **all eight handler `500`s discarded their error** — the
+      status alone would have said a request failed and never why.
+      `writeInternalError` logs the cause and still sends only the generic
+      message. *And one consequence of T-50:* a successful `GET /api/healthz`
+      is logged at debug, since the image's probe would otherwise add an info
+      line every 30 seconds; a failing one stays at info.
+- [x] **T-50 · 2.8 · S** — `HEALTHCHECK` in the image and on the compose `app` service — `delivery` D13
+      **DONE, by the finding's second option.** `recipe-reader --health-check`
+      probes `/api/healthz` on `HTTP_ADDR` — dialling loopback when it names
+      every interface, as the container's `:8080` does — and exits 0 only on
+      200 *and* `{"status":"ok"}`, so another service on the port cannot pass
+      for this one. The image stays without `curl`/`wget`. `HEALTHCHECK` runs
+      every 30s with `--start-interval=2s`, and the probe gives up at 3s,
+      inside the 5s `--timeout`, so a hung server fails with a message.
+      **Diverged:** the compose `app` service gets the check by inheriting it
+      from the image, with a comment saying so, rather than a second copy
+      that could drift from the first. `scripts/smoke-test-image.sh` now also
+      waits for Docker to report `healthy`, since nothing else reaches the
+      `HEALTHCHECK` line. Verified: the smoke test passes, and
+      `docker compose ps` shows the app `healthy` 3s after start.
+      *In passing:* the runtime base went `alpine:3.23` → `3.24`. **Postgres
+      18 is out and was deliberately not taken** — see the note after the
+      band.
+- [x] **T-54 · 2.6 · S** — Test the down migration (up → down → up) — `persistence` P11 + `delivery` D12
       Delivery owns it; lands inside T-10's `TestMain`. **Not just a test:** `internal/db` exports no Down at all, so this needs a new entry point in `connect.go`.
       **Order:** after T-16, so the test exercises the `0002` migration it adds rather than only `0001`.
-- [ ] **T-51 · 2.6 · S** — Keyword-match categories in rules-only mode — `extraction` E12
-- [ ] **T-13 · 2.5 · S** — Fix the Instagram client test's name and cover the restore branch — `delivery` D2 + `integration` I12
+      **DONE, across all three migrations.** `db.MigrateDown` shares a
+      `newMigrate` constructor with `Migrate`, so the down path runs through
+      the embedded source the binary ships — the image carries no migration
+      files for the golang-migrate CLI. `TestMigrations_UpDownUp` migrates up,
+      writes a row to every table (the drop order only matters once foreign
+      keys point at something), migrates all the way down and checks no table
+      and no sequence is left, then up again and checks `0002`'s and `0003`'s
+      constraints are back and the schema takes writes. `testdb.NewDatabase`
+      now provides the empty per-test database the `0002` test used to build
+      by hand; that test and the new `0003` one use it.
+- [x] **T-51 · 2.6 · S** — Keyword-match categories in rules-only mode — `extraction` E12
+      **DONE, and measured on T-42's gold set.** `categoriesFor` reads only
+      what the author said about the dish — the lines before the first
+      section header, and hashtags — never the ingredient or instruction
+      sections: the gold set's own gratin ends "40 Minuten … backen". A
+      keyword is either a prefix, for hashtags that run words together
+      (`#veganfood`), or a whole word with German inflections, for words whose
+      compounds mean something else (`#smoothiebowl` is not a drink,
+      `Cocktailsoße` is a sauce, `#veggies` are vegetables). Only the nine
+      seeded names can be proposed, `TestRuleCategories_AreAllSeeded` holds
+      the list to `db.DefaultCategories()`, and the import still drops any
+      name the database lacks. Nothing is proposed for a caption scoring 0.
+      **The gold set gained `expect.categories`** — every category a reader
+      would accept, labelled from the ingredients rather than from the output
+      — and the rules are gated on proposing nothing outside it: a wrong
+      category is the harm, a missing one is where rules-only mode already
+      was. Current: 5 proposed across 21 recipe cases, none wrong.
+- [x] **T-13 · 2.5 · S** — Fix the Instagram client test's name and cover the restore branch — `delivery` D2 + `integration` I12
       **CORRECTED — premise withdrawn.** Revision 1 said this test makes a real network call on every run. It does not and never has: `instago@v1.0.2/auth.go:48-50` returns `BadCredentials` before any request is built, verified independently by two reviewers including a dead-proxy run. **The suite is already hermetic.** What remains is Low: the name `RestoresExistingSession` asserts the *missing*-session path, `err == nil` is near-tautological, and the restore branch has zero coverage.
       **Unchanged by the ≥ 6.0 work**, though `client_test.go` grew around it: T-11 and T-06 added timeout, slot and re-authentication tests beside the untouched original, and `LoginOrRestore` now takes a `ctx`.
-- [ ] **T-52 · 2.5 · S** — Log the discarded `LoadSettings` error — `go` #13 — still discarded in `Client.LoginOrRestore` (`internal/instagram/client.go`), and now more worth saying out loud: a session file that fails to load sends the client straight to a fresh login, which is the behaviour T-06's re-login floor exists to ration.
-- [ ] **T-53 · 2.5 · S** — `RunOnce` should not return a stale result when it skips — `go` #10
+      **DONE, still with no network.** The test is now
+      `MissingSessionFallsBackToLogin` and asserts what the name says: the
+      error is the login's own `BadCredentials` rather than any error, a login
+      attempt was recorded, and no session is claimed or written. The restore
+      branch is covered by `RestoresSavedSession`: a session file written by
+      `DumpSettings` on a fresh client restores offline, and with an empty
+      password a login attempt would have failed, so success proves none was
+      made.
+- [x] **T-52 · 2.5 · S** — Log the discarded `LoadSettings` error — `go` #13 — still discarded in `Client.LoginOrRestore` (`internal/instagram/client.go`), and now more worth saying out loud: a session file that fails to load sends the client straight to a fresh login, which is the behaviour T-06's re-login floor exists to ration.
+      **DONE.** A missing file — the ordinary first boot — is an info line;
+      any other failure is a warning naming the file, logged before the
+      password login that replaces it. Tested with a truncated session file.
+- [x] **T-53 · 2.5 · S** — `RunOnce` should not return a stale result when it skips — `go` #10
       **SCOPE GREW: two skip paths now.** T-12 added a second one — `RunOnce`
       returns `lastResult` both when a run is already in flight and when the
       rate-limit cooldown is in effect (`internal/pipeline/worker.go`). The
       cooldown path at least logs and the API refuses with 429 before reaching
       it, so the finding is unchanged in kind and slightly wider in reach.
-- [ ] **T-55 · 2.4 · S** — Decide whether duplicate ingredient rows are meaningful — `persistence` P9
-- [ ] **T-56 · 2.4 · S** — Cache the resolved collection id — `integration` I9 — `PipelineFetcher.FetchNewPosts` (`internal/instagram/fetcher_adapter.go`) still calls `ResolveCollectionID` on every run, which is one extra private-API request per import against an endpoint T-12 now backs off from.
-- [ ] **T-57 · 2.2 · S** — Record retention/provenance intent in `docs/PROJECT.md` — `security` S8
-- [ ] **T-58 · 2.2 · S** — Re-panic on `http.ErrAbortHandler` — `go` #11
-- [ ] **T-59 · 2.2 · S** — Drop the fixed `/tmp` path from `make lint` — `delivery` D10
-- [ ] **T-60 · 2.0 · S** — Optional: read-then-insert for `FindOrCreate*` — `persistence` P6
+      **DONE — `(ImportResult, bool)`, the first of go #10's two options.**
+      Both skip paths return the zero result and `false`; `Status` is where the
+      last run is read. Tested on the case that made it matter: a run imports
+      one post and is rate-limited, and the skip that follows now returns
+      nothing instead of a second `Imported: 1`.
+- [x] **T-55 · 2.4 · S** — Decide whether duplicate ingredient rows are meaningful — `persistence` P9
+      **DECIDED: they are meaningful; positions are not.** A recipe may list
+      an ingredient twice — sugar for the dough and for the topping — so P9's
+      `UNIQUE (recipe_id, ingredient_id)` would refuse real recipes or merge
+      the lines and lose an amount. What distinguishes the two lines is their
+      position, so migration `0003` makes `(recipe_id, position)` unique, the
+      other constraint P9 named. It renumbers any colliding rows first, in the
+      order reads already return them, which leaves every position written by
+      the application unchanged — `writeAssociations` has always written
+      `0..n-1`. Tested: the backfill against rows written at version 2, a
+      repeated ingredient still accepted, a repeated position refused, and a
+      create-then-reorder round trip through the repository. The decision is
+      recorded on `writeAssociations`, on `domain.RecipeIngredient` (whose
+      comment also still described pre-T-08 callers) and in the README.
+      *Noted, not done:* the new unique index leads with `recipe_id`, which
+      makes `idx_recipe_ingredients_recipe_id` redundant. Dropping it is a
+      later migration's call.
+- [x] **T-56 · 2.4 · S** — Cache the resolved collection id — `integration` I9 — `PipelineFetcher.FetchNewPosts` (`internal/instagram/fetcher_adapter.go`) still calls `ResolveCollectionID` on every run, which is one extra private-API request per import against an endpoint T-12 now backs off from.
+      **DONE, with a wider invalidation than I9 asked for — because of T-43.**
+      The id is cached on `PipelineFetcher`. I9 said to re-resolve "only if a
+      fetch fails with a not-found error", but what this endpoint answers for
+      a deleted collection has never been observed: a 404, a 400 or an
+      undecodable page are all plausible, and betting on one risks a stale id
+      that fails every run until a restart. So the id is dropped on any failed
+      fetch except a rate limit (one more request against a throttled API is
+      the harm), an authentication failure or a context error — costing one
+      list request on the next run, what every run paid before. *Also added:*
+      a 24-hour maximum age, so a collection renamed away and replaced under
+      the configured name is picked up without a restart. `Client` gained a
+      `send` field (`c.do` in production) so the adapter can be driven by a
+      stub; five tests cover the cache, both invalidations, the expiry and an
+      unknown name.
+- [x] **T-57 · 2.2 · S** — Record retention/provenance intent in `docs/PROJECT.md` — `security` S8
+      **DONE, as §6.1**, in German like the rest of the document: personal
+      use of one's own saved posts, never shared; `source` is the attribution
+      and is kept; no automatic deletion, and deliberately so; `image_url` is
+      stored but not shown, with the CSP from T-48 as the switch to change.
+      **One observation S8 did not make:** reads need no token, so a
+      network-reachable instance — which the compose file produces — already
+      lets anyone who reaches the port read the collection. For the private
+      purpose it belongs behind loopback, a VPN or an authenticating proxy;
+      §6.1 says so, and lists what sharing would require first.
+- [x] **T-58 · 2.2 · S** — Re-panic on `http.ErrAbortHandler` — `go` #11
+      **DONE**, compared by identity as net/http itself does. Tested: the
+      panic propagates, nothing is written, and it is not logged as a
+      recovered panic.
+- [x] **T-59 · 2.2 · S** — Drop the fixed `/tmp` path from `make lint` — `delivery` D10
+      **DONE** with CI's form, plus a line saying what failed. Checked both
+      ways: a clean tree passes, an unformatted file fails the target.
+- [x] **T-60 · 2.0 · S** — Optional: read-then-insert for `FindOrCreate*` — `persistence` P6
+      **DONE rather than kept optional — T-08 changed P6's premise.** P6 was
+      costed when lookups were autocommit statements. T-08 moved them into
+      the recipe transaction, so the row lock `DO UPDATE` took on every
+      *existing* row was held until the recipe committed: two writes naming
+      the same ingredient queued, and two naming a pair in opposite order
+      could deadlock. Each query is now one statement — a CTE reads the row,
+      and the insert runs only when it found nothing — keeping `DO UPDATE` as
+      P6's race fallback, since unlike `DO NOTHING` it still returns the row
+      another transaction committed after this statement's snapshot. No Go
+      retry was needed. Tested against real Postgres: repeat lookups spend no
+      sequence value, a lookup is not blocked by an open transaction holding
+      the same row, and a concurrent insert of the same name returns one row.
+      **The first two fail against the old query** — five repeats spent five
+      ids, and the lookup blocked for the whole 2s deadline.
 - [x] **T-61 · 2.0 · S** — `dtoToRecipe` should take `context.Context` — `go` #9
       **Closed by T-08, not worked on its own.** `dtoToRecipe` no longer
       resolves lookups, so it needs neither the request nor a context — it
@@ -1084,8 +1258,18 @@ re-opens a settled one or assumes a live one is settled:
 
 ## Band < 2.0 (2 tasks)
 
-- [ ] **T-62 · 1.5 · S** — Accept or document the count/page inconsistency — `persistence` P10 (no action recommended)
-- [ ] **T-63 · 1.2 · S** — Doc comments on `LookupRepository`; drop five redundant filename comments — `go` #15
+- [x] **T-62 · 1.5 · S** — Accept or document the count/page inconsistency — `persistence` P10 (no action recommended)
+      **DONE — accepted and documented**, on `Search` and in the README, with
+      the reasoning P10 gave: the window is milliseconds on a collection that
+      changes every few hours, and a `REPEATABLE READ` transaction around both
+      statements would cost more on the listing the app opens with than a
+      pager that heals on the next click.
+- [x] **T-63 · 1.2 · S** — Doc comments on `LookupRepository`; drop five redundant filename comments — `go` #15
+      **DONE.** `LookupRepository` and `NewLookupRepository` are documented,
+      including that recipe writes no longer go through them. The filename
+      comments were dropped from all twelve files carrying one — the five go
+      #15 named and seven tests — and `internal/instagram`, which had no
+      package doc at all, got one in their place.
 
 *Removed in revision 2:* T-64 (govulncheck advisory) — withdrawn by
 `security_reviewer` under cross-examination. A clean scan is a scan result, not
@@ -1104,13 +1288,26 @@ a finding. The GO-2026-5932 provenance note lives in the security review's
 | 5.0 – 5.9 | 12 | 12 |
 | 4.0 – 4.9 | 10 | 9 |
 | 3.0 – 3.9 | 12 | 11 |
-| 2.0 – 2.9 | 15 | 1 |
-| < 2.0 | 2 | 0 |
-| **Total** | **62** | **44** |
+| 2.0 – 2.9 | 15 | 15 |
+| < 2.0 | 2 | 2 |
+| **Total** | **62** | **60** |
 
-**The two tasks rated ≥ 3.0 that are not done** are the two in
+**The two tasks that are not done** are the two in
 [Blocked on external access](#blocked-on-external-access): **T-24** (4.8, needs
 an LLM API key to run the eval that settles it) and **T-43** (3.4, needs live
-Instagram credentials). Neither is waiting on work. Everything else still open
-is in the 2.0–2.9 and < 2.0 bands and needs nothing from outside the
-repository.
+Instagram credentials). Neither is waiting on work, and nothing else is open.
+
+**Recorded alongside, not a task:** Postgres 18 is available and the compose
+file, the test container and the smoke test all stay on 17. That is a major
+version under a persistent volume — an existing 17 data directory does not
+start under 18 without `pg_upgrade` or a dump and restore, and the 18 image
+also moved `PGDATA` — so it is an upgrade to plan, not a tag to bump.
+**DONE, all three on `postgres:18-alpine` (18.6 at the time).** The compose
+volume now mounts at `/var/lib/postgresql`, since 18 keeps `PGDATA` at
+`/var/lib/postgresql/18/docker` and refuses a volume at the old `.../data`
+path. The README's "Upgrading from Postgres 17" section gives the dump and
+restore steps. They were run against a throwaway compose project: a 17 volume
+with a recipe written through the app was dumped and dropped, then restored on
+18, and the app started on it with nothing to migrate and its sequences intact.
+The run also showed that 18 on an unconverted 17 volume exits with an error
+naming the old data, rather than starting an empty database.

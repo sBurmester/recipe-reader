@@ -79,8 +79,12 @@ cover: test
 cover-html: test
 	go tool cover -html=cover.out
 
+# gofmt's list is held in a shell variable, as CI does it, not in a temp file.
+# The file was a fixed, world-writable /tmp path, so two concurrent runs — two
+# worktrees, two users on one box, two jobs on one runner — raced on it, and the
+# `;` ran the check whether or not the write had succeeded.
 lint:
-	gofmt -l . | tee /tmp/gofmt-out; test ! -s /tmp/gofmt-out
+	@out=$$(gofmt -l .); if [ -n "$$out" ]; then echo "gofmt needs to be run on:"; echo "$$out"; exit 1; fi
 	go vet ./...
 	golangci-lint run ./...
 

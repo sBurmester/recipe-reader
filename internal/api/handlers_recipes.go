@@ -44,7 +44,7 @@ func (d Deps) handleListRecipes(w http.ResponseWriter, r *http.Request) {
 
 	recipes, total, err := d.Recipes.Search(r.Context(), q)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "search failed")
+		writeInternalError(w, r, "search failed", err)
 		return
 	}
 
@@ -69,7 +69,7 @@ func (d Deps) handleGetRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "get failed")
+		writeInternalError(w, r, "get failed", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toRecipeDTO(*recipe))
@@ -107,7 +107,7 @@ func (d Deps) handleCreateRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "create failed")
+		writeInternalError(w, r, "create failed", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toRecipeDTO(*recipe))
@@ -152,7 +152,7 @@ func (d Deps) handleUpdateRecipe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "recipe not found")
 		return
 	} else if err != nil {
-		writeError(w, http.StatusInternalServerError, "update failed")
+		writeInternalError(w, r, "update failed", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toRecipeDTO(*recipe))
@@ -168,7 +168,7 @@ func (d Deps) handleDeleteRecipe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "recipe not found")
 		return
 	} else if err != nil {
-		writeError(w, http.StatusInternalServerError, "delete failed")
+		writeInternalError(w, r, "delete failed", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

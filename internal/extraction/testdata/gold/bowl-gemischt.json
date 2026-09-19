@@ -6,6 +6,11 @@
   "expect": {
     "no_recipe": false,
     "name": "Sweet Potato Bowl",
+    "categories": [
+      "Hauptgericht",
+      "Vegetarisch",
+      "Vegan"
+    ],
     "ingredients": [
       {
         "name": "Süßkartoffeln",

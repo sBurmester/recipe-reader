@@ -90,6 +90,13 @@ larger one is answered `413` and the connection is closed. The server also bound
 headers must arrive within 10s and the whole request within 30s, a response must be written within
 60s of the headers, and idle keep-alive connections are closed after 120s.
 
+Every request is logged once, after the handler has run, with its method, path, **status** and
+duration — including a request whose handler panicked, which is logged with the `500` it was
+answered with. A `500` also logs its cause on the line before it; the client only ever sees the
+generic message, since the cause carries SQL and driver detail. A successful `GET /api/healthz` is
+logged at debug level, below the default, so the container's health check does not add a line
+every 30 seconds; a failing one is logged like any other request.
+
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/api/healthz` | Liveness probe — `{"status":"ok","version":"..."}`. Touches no dependency, so it reports that the process is serving, not that the database is reachable. `version` is omitted from an unstamped build. |
@@ -218,6 +225,19 @@ name — short, carrying a letter, not itself a header ending in `:`. Whatever i
 of its leading emoji run and trailing hashtag block. A caption that offers nothing usable gets
 `Unbenanntes Rezept` and a reduced confidence.
 
+### Categories
+
+The rules propose categories from what a caption's author said about the dish: the words of its
+title and any lines before the first section header, and its hashtags wherever they are. `#vegan
+#backen` under a banana bread gives `Vegan` and `Backen`; `Grüner Power-Smoothie` gives `Getränk`.
+The ingredient and instruction sections are not read — "40 Minuten backen" is how a gratin ends,
+and one "vegane Butter" does not make a dish vegan. Only the nine seeded categories can be proposed,
+a test holds the keyword list to the seed, and the import still drops any name the database does not
+hold. The list is short on purpose: a missing category is where rules-only mode already was, while a
+wrong one files a recipe where nobody looks for it. Before this, rules-only mode — which is what the
+default `hybrid` runs without an API key — proposed no categories at all, and the category filter
+had nothing to filter.
+
 ### Prompt injection
 
 The caption is attacker-controlled: anyone can post content designed to be saved. It reaches the
@@ -275,7 +295,15 @@ arrives while an abandoned one is still outstanding fails with a clear error rat
 it, and recovers by itself once the abandoned call returns. An expired Instagram session is
 re-established once, in place, at most once every 15 minutes — repeated logins are what Instagram
 flags — and a challenge or two-factor prompt is reported as `ErrReauthRequired` without spending a
-login attempt on it.
+login attempt on it. A saved session file that exists but cannot be read is logged as a warning
+naming the file before the password login that replaces it; a missing one — the first boot — is
+only noted.
+
+With `INSTAGRAM_COLLECTION` set, the collection's id is looked up once and reused rather than listed
+on every run, which was one extra private-API request per import. It is looked up again after a day,
+so a collection renamed away and replaced under the configured name is picked up without a restart,
+and after any failed fetch other than a rate limit, an authentication problem or a timeout — what the
+endpoint answers for a deleted collection has never been observed, so the cache does not bet on it.
 
 ## Frontend
 
@@ -297,6 +325,19 @@ the frontend build overwrites, so a build cannot quietly replace it and turn tha
 
 Routing is hash-based (`#/`, `#/recipes/:id`, `#/import`), so the Go binary can serve the whole
 app from one embedded directory with no server-side rewrite rules.
+
+Everything the frontend handler serves carries `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and a strict Content-Security-Policy:
+
+    default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none';
+    form-action 'self'; frame-ancestors 'none'
+
+It can be that strict because the bundle is: one same-origin script, one same-origin stylesheet, no
+inline code. A test fails if `index.html` ever gains an inline script, style or event handler, rather
+than leaving the browser to block it silently. `frame-ancestors 'none'` is what stops another page
+framing the app to trick a click onto a destructive button. Images from other origins are not
+allowed — the stored `image_url` is not displayed, and why is recorded in
+[`docs/PROJECT.md` §6.1](docs/PROJECT.md).
 
 `src/types.ts` mirrors the Go DTOs in `internal/api/dto.go` field-for-field. Nothing enforces
 that correspondence at compile time — if you change one side, change the other, or the drift
@@ -336,6 +377,60 @@ not log in again on every restart, which Instagram rate-limits.
 
 `make db-up` starts only the Postgres service, for running the Go binary locally against the same
 database the container would use. It needs `POSTGRES_PASSWORD` too.
+
+### Postgres version
+
+The database is **Postgres 18** (`postgres:18-alpine`). The tag names only the major version, so
+patch releases arrive with `docker compose pull`; they share the on-disk format. The test
+containers and `scripts/smoke-test-image.sh` run the same image, so tests cover the version you
+deploy.
+
+The volume is mounted at `/var/lib/postgresql`, not `/var/lib/postgresql/data` as it was on 17. The
+18 image keeps its data one level down, in a per-version directory (`18/docker`), and refuses to
+start with a volume at the old path.
+
+### Upgrading from Postgres 17
+
+A volume created by the 17 compose file does not start under 18. A major version changes the
+on-disk format, and the 18 image exits with an error naming the old data rather than starting an
+empty database over it. Move the data with a dump and restore. For a database this size it takes
+seconds, and it avoids needing both versions' binaries, as `pg_upgrade` would.
+
+Every compose command needs `POSTGRES_PASSWORD` and `API_TOKEN` set, as usual; `down` and `exec`
+fail without them too. Replace `recipes` with your `POSTGRES_USER` / `POSTGRES_DB` if you changed
+them.
+
+    # 1. Still on the 17 compose file: dump the database, then stop.
+    docker compose up -d --wait db
+    docker compose exec -T db pg_dump -U recipes -d recipes -Fc > recipes.dump
+    docker compose down
+
+    # 2. Remove the 17 volume. Compose prefixes it with the project name (the directory
+    #    name by default), so check `docker volume ls` first. Keep recipes.dump until step 3
+    #    has succeeded: from here on it is the only copy.
+    docker volume rm recipe-reader_db-data
+
+    # 3. On the 18 compose file: start the database alone, restore into it, then start the app.
+    docker compose up -d --wait db
+    docker compose exec -T db pg_restore -U recipes -d recipes --no-owner --exit-on-error < recipes.dump
+    docker compose up -d
+
+Restore before the app starts. On first start the app runs migrations and seeds the lookup
+tables, and the restore would then collide with the tables and rows it created. The restored `schema_migrations`
+table leaves the app nothing to migrate, and the ID sequences carry on from where they were.
+
+### Health check
+
+The image declares a `HEALTHCHECK`, and the probe is the binary itself:
+
+    recipe-reader --health-check     # exit 0 if /api/healthz on HTTP_ADDR answers {"status":"ok"}
+
+The runtime image has no `curl` or `wget`, and adding one to probe ourselves would grow it for one
+`GET`. The probe dials loopback when `HTTP_ADDR` names every interface (`:8080`, as in the
+container), gives up after 3s, and checks the body as well as the status so that something else
+answering on the port does not pass. It polls every 2s while the container starts and every 30s
+after, so `docker compose ps` reports the app `healthy` within seconds. The compose `app` service
+inherits it rather than restating it.
 
 ### Version stamping
 
@@ -390,7 +485,8 @@ from, and a `docker build` followed by a smoke test of the image:
     scripts/smoke-test-image.sh recipe-reader:ci "$(git describe --tags --always --dirty)"
 
 The script starts the image against a throwaway Postgres and fails unless `/api/healthz` answers,
-`/api/recipes` answers (so the migrations ran against a real database), `/` serves the built
+the image's own `HEALTHCHECK` reports `healthy`, `/api/recipes` answers (so the migrations ran
+against a real database), `/` serves the built
 frontend rather than the placeholder page, and `--version` and `/api/healthz` agree on a version
 that is not the unstamped `dev` — the link-time stamp is the one part of the build no unit test can
 reach. The expected version is optional; without it the script only refuses `dev`. It runs the same
@@ -399,8 +495,7 @@ way locally as in CI.
 ## Database
 
 The connection pool is configured rather than taken as `pgxpool` hands it over: **10** maximum
-connections (above pgxpool's `max(4, NumCPU)`, because one page of search still costs `2+2N`
-queries), a floor of **2** so the pool does not drain to nothing between the six-hourly imports and
+connections (above pgxpool's `max(4, NumCPU)`, which is four on a small container), a floor of **2** so the pool does not drain to nothing between the six-hourly imports and
 leave the next request paying a full connect, and a **5s** connect timeout. Every one of these is
 overridden by the DSN when it names the corresponding parameter, so they are defaults and not
 decisions taken away from the operator:
@@ -421,6 +516,22 @@ the unique index on `source` decides, with no window between a check and a write
 importer to slip through. The repository reports the conflict as `ErrDuplicateSource`; the import
 pipeline counts it as `skipped`, and `POST /api/recipes` answers `409`.
 
+**Looking up a category, ingredient or unit reads before it writes.** Recipe writes resolve names
+inside their own transaction, and the lookup used to be an `INSERT ... ON CONFLICT DO UPDATE` that
+went through the insert path every time: it spent a sequence value, wrote a row version and took a
+row lock even when the row existed. Held until the recipe committed, that lock made two writes naming
+the same ingredient wait for each other, and two naming a pair in opposite order could deadlock. The
+insert now runs only when the read found nothing, with `DO UPDATE` kept for the one race the read
+cannot see.
+
+**A recipe may list the same ingredient twice** — "200 g Zucker" for the dough, "50 g Zucker" for
+the topping — and both lines are kept, each with its own amount. What the schema enforces instead
+(migration `0003`) is that no two lines of a recipe share a position, so their order is total.
+
+**A list page's `total` and its rows are read by two statements**, not from one snapshot, so a write
+landing between them can leave the pager a page out until the next load. That is accepted rather
+than overlooked: the window is milliseconds on a collection that changes every few hours.
+
 ## Changing the database schema
 
 1. Add `internal/db/migrations/000N_*.up.sql` and the matching `.down.sql`.
@@ -428,6 +539,13 @@ pipeline counts it as `skipped`, and `POST /api/recipes` answers `409`.
 3. Run `make sqlc-generate`.
 4. Commit the migration, the query, and the regenerated `internal/db/sqlc/` files together — CI
    fails if the generated code does not match its inputs.
+
+`TestMigrations_UpDownUp` runs every migration up, all of them down over a database holding a row in
+every table, and up again, through the same embedded source the binary uses (`db.MigrateDown`), so
+a new migration's down file is exercised without any extra work. If the migration has to transform
+data already in the table — `0002` and `0003` both do — give it a test of its own that stops at the
+previous version, writes the rows that need transforming, and migrates over them; `testdb.NewDatabase`
+provides the empty database for that.
 
 ## Architecture
 
@@ -443,7 +561,9 @@ The saved-posts and collection fetching in `internal/instagram/saved.go` uses In
 unofficial private API through the `instago` library. Those endpoints are not documented or
 supported, so they can break without notice if Instagram changes them, and using them carries
 real Terms of Service risk. Treat this as personal automation against your own account for your
-own recipe collection — not as a scraping service for other people's data.
+own recipe collection — not as a scraping service for other people's data. What is kept, for how
+long, and what would have to change before the collection could be shared is recorded in
+[`docs/PROJECT.md` §6.1](docs/PROJECT.md).
 
 **They have not been verified against a live account.** Nothing in this repository records a
 successful run: that `feed/saved/posts/` is the right endpoint, that saved entries wrap the media

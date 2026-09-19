@@ -6,6 +6,12 @@
   "expect": {
     "no_recipe": false,
     "name": "Grüner Power-Smoothie",
+    "categories": [
+      "Frühstück",
+      "Vegetarisch",
+      "Vegan",
+      "Getränk"
+    ],
     "ingredients": [
       {
         "name": "Wasser",

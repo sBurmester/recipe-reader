@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Smoke-tests a built recipe-reader image: starts it against a throwaway
-# Postgres, waits for /api/healthz, checks that a database-backed route answers
-# (so the migrations ran), checks that / serves the real frontend rather than
-# the placeholder page a build without the frontend embeds, and checks that the
-# binary reports a version.
+# Postgres, waits for /api/healthz and for the image's HEALTHCHECK to report
+# healthy, checks that a database-backed route answers (so the migrations ran),
+# checks that / serves the real frontend rather than the placeholder page a
+# build without the frontend embeds, and checks that the binary reports a
+# version.
 #
 # CI runs this after `docker build`; it runs the same way locally.
 #
@@ -44,7 +45,7 @@ docker network create "$net" >/dev/null
 docker run -d --name "$db" --network "$net" \
 	-e POSTGRES_DB=recipes -e POSTGRES_USER=recipes -e POSTGRES_PASSWORD=recipes \
 	--health-cmd "pg_isready -U recipes" --health-interval 1s --health-retries 60 \
-	postgres:17-alpine >/dev/null
+	postgres:18-alpine >/dev/null
 
 for _ in $(seq 1 60); do
 	[ "$(docker inspect -f '{{.State.Health.Status}}' "$db")" = healthy ] && break
@@ -73,6 +74,18 @@ for _ in $(seq 1 60); do
 	sleep 1
 done
 $healthy || fail "/api/healthz did not answer ok within 60s"
+
+# The image's own HEALTHCHECK — the binary probing itself with --health-check —
+# is reached by no unit test. A renamed flag, a wrong binary path or a probe
+# that cannot dial the listen address would leave every check above passing
+# while Docker reports the container unhealthy forever.
+health=
+for _ in $(seq 1 45); do
+	health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$app")
+	case "$health" in healthy | unhealthy) break ;; esac
+	sleep 1
+done
+[ "$health" = healthy ] || fail "the image's HEALTHCHECK reports '${health:-no healthcheck}', want healthy"
 
 # Liveness touches no dependency by design, so reach the database separately:
 # this only answers once the migrations have run against real Postgres.

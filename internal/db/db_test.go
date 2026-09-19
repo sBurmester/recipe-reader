@@ -24,7 +24,7 @@ func TestMigrateConnectSeed(t *testing.T) {
 		t.Error("expected seeded units, got 0")
 	}
 
-	// Re-seeding must not duplicate (ON CONFLICT DO UPDATE keeps row count stable).
+	// Re-seeding must not duplicate: the rows exist, so nothing is inserted.
 	if err := db.Seed(ctx, pool); err != nil {
 		t.Fatalf("second Seed() error = %v", err)
 	}

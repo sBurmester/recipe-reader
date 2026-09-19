@@ -26,7 +26,7 @@ ARG VERSION=dev
 COPY --from=frontend /app/web/dist ./internal/webui/dist
 RUN CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" -o /recipe-reader ./cmd/recipe-reader
 
-FROM alpine:3.23
+FROM alpine:3.24
 # ca-certificates is required, not optional: the app makes outbound HTTPS calls
 # to the Instagram and Anthropic APIs, and a bare alpine image ships no trust
 # store, so both would fail with "certificate signed by unknown authority".
@@ -43,4 +43,13 @@ COPY --from=backend /recipe-reader /usr/local/bin/recipe-reader
 USER appuser
 WORKDIR /app
 EXPOSE 8080
+# The binary is its own probe: --health-check dials /api/healthz on HTTP_ADDR
+# with the container's own environment. This image has no curl or wget, and
+# adding one to probe ourselves would grow it for the sake of one GET. The
+# probe gives up after 3s, inside --timeout, so a hung server fails it with a
+# message rather than being killed by Docker without one. --start-interval
+# polls quickly while the server starts, so a healthy container reports so in
+# seconds rather than after the first 30s interval.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=2s --retries=3 \
+    CMD ["/usr/local/bin/recipe-reader", "--health-check"]
 ENTRYPOINT ["/usr/local/bin/recipe-reader"]

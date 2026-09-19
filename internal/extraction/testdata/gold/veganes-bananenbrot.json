@@ -6,6 +6,13 @@
   "expect": {
     "no_recipe": false,
     "name": "Veganes Bananenbrot",
+    "categories": [
+      "Frühstück",
+      "Snack",
+      "Vegetarisch",
+      "Vegan",
+      "Backen"
+    ],
     "ingredients": [
       {
         "name": "Bananen",

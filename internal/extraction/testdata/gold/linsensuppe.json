@@ -6,6 +6,12 @@
   "expect": {
     "no_recipe": false,
     "name": "Deftige Linsensuppe",
+    "categories": [
+      "Hauptgericht",
+      "Vorspeise",
+      "Vegetarisch",
+      "Vegan"
+    ],
     "ingredients": [
       {
         "name": "rote Linsen",

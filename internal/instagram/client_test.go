@@ -1,33 +1,108 @@
-// internal/instagram/client_test.go
 package instagram
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/felipeinf/instago/igerrors"
 )
 
-func TestClient_LoginOrRestore_RestoresExistingSession(t *testing.T) {
-	dir := t.TempDir()
-	sessionPath := filepath.Join(dir, "session.json")
+// captureLog points the default logger at a buffer for the rest of the test.
+// No test in this package calls t.Parallel, which is what makes swapping the
+// process-wide logger safe.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
 
+// None of the LoginOrRestore tests touch the network. instago refuses an empty
+// password with BadCredentials before it builds a request (auth.go:48-50), and
+// a session file is only read from disk.
+
+// With no session file, LoginOrRestore falls through to a password login. This
+// test used to be called RestoresExistingSession while asserting the opposite
+// path, and passed on `err != nil` alone — which any failure satisfies. It now
+// checks that the failure is the login's own refusal, that a login attempt was
+// recorded, and that nothing claims a session afterwards.
+func TestClient_LoginOrRestore_MissingSessionFallsBackToLogin(t *testing.T) {
+	log := captureLog(t)
+	sessionPath := filepath.Join(t.TempDir(), "session.json")
 	c := NewClient()
-	// Prime a session file the way DumpSettings would, by logging in is not
-	// possible offline — instead assert that a *missing* session file
-	// correctly falls through to attempting Login (which will fail fast
-	// with no credentials, proving the restore path was skipped).
-	err := c.LoginOrRestore(context.Background(), "", "", sessionPath)
-	if err == nil {
-		t.Fatal("expected an error when no session file exists and credentials are empty")
+
+	err := c.LoginOrRestore(context.Background(), "someone", "", sessionPath)
+
+	if _, ok := errors.AsType[*igerrors.BadCredentials](err); !ok {
+		t.Fatalf("LoginOrRestore() error = %v, want the password login's BadCredentials", err)
+	}
+	if c.lastLogin.IsZero() {
+		t.Error("no login attempt was recorded")
+	}
+	if c.sessionHeld() {
+		t.Error("sessionHeld() = true after a refused login")
 	}
 	if _, statErr := os.Stat(sessionPath); statErr == nil {
-		t.Error("expected no session file to be written on a failed login")
+		t.Error("a session file was written for a refused login")
+	}
+	// A first boot is ordinary, so it is noted rather than warned about.
+	if !strings.Contains(log.String(), "no saved session yet") || strings.Contains(log.String(), "level=WARN") {
+		t.Errorf("want an info line for the missing session and no warning; log:\n%s", log.String())
+	}
+}
+
+// The restore branch had no coverage at all. A session file DumpSettings wrote
+// is loaded, and no login is attempted — with an empty password, an attempt
+// would have failed, so success here is the proof.
+func TestClient_LoginOrRestore_RestoresSavedSession(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "session.json")
+	if err := NewClient().raw.DumpSettings(sessionPath); err != nil {
+		t.Fatalf("write a session file: %v", err)
+	}
+	c := NewClient()
+
+	if err := c.LoginOrRestore(context.Background(), "someone", "", sessionPath); err != nil {
+		t.Fatalf("LoginOrRestore() error = %v, want the saved session restored without a login", err)
+	}
+	if !c.sessionHeld() {
+		t.Error("sessionHeld() = false after restoring a session")
+	}
+	if !c.lastLogin.IsZero() {
+		t.Error("a login was attempted although a session was restored")
+	}
+	// The credentials are kept either way, so an expiry later can re-log in.
+	if c.username != "someone" || c.sessionPath != sessionPath {
+		t.Errorf("credentials not kept: username %q, sessionPath %q", c.username, c.sessionPath)
+	}
+}
+
+// go #13: a session file that exists but cannot be read used to be
+// indistinguishable from a missing one. It is now a warning naming the file,
+// logged before the password login that replaces it.
+func TestClient_LoginOrRestore_WarnsAboutAnUnreadableSession(t *testing.T) {
+	log := captureLog(t)
+	sessionPath := filepath.Join(t.TempDir(), "session.json")
+	if err := os.WriteFile(sessionPath, []byte(`{"uuids": {"uuid": "trunc`), 0o600); err != nil {
+		t.Fatalf("write a truncated session file: %v", err)
+	}
+
+	if err := NewClient().LoginOrRestore(context.Background(), "someone", "", sessionPath); err == nil {
+		t.Fatal("LoginOrRestore() error = nil, want the fallback login refused")
+	}
+
+	out := log.String()
+	if !strings.Contains(out, "level=WARN") || !strings.Contains(out, "could not be restored") || !strings.Contains(out, sessionPath) {
+		t.Errorf("want a warning naming the unreadable session file; log:\n%s", out)
 	}
 }
 

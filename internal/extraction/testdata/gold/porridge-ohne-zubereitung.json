@@ -6,6 +6,11 @@
   "expect": {
     "no_recipe": false,
     "name": "Bestes Porridge",
+    "categories": [
+      "Frühstück",
+      "Vegetarisch",
+      "Vegan"
+    ],
     "ingredients": [
       {
         "name": "Haferflocken",

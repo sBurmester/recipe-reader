@@ -1,4 +1,3 @@
-// internal/pipeline/pipeline_test.go
 package pipeline
 
 import (

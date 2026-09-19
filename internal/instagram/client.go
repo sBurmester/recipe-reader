@@ -1,10 +1,19 @@
-// internal/instagram/client.go
+// Package instagram fetches saved posts through the unofficial instago client.
+// It owns the parts of that dependency a long-running importer cannot leave to
+// chance: a bound on every call, a persisted session that is re-established
+// when it expires, a named rate-limit error, and a paging loop that reports a
+// response it cannot read instead of returning an empty success.
+//
+// The endpoints are private and unverified against a live account (review task
+// T-43), so the response types in saved.go are written from the observed shape.
 package instagram
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -56,6 +65,11 @@ type Client struct {
 	raw            *ig.Client
 	requestTimeout time.Duration
 
+	// send is how the fetch methods reach the API: c.do in production. It is
+	// a field so a test can drive ListCollections and the paging loop through
+	// a stub, which is the only way to exercise them without a live account.
+	send requester
+
 	// slot admits one call into raw at a time. See run for why abandoning a
 	// call makes this necessary rather than merely tidy.
 	slot chan struct{}
@@ -74,11 +88,13 @@ type Client struct {
 // NewClient returns a Client backed by a fresh instago client. Call
 // LoginOrRestore before any fetch method.
 func NewClient() *Client {
-	return &Client{
+	c := &Client{
 		raw:            ig.NewClient(),
 		requestTimeout: defaultRequestTimeout,
 		slot:           make(chan struct{}, 1),
 	}
+	c.send = c.do
+	return c
 }
 
 // run executes one call into the instago client under a deadline, and gives up
@@ -201,13 +217,33 @@ func (c *Client) LoginOrRestore(ctx context.Context, username, password, session
 	c.username, c.password, c.sessionPath = username, password, sessionPath
 	c.mu.Unlock()
 
-	if err := c.raw.LoadSettings(sessionPath, false); err == nil {
+	err := c.raw.LoadSettings(sessionPath, false)
+	if err == nil {
 		c.mu.Lock()
 		c.hasSession = true
 		c.mu.Unlock()
 		return nil
 	}
+	logSessionLoadFailure(sessionPath, err)
 	return c.login(ctx, username, password, sessionPath)
+}
+
+// logSessionLoadFailure says why a persisted session was not restored, before
+// the password login that replaces it.
+//
+// The error used to be discarded, so a corrupt or truncated session file looked
+// exactly like a missing one: both went quietly to a fresh password login,
+// which is the event the file exists to avoid and the one the re-login floor
+// rations. A missing file is the ordinary first boot and is only noted; any
+// other failure means a session was there and could not be read, and is a
+// warning — that is the case someone should look at.
+func logSessionLoadFailure(sessionPath string, err error) {
+	if errors.Is(err, fs.ErrNotExist) {
+		slog.Info("instagram: no saved session yet; logging in with the password", "path", sessionPath)
+		return
+	}
+	slog.Warn("instagram: saved session could not be restored; logging in with the password instead",
+		"path", sessionPath, "error", err)
 }
 
 // login performs the login and persists the resulting session, recording the

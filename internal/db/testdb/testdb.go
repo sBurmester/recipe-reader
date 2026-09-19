@@ -13,7 +13,10 @@ package testdb
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -55,6 +58,35 @@ func New(t *testing.T) *pgxpool.Pool {
 	return shared.pool
 }
 
+// NewDatabase creates an empty, unmigrated database named name in the shared
+// container and returns a postgres:// DSN for it; it is dropped when the test
+// ends. It is for tests of the migrations themselves, which need a schema at a
+// version of their choosing — the shared database is always fully migrated.
+//
+// It calls New, so it resets the shared database like any other test would.
+func NewDatabase(t *testing.T, name string) string {
+	t.Helper()
+	ctx := context.Background()
+	admin := New(t)
+	ident := pgx.Identifier{name}.Sanitize()
+	if _, err := admin.Exec(ctx, "CREATE DATABASE "+ident); err != nil {
+		t.Fatalf("testdb: create database %s: %v", name, err)
+	}
+	// FORCE, because a migrator or pool the test forgot to close would
+	// otherwise keep the database from being dropped.
+	t.Cleanup(func() { _, _ = admin.Exec(context.Background(), "DROP DATABASE "+ident+" WITH (FORCE)") })
+
+	cfg := admin.Config().ConnConfig
+	dsn := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(cfg.User, cfg.Password),
+		Host:     net.JoinHostPort(cfg.Host, strconv.Itoa(int(cfg.Port))),
+		Path:     "/" + name,
+		RawQuery: "sslmode=disable",
+	}
+	return dsn.String()
+}
+
 // Main runs the package's tests and then tears down the shared container, if
 // any test started one. It does not return.
 func Main(m *testing.M) {
@@ -78,7 +110,7 @@ func start() {
 	// Postgres, runs init scripts, then restarts) and then for the mapped port
 	// to be served on localhost. v0.44's tcpostgres.Run sets no wait strategy
 	// of its own, so this must be passed explicitly or migrate races startup.
-	container, err := tcpostgres.Run(ctx, "postgres:17-alpine",
+	container, err := tcpostgres.Run(ctx, "postgres:18-alpine",
 		tcpostgres.WithDatabase("recipes_test"),
 		tcpostgres.WithUsername("recipes"),
 		tcpostgres.WithPassword("recipes"),

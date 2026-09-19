@@ -1,4 +1,3 @@
-// internal/repository/lookup_repository_test.go
 package repository
 
 import (

@@ -6,6 +6,12 @@
   "expect": {
     "no_recipe": false,
     "name": "Kartoffelsalat",
+    "categories": [
+      "Hauptgericht",
+      "Vorspeise",
+      "Vegetarisch",
+      "Vegan"
+    ],
     "ingredients": [
       {
         "name": "Kartoffeln",

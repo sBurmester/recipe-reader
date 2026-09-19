@@ -123,6 +123,11 @@ findings into **63 tasks grouped by rating band**, with the nine duplicate
 findings merged into single work items and a short sequencing note for the
 three tasks that unblock others.
 
+**Status, 2026-09-19: 60 of 62 tasks done.** The two left, T-24 and T-43, are
+blocked on external access — an LLM API key and a live Instagram account — not
+on work; the plan's "Blocked on external access" section says what each needs
+and what waits on it.
+
 ## Suggested reading order
 
 Start with the [consensus record](2026-09-11-consensus.md) — it carries nine

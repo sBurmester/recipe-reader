@@ -36,6 +36,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// A probe of another process, not a server: it touches no database and
+	// starts nothing. See probeHealth.
+	if cfg.HealthCheck {
+		return probeHealth(context.Background(), cfg.HTTPAddr)
+	}
 
 	// Before anything external: a misconfigured extraction mode is a startup
 	// error, and reporting it after a database migration has already run buries

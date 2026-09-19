@@ -1,4 +1,3 @@
-// internal/instagram/saved_test.go
 package instagram
 
 import (
