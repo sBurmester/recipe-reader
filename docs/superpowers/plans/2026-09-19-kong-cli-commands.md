@@ -138,6 +138,7 @@
 
 - `import`-Kommando für einen einmaligen Importlauf ohne Server. Offene Fragen: gleichzeitiger Betrieb mit laufendem `serve` (Session-Datei, Login-Floor) und Ausgabeformat.
 - `--log-level` / `--log-format` als globale Flags.
+- `server.Run` soll auch bei einem Fehler drainen (aus dem Milestone-Review von M1, F2). Heute kehrt `Run` sofort zurück, wenn `newHTTPServer` oder `ListenAndServe` scheitert (z. B. Port belegt). Der Pool ist dann geschlossen, aber der bereits gestartete Import-Zeitplan und die Shutdown-Goroutine laufen unter `ctx` weiter, bis der Aufrufer ihn abbricht. Das Verhalten ist nicht neu; beide Aufrufer beenden den Prozess danach mit 1. Seit M1 steht es im Doc-Kommentar. Vorschlag: am Anfang `ctx, cancel := context.WithCancel(ctx)` mit `defer cancel()`, `worker.Start` erst nach erfolgreichem `newHTTPServer`, und im Fehlerpfad von `ListenAndServe` `cancel()` gefolgt von `<-shutdownDone`. Danach den Absatz im Doc-Kommentar kürzen.
 
 ---
 
@@ -203,7 +204,7 @@ internal/db/
 
 ### Milestones
 
-Es gibt vier Milestones. Jeder endet in einem **releasefähigen Stand**: Tests, Lint und Build sind grün, und der Stand könnte so nach `main` gehen. Ein Milestone gilt als erreicht, wenn alle seine Tasks das zweistufige Review bestanden haben (siehe „Ablauf der Umsetzung“) und seine Abnahmekriterien abgehakt sind. Der nächste Milestone beginnt erst danach.
+Es gibt vier Milestones. Jeder endet in einem **releasefähigen Stand**: Tests, Lint und Build sind grün, und der Stand könnte so nach `main` gehen. Ein Milestone gilt als erreicht, wenn alle seine Tasks das zweistufige Review bestanden haben, das Milestone-Review durchgeführt und seine Befunde bewertet und abgearbeitet sind (beides siehe „Ablauf der Umsetzung“) und seine Abnahmekriterien abgehakt sind. Der nächste Milestone beginnt erst danach.
 
 | Milestone | Tasks | Ergebnis | Für Betreiber sichtbar |
 | --- | --- | --- | --- |
@@ -217,11 +218,11 @@ Es gibt vier Milestones. Jeder endet in einem **releasefähigen Stand**: Tests, 
 **Ergebnis:** Die Logik verlässt das Paket `main`, noch ohne kong-Umbau. Das ist die risikoärmste Hälfte der Aufgabe: reine Verschiebungen, abgesichert durch die mitwandernden Tests.
 
 Abnahmekriterien:
-- [ ] `cmd/recipe-reader/` enthält nur noch `main.go` und `version.go`; `main.go` lädt nur noch die Config und dispatcht.
-- [ ] `internal/healthcheck` und `internal/server` enthalten die verschobenen Tests, und alle sind grün.
-- [ ] `TestRun_ServesUntilCancelledThenReturnsNil` (Task 2) ist grün: `server.Run` migriert eine leere Datenbank, antwortet auf `/api/healthz` und gibt nach dem Abbruch seines Kontexts `nil` zurück.
-- [ ] Die Laufzeit-Stichprobe aus Task 2, Step 7 ist bestanden: Die gebaute Binary antwortet gegen eine Wegwerf-Datenbank, und nach `SIGTERM` endet der Prozess mit Exit 0.
-- [ ] Das Verhalten ist unverändert: Die Flag-Liste von `--help` ist identisch mit der Baseline, `--health-check` eingeschlossen.
+- [x] `cmd/recipe-reader/` enthält nur noch `main.go` und `version.go`; `main.go` lädt nur noch die Config und dispatcht.
+- [x] `internal/healthcheck` und `internal/server` enthalten die verschobenen Tests, und alle sind grün.
+- [x] `TestRun_ServesUntilCancelledThenReturnsNil` (Task 2) ist grün: `server.Run` migriert eine leere Datenbank, antwortet auf `/api/healthz` und gibt nach dem Abbruch seines Kontexts `nil` zurück.
+- [x] Die Laufzeit-Stichprobe aus Task 2, Step 7 ist bestanden: Die gebaute Binary antwortet gegen eine Wegwerf-Datenbank, und nach `SIGTERM` endet der Prozess mit Exit 0.
+- [x] Das Verhalten ist unverändert: Die Flag-Liste von `--help` ist identisch mit der Baseline, `--health-check` eingeschlossen.
 
 Deckt ab: die Vorarbeit für Z3 und US3.
 
@@ -274,23 +275,27 @@ Entschieden am 2026-09-19: **ein PR pro Milestone**, wie zuletzt im Repo üblich
 
 - **Plan zuerst:** Diese Datei kommt über einen eigenen Docs-PR vom Branch `docs/kong-cli-refactor-plan` nach `main`, bevor M1 beginnt. So zweigt jeder Milestone-Branch von einem `main` ab, das den Plan zum Abhaken schon enthält, und kein Milestone-PR trägt den Plan-Commit mit. Wie jeder PR wird er erst nach Freigabe durch den Nutzer geöffnet.
 - **Abzweigen:** Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist (für M1 der Plan-PR). Will der Nutzer vor dem Merge weitermachen, wird der Branch auf den vorigen gestapelt (PR-Base = Branch des Vorgängers) und nach dessen Merge auf `main` rebased.
-- **Inhalt:** Ein PR enthält die Task-Commits seines Milestones und einen letzten Commit `docs: mark M<n> done in the kong CLI plan`, der die Häkchen in dieser Datei setzt.
+- **Inhalt:** Ein PR enthält die Task-Commits seines Milestones, die Korrektur-Commits aus dem Milestone-Review und einen letzten Commit `docs: mark M<n> done in the kong CLI plan`, der die Häkchen in dieser Datei setzt.
 - **Beschreibung:** Die PR-Beschreibung nennt das Ergebnis des Milestones, listet seine abgehakten Abnahmekriterien und verlinkt diesen Plan. Sie endet mit dem `Assisted-by`-Footer und `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 - **Breaking Change:** PRs werden in diesem Repo per Squash gemergt; der Body des Squash-Commits ist die PR-Beschreibung, die Messages der einzelnen Commits gehen verloren. Der `BREAKING CHANGE:`-Footer im Commit von Task 3 allein erreicht `main` also nicht. Der PR für **M2** trägt den Breaking Change (`--health-check` → `healthcheck`) deshalb zweimal: als Hinweis am Anfang der Beschreibung und als Conventional-Commits-Footer `BREAKING CHANGE: --health-check is replaced by the healthcheck command; external exec probes must be updated.` im letzten Absatz, direkt vor `Assisted-by`. Das `!` im PR-Titel markiert ihn zusätzlich.
 
 ### Aufgabenliste
 
-- [ ] **Plan-PR:** diese Datei über `docs/kong-cli-refactor-plan` nach `main` bringen
-- [ ] **M1: Paket `main` entschlackt**
-  - [ ] **Vorbereitung:** Branch, Werkzeug-Versionen und Baseline
-  - [ ] **Task 1:** Health-Probe nach `internal/healthcheck` (S)
-  - [ ] **Task 2:** Composition Root nach `internal/server` (M)
+- [x] **Plan-PR:** diese Datei über `docs/kong-cli-refactor-plan` nach `main` bringen
+- [x] **M1: Paket `main` entschlackt**
+  - [x] **Vorbereitung:** Branch, Werkzeug-Versionen und Baseline
+  - [x] **Task 1:** Health-Probe nach `internal/healthcheck` (S)
+  - [x] **Task 2:** Composition Root nach `internal/server` (M)
+  - [x] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
 - [ ] **M2: kong-Kommandobaum**
   - [ ] **Task 3:** kong-Kommandobaum in `internal/cli`; `healthcheck` ersetzt `--health-check` (L)
+  - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
 - [ ] **M3: Konfiguration gruppiert**
   - [ ] **Task 4:** Settings in Optionsgruppen pro Belang (M)
+  - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
 - [ ] **M4: `migrate` und Abschluss**
   - [ ] **Task 5:** Kommando `migrate` (S)
+  - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
   - [ ] **Abschluss-Verifikation**
 
 Jeder Task endet grün (Tests, Lint, Build) und ist einzeln reviewbar. Die Reihenfolge ist zwingend, weil jeder Task auf den Paketen des vorigen aufbaut.
@@ -307,7 +312,13 @@ Entschieden am 2026-09-19. **Start erst nach Freigabe durch den Nutzer.**
   2. **Code-Qualität:** Korrektheit, Tests und Kommentarstil; außerdem müssen Commit-Gate bzw. Docker-Gate nachweislich grün gelaufen sein (Ausgabe gesehen, nicht nur behauptet).
   Befunde behebt ein Subagent vor dem nächsten Task. Ein Task, der das Review nicht besteht, blockiert den nächsten.
 - **Commit:** genau ein Commit pro Task mit der Message aus dem jeweiligen Commit-Step, erst nach bestandenem Review. Ausnahmen sind reine Versions-Bumps (Vorbereitung, Step 2; Task 3, Step 0): Sie bekommen einen eigenen `build:`-Commit vor dem Task-Commit, damit der Refactoring-Commit keine fremde Änderung mitträgt.
-- **Abhaken:** Nach jedem bestandenen Task hakt die Hauptsession dessen Steps und den Eintrag in der Aufgabenliste in dieser Datei ab. Einen Milestone hakt sie erst ab, wenn alle seine Abnahmekriterien nachgewiesen sind.
+- **Abhaken:** Nach jedem bestandenen Task hakt die Hauptsession dessen Steps und den Eintrag in der Aufgabenliste in dieser Datei ab. Einen Milestone hakt sie erst ab, wenn alle seine Abnahmekriterien nachgewiesen sind und sein Milestone-Review abgeschlossen ist.
+- **Milestone-Review (Pflicht, vom Nutzer am 2026-09-19 ergänzt):** Nach jeder Fertigstellung eines Milestones MUSS ein neuer Subagent ein Review durchführen. Ein weiterer Subagent soll die gefundenen Review-Findings bewerten und abarbeiten.
+  1. **Review:** Ein frischer Subagent auf dem stärksten verfügbaren Modell prüft den gesamten Diff des Milestones (`git merge-base main HEAD`..`HEAD`) gegen die Abnahmekriterien des Milestones, die *Global Constraints* und die Entscheidungen E1–E12. Er schreibt jeden Befund mit Schweregrad (Critical/Important/Minor), `Datei:Zeile` und Begründung in eine Datei. Das Review ist rein lesend.
+  2. **Bewertung und Abarbeitung:** Ein zweiter, frischer Subagent bewertet jeden Befund mit Begründung als *berechtigt*, *unberechtigt*, *gehört in einen späteren Task* oder *widerspricht dem Plan*. Die berechtigten behebt er. Danach lässt er das Commit-Gate (bzw. das Docker-Gate, wenn `Dockerfile` oder `scripts/` betroffen sind) laufen und committet die Korrekturen mit Footer. Befunde, die dem Plan widersprechen, behebt er nicht; die Hauptsession legt sie dem Nutzer zur Entscheidung vor.
+  3. Die Hauptsession prüft die Bewertung und die Korrektur-Commits und legt beides zusammen mit der Milestone-Abnahme vor.
+
+  Bei M4 läuft das Milestone-Review nach Task 5 und vor der Abschluss-Verifikation, damit diese die Korrekturen mit abdeckt.
 - **Milestone-Abnahme:** Ist ein Milestone erreicht, hält die Hauptsession an und legt dem Nutzer Ergebnis und Abnahmekriterien vor. Den PR öffnet sie erst nach dessen Freigabe. Der nächste Milestone beginnt erst nach dem Merge oder auf ausdrücklichen Wunsch gestapelt.
 - **Abweichungen:** Muss ein Subagent vom Plan abweichen (z. B. weil kong sich anders verhält als unter R1 verifiziert), hält er an und meldet es. Die Hauptsession entscheidet dann oder fragt den Nutzer und hält die Abweichung im betroffenen Task fest.
 - **PR:** einer pro Milestone, geöffnet erst nach der Milestone-Abnahme durch den Nutzer; Titel und Branch stehen unter „Branches und PRs“.
@@ -316,7 +327,7 @@ Entschieden am 2026-09-19. **Start erst nach Freigabe durch den Nutzer.**
 
 ### Vorbereitung: Branch, Werkzeug-Versionen und Baseline
 
-- [ ] **Step 1: Branch für M1 anlegen.** Voraussetzung ist, dass der Plan-PR gemerged ist (siehe „Branches und PRs“). Ist die Datei noch nicht auf `main`, hier anhalten und den Nutzer fragen, statt von einem anderen Branch abzuzweigen.
+- [x] **Step 1: Branch für M1 anlegen.** Voraussetzung ist, dass der Plan-PR gemerged ist (siehe „Branches und PRs“). Ist die Datei noch nicht auf `main`, hier anhalten und den Nutzer fragen, statt von einem anderen Branch abzuzweigen.
 
 ```bash
 git switch main && git pull --ff-only
@@ -326,7 +337,7 @@ git switch -c refactor/kong-cli-extract-main
 
 (Die Branches für M2 bis M4 entstehen nach demselben Muster zu Beginn des jeweiligen Milestones; siehe „Branches und PRs“.)
 
-- [ ] **Step 2: Werkzeug-Versionen prüfen** (Pflicht laut `~/.claude/CLAUDE.md`: immer die neueste stabile Go- und golangci-lint-Version)
+- [x] **Step 2: Werkzeug-Versionen prüfen** (Pflicht laut `~/.claude/CLAUDE.md`: immer die neueste stabile Go- und golangci-lint-Version)
 
 ```bash
 go version
@@ -341,7 +352,7 @@ Erwartet (Stand 2026-09-19): `go1.27.1` lokal, in `go.mod` und als neueste Versi
 - Ist golangci-lint veraltet: mit dem Install-Befehl aus `~/.claude/CLAUDE.md` aktualisieren. Das ändert nur das Werkzeug, es gibt keinen Commit.
 - Gibt es eine neuere stabile Go-Version: lokal installieren, dann die `go`-Direktive (`go mod edit -go=<version>`), das `golang:<major.minor>-alpine`-Image im `Dockerfile` und `go-version` in `.github/workflows/ci.yml` anheben. Danach laufen Commit-Gate und Docker-Gate, und es folgt ein eigener Commit `build: bump Go to <version>` vor Task 1.
 
-- [ ] **Step 3: Ausgangszustand prüfen**
+- [x] **Step 3: Ausgangszustand prüfen**
 
 ```bash
 go test ./... 2>&1 | tail -n 20
@@ -371,7 +382,7 @@ Reine Verschiebung. `probeHealth` wird zu `healthcheck.Probe`, weil es außerhal
 - Consumes: —
 - Produces: `func healthcheck.Probe(ctx context.Context, listenAddr string) error` (Semantik unverändert: nil nur bei 200 und `{"status":"ok"}`; loopback für unspezifizierte Hosts; 3-s-Timeout)
 
-- [ ] **Step 1: Test verschieben und umstellen**
+- [x] **Step 1: Test verschieben und umstellen**
 
 ```bash
 mkdir -p internal/healthcheck
@@ -381,12 +392,12 @@ sed -i 's/^package main$/package healthcheck/; s/probeHealth/Probe/g' internal/h
 
 (`s/probeHealth/Probe/g` ist case-sensitiv; Testnamen wie `TestProbeHealth_…` bleiben erhalten.)
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test ./internal/healthcheck/`
 Expected: FAIL, `undefined: Probe` und `undefined: dialAddr`
 
-- [ ] **Step 3: Implementierung verschieben**
+- [x] **Step 3: Implementierung verschieben**
 
 ```bash
 git mv cmd/recipe-reader/healthcheck.go internal/healthcheck/healthcheck.go
@@ -402,7 +413,7 @@ Dann in `internal/healthcheck/healthcheck.go` die Zeile `package main` ersetzen 
 package healthcheck
 ```
 
-- [ ] **Step 4: `main.go` umstellen**
+- [x] **Step 4: `main.go` umstellen**
 
 In `cmd/recipe-reader/main.go` den Import `"github.com/sBurmester/recipe-reader/internal/healthcheck"` ergänzen (alphabetisch nach `.../internal/extraction`) und in `run()` ersetzen:
 
@@ -424,12 +435,12 @@ durch
 	}
 ```
 
-- [ ] **Step 5: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 5: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go test ./internal/healthcheck/ ./cmd/recipe-reader/ && go build ./...`
 Expected: PASS für beide Pakete, Build ohne Fehler.
 
-- [ ] **Step 6: Commit-Gate und Commit**
+- [x] **Step 6: Commit-Gate und Commit**
 
 ```bash
 git add -A cmd/recipe-reader internal/healthcheck
@@ -459,7 +470,7 @@ Reine Verschiebung von `run()` (ohne Config-Laden und Signal-Handling), `newExtr
 - Consumes: `healthcheck.Probe` (Task 1), `config.Config`/`config.Load` (unverändert), `testdb.NewDatabase(t, name) string`, `testdb.Main(m)`
 - Produces: `func server.Run(ctx context.Context, cfg config.Config, version string) error`. Serviert, bis `ctx` abgebrochen wird, und wartet vor der Rückkehr auf Shutdown und Import. Intern: `newExtractor(cfg config.Config) (extraction.Extractor, error)`, `newHTTPServer(cfg config.Config, deps api.Deps) (*http.Server, error)`, `newFetcher(...)`, `alreadyImported(...)`, jeweils mit unveränderter Signatur.
 
-- [ ] **Step 1: Tests verschieben und umstellen**
+- [x] **Step 1: Tests verschieben und umstellen**
 
 ```bash
 mkdir -p internal/server
@@ -558,12 +569,12 @@ func freeLoopbackAddr(t *testing.T) string {
 }
 ```
 
-- [ ] **Step 2: Tests laufen lassen, sie müssen fehlschlagen**
+- [x] **Step 2: Tests laufen lassen, sie müssen fehlschlagen**
 
 Run: `go test ./internal/server/`
 Expected: FAIL, `undefined: newExtractor`, `undefined: newHTTPServer`, `undefined: newFetcher`, `undefined: Run`
 
-- [ ] **Step 3: Funktionen aus `main.go` extrahieren** (vor Step 5, weil `main.go` dort überschrieben wird)
+- [x] **Step 3: Funktionen aus `main.go` extrahieren** (vor Step 5, weil `main.go` dort überschrieben wird)
 
 ```bash
 {
@@ -608,7 +619,7 @@ sed -i 's/^package main$/package server/; s/^\t"context"$/\t"context"\n\t"errors
 
 Prüfen: `http.go` enthält den `const (...)`-Block mit den vier Timeouts **und** `func newHTTPServer`. In den Kommentaren steht jetzt „separated from Run“ bzw. „Run needs a database and a socket“. „Run itself has no seam at all“ wäre mit `run_test.go` aus Step 1 nicht mehr wahr.
 
-- [ ] **Step 4: `internal/server/server.go` anlegen**
+- [x] **Step 4: `internal/server/server.go` anlegen**
 
 ```go
 // Package server is the composition root of the long-running process: it
@@ -730,7 +741,7 @@ func Run(ctx context.Context, cfg config.Config, version string) error {
 }
 ```
 
-- [ ] **Step 5: `cmd/recipe-reader/main.go` durch den Dispatcher ersetzen**
+- [x] **Step 5: `cmd/recipe-reader/main.go` durch den Dispatcher ersetzen**
 
 ```go
 // Command recipe-reader loads its configuration and hands over to the server —
@@ -783,12 +794,12 @@ sed -i "s/Worker\.Start, which is main's —/Worker.Start, which is server.Run's
 grep -rn "main\.go\|main's" internal   # Expected: keine Treffer
 ```
 
-- [ ] **Step 6: Tests laufen lassen, sie müssen grün sein** (Docker muss laufen: `run_test.go` braucht Postgres)
+- [x] **Step 6: Tests laufen lassen, sie müssen grün sein** (Docker muss laufen: `run_test.go` braucht Postgres)
 
 Run: `go build ./... && go test ./internal/server/ ./internal/healthcheck/ ./cmd/recipe-reader/`
 Expected: PASS für `internal/server` (einschließlich `TestRun_ServesUntilCancelledThenReturnsNil`) und `internal/healthcheck`; `cmd/recipe-reader` meldet `[no test files]`.
 
-- [ ] **Step 7: Laufzeit-Stichprobe** (die gebaute Binary einmal echt starten und per `SIGTERM` beenden; das prüft die Signal-Verdrahtung in `main`, die `run_test.go` nicht erreicht)
+- [x] **Step 7: Laufzeit-Stichprobe** (die gebaute Binary einmal echt starten und per `SIGTERM` beenden; das prüft die Signal-Verdrahtung in `main`, die `run_test.go` nicht erreicht)
 
 Die Stichprobe läuft gegen eine Wegwerf-Datenbank, **nicht** über `make db-up`. Das würde den `db`-Dienst des echten Compose-Projekts mit dem Volume `db-data` starten. Postgres setzt das Passwort nur bei der ersten Initialisierung; bei einem bestehenden Volume mit anderem Passwort scheitert die Anmeldung, und die Stichprobe liefe gegen echte Daten. Port `18080` muss frei sein.
 
@@ -814,12 +825,20 @@ docker rm -f "$db" >/dev/null
 
 Expected: `probe ok`, danach `exit=0` und kein `graceful shutdown failed` im Log. Die Binary wird direkt gestartet und nicht über `go run`, damit das `SIGTERM` den Prozess selbst erreicht. Statt `sleep` wird gepollt, und zwar mit der Probe der Binary selbst. `docker rm -f` auch dann ausführen, wenn ein Schritt davor scheitert.
 
-- [ ] **Step 8: Commit-Gate und Commit**
+- [x] **Step 8: Commit-Gate und Commit**
 
 ```bash
 git add -A cmd/recipe-reader internal
 git commit -m "refactor: move the composition root into internal/server" -m "run(), newExtractor, newServer (now newHTTPServer), the server timeouts, newFetcher and alreadyImported move out of package main unchanged; main only loads config and dispatches."
 ```
+
+**Abweichungen aus dem Milestone-Review von M1** (vom Nutzer am 2026-09-19 entschieden, eigene Commits nach dem Task-Commit):
+- Der grep in Step 5 (`main\.go\|main's`) trifft auch `domain's` in `internal/api/handlers_recipes.go` und `handlers_recipes_test.go`. Das sind zwei erwartete Fehltreffer; künftige greps dieser Art nutzen Wortgrenzen (`\bmain's`).
+- **F1:** Der Doc-Kommentar von `run_test.go` versprach, die Shutdown-Reihenfolge abzusichern. Das kann der Test nicht: Ohne Instagram-Account gibt es keinen Worker, und auch ohne `<-shutdownDone` bleibt er grün. Deshalb konfiguriert der Test jetzt einen Account ohne Passwort, sodass ein Worker existiert, und prüft, dass `GET /api/import/status` den abgelehnten Login als `instagram_auth` meldet. Das ist der erste Test des `pipeline.ErrLogin`-Wraps in `Run`. Der Kommentar sagt jetzt ausdrücklich, dass die Drain-Reihenfolge nicht geprüft wird.
+- **F2:** Der Doc-Kommentar von `Run` beschreibt jetzt auch den Fehlerpfad, der ohne Drain zurückkehrt. Die Verhaltenskorrektur steht im Backlog in Teil A.
+- **F3/F5:** In `http.go` ist die Begründung für `newHTTPServer` korrigiert (`Run` hat keinen Signal-Handler mehr). Die per `sed` verlängerten Kommentarzeilen in `server_test.go`, `http.go` und `bounds_test.go` sind auf 80 Spalten umgebrochen. `worker_lifecycle_test.go` folgt in Task 4, Step 5c.
+- **F6:** Die drei Tests von `newHTTPServer` heißen jetzt `TestNewHTTPServer_*`, weil `\bnewServer\b` nicht in `TestNewServer_` greift. `TestLLMSettings_FallbacksAreProviderScoped` zieht in Task 4 nach `internal/config`.
+- **F4/F7** (ohne Planbezug): In `internal/pipeline` und `.github/workflows/ci.yml` sind veraltete Kommentare korrigiert.
 
 ---
 
@@ -834,8 +853,8 @@ Kern des Umbaus. `config.Load` entfällt. kong parst jetzt einen Baum `CLI{Versi
 - Modify: `internal/config/credentials_test.go` (Description-Test zieht nach `cli`)
 - Delete: `internal/config/version_test.go` (zieht nach `cli`), `cmd/recipe-reader/version.go` (geht in `main.go` auf)
 - Modify: `cmd/recipe-reader/main.go` (Endform)
-- Modify: `internal/healthcheck/healthcheck.go:22` (Doc-Kommentar)
-- Modify (nur Kommentare, die `config.validate` nennen): `internal/pipeline/worker.go:74`, `internal/pipeline/worker_lifecycle_test.go:65`, `internal/api/middleware.go:173`
+- Modify: `internal/healthcheck/healthcheck.go:25` (Doc-Kommentar)
+- Modify (nur Kommentare, die `config.validate` bzw. `config.Load` nennen): `internal/pipeline/worker.go:74`, `internal/pipeline/worker_lifecycle_test.go:65`, `internal/api/middleware.go:15,173`
 - Modify: `Dockerfile:46-55`, `docker-compose.yml:53`, `scripts/smoke-test-image.sh:78-81`, `README.md`
 - Evtl. Modify (Step 0, eigener Commit): `Dockerfile` (`FROM`-Zeilen), `.github/workflows/ci.yml` (`node-version`)
 
@@ -1398,10 +1417,15 @@ sed -i 's/see Config\.validate for when/see Config.Validate for when/' internal/
 sed -i 's/config\.validate rejects one now/config.Config.Validate rejects one now/' \
   internal/pipeline/worker.go internal/pipeline/worker_lifecycle_test.go
 sed -i 's/by Config\.validate, so it cannot/by config.Config.Validate, so it cannot/' internal/api/middleware.go
-grep -rn 'config\.Load\|Load refuses\|onfig\.validate' internal cmd   # Expected: keine Treffer
+sed -i 's/which config\.Load only permits on a loopback/which config validation only permits on a loopback/' internal/api/middleware.go
+grep -rn 'config\.Load\|Load refuses\|onfig\.validate' internal   # Expected: keine Treffer
 ```
 
+Danach in `internal/api/middleware.go` den Absatz von `// Token is the bearer token` bis `// UI.` auf 80 Spalten umbrechen, ohne Wörter zu ändern; die neue Formulierung macht die Zeile länger. Der grep läuft hier nur über `internal`, weil `cmd/recipe-reader/main.go` `config.Load` bis Step 7 noch aufruft; Step 7 wiederholt ihn über `internal cmd`.
+
 (Task 4 zieht die drei `config.Config.Validate` auf die Gruppe nach, die die Regel dann trägt.)
+
+*Nachgetragen im Milestone-Review von M1 (F9):* Die `middleware.go:15`-Zeile, die Aufteilung des grep und die Zeilennummer `healthcheck.go:25` fehlten in der ursprünglichen Fassung. Ohne sie hätte der grep garantiert zwei Treffer geliefert.
 
 - [ ] **Step 7: `main.go` in die Endform bringen**
 
@@ -1432,6 +1456,12 @@ var version = "dev"
 func main() {
 	os.Exit(cli.Main(os.Args[1:], version))
 }
+```
+
+Danach den grep aus Step 6 über beide Verzeichnisse wiederholen:
+
+```bash
+grep -rn 'config\.Load\|Load refuses\|onfig\.validate' internal cmd   # Expected: keine Treffer
 ```
 
 - [ ] **Step 8: Tests laufen lassen, sie müssen grün sein**
@@ -1540,8 +1570,8 @@ Der Footer hier dokumentiert den Commit. `main` erreicht er nur über die PR-Bes
 
 **Files:**
 - Modify: `internal/config/config.go` (komplett ersetzt, Code in Step 4)
-- Modify: `internal/config/config_test.go` (`TestLLMSettings_Precedence`), plus `sed` über alle Config-Tests
-- Modify: `internal/server/*.go` (`sed`, einschließlich `run_test.go` aus Task 2), `internal/server/server_test.go` (`baseConfig`, `TestLLMSettings_FallbacksAreProviderScoped`)
+- Modify: `internal/config/config_test.go` (`TestLLMSettings_Precedence`, plus `TestLLMSettings_FallbacksAreProviderScoped` aus `internal/server/server_test.go`), plus `sed` über alle Config-Tests
+- Modify: `internal/server/*.go` (`sed`, einschließlich `run_test.go` aus Task 2), `internal/server/server_test.go` (`baseConfig`; `TestLLMSettings_FallbacksAreProviderScoped` zieht nach `internal/config`)
 - Modify: `internal/cli/healthcheck.go` (bettet `config.Listen` ein), `internal/cli/cli.go` (`kong.ExplicitGroups`), `internal/cli/cli_test.go` (`sed` + zwei neue Help-Tests)
 - Modify (nur Kommentare): `internal/pipeline/worker.go:74`, `internal/pipeline/worker_lifecycle_test.go:65`, `internal/api/middleware.go:173` (`config.Config.Validate` → die Gruppe, die die Regel jetzt trägt)
 - Modify: `README.md` (Configuration)
@@ -1641,7 +1671,7 @@ EOF
 sed -i -f "$fields" internal/server/*.go internal/config/*_test.go internal/cli/*_test.go
 ```
 
-Struct-Literale erfasst `sed` nicht. Diese drei Stellen von Hand ersetzen:
+Struct-Literale erfasst `sed` nicht. Diese drei Stellen von Hand ersetzen (die zweite zieht dabei um):
 
 `internal/server/server_test.go`, `baseConfig`:
 
@@ -1655,20 +1685,22 @@ func baseConfig(mode string) config.Config {
 }
 ```
 
-`internal/server/server_test.go`, `TestLLMSettings_FallbacksAreProviderScoped`, Rumpf:
+`TestLLMSettings_FallbacksAreProviderScoped` samt Doc-Kommentar aus `internal/server/server_test.go` löschen und in `internal/config/config_test.go` direkt nach `TestLLMSettings_Precedence` einfügen. Er testet eine Methode aus `internal/config` und gehört neben seinen Geschwistertest. Kommentar und Name bleiben, der Rumpf lautet dort (ohne Paketpräfix):
 
 ```go
-	anthropic := config.LLM{Provider: "anthropic", AnthropicAPIKey: "sk-ant", AnthropicModel: "claude-x"}
+	anthropic := LLM{Provider: "anthropic", AnthropicAPIKey: "sk-ant", AnthropicModel: "claude-x"}
 	settings, ok := anthropic.Settings()
 	if !ok || settings.APIKey != "sk-ant" || settings.Model != "claude-x" {
 		t.Errorf("anthropic settings = %+v, ok = %v", settings, ok)
 	}
 
-	openAI := config.LLM{Provider: "openai", AnthropicAPIKey: "sk-ant"}
+	openAI := LLM{Provider: "openai", AnthropicAPIKey: "sk-ant"}
 	if settings, ok := openAI.Settings(); ok {
 		t.Errorf("openai settings = %+v, ok = %v — ANTHROPIC_API_KEY must not carry over", settings, ok)
 	}
 ```
+
+(*Nachgetragen im Milestone-Review von M1, F6.* In `package main` war die Trennung von seinem Geschwistertest harmlos; seit Task 2 liegt eine echte Paketgrenze dazwischen.)
 
 `internal/config/config_test.go`, `TestLLMSettings_Precedence`, Rumpf:
 
@@ -2039,6 +2071,8 @@ sed -i 's/config\.Config\.Validate rejects one now/config.Import.Validate reject
 sed -i 's/by config\.Config\.Validate, so it cannot/by config.HTTP.Validate, so it cannot/' internal/api/middleware.go
 grep -rn 'config\.Config\.Validate\|Config\.Validate for' internal   # Expected: keine Treffer
 ```
+
+Danach die beiden Absätze mit `config.Import.Validate rejects one now` (`internal/pipeline/worker.go` und `internal/pipeline/worker_lifecycle_test.go`) und den Absatz mit `config.HTTP.Validate` in `internal/api/middleware.go` auf 80 Spalten umbrechen, ohne Wörter zu ändern. Das geht erst jetzt, weil die `sed`s von Task 3 und Task 4 jeweils auf eine ganze Zeile zielen (*nachgetragen im Milestone-Review von M1, F5*).
 
 - [ ] **Step 6: Tests laufen lassen, sie müssen grün sein**
 

@@ -59,11 +59,10 @@ jobs:
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-      # internal/db, internal/repository, internal/pipeline and internal/api
-      # each start one ephemeral Postgres container via testcontainers-go,
-      # shared across the package's tests (see internal/db/testdb).
-      # ubuntu-latest runners have Docker natively, so no services: block is
-      # needed.
+      # Every package whose TestMain calls testdb.Main starts one ephemeral
+      # Postgres container via testcontainers-go, shared across the package's
+      # tests (see internal/db/testdb). ubuntu-latest runners have Docker
+      # natively, so no services: block is needed.
       - name: go test
         # -coverprofile, and nothing that gates on the result. A threshold
         # produces tests written to move a number; the per-package percentages

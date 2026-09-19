@@ -1,4 +1,7 @@
-package main
+// Package healthcheck probes a running recipe-reader over HTTP. It is the
+// client half of GET /api/healthz, and what the binary's own health check runs,
+// so the runtime image needs no curl or wget.
+package healthcheck
 
 import (
 	"context"
@@ -16,14 +19,14 @@ import (
 // with none.
 const healthCheckTimeout = 3 * time.Second
 
-// probeHealth asks the server listening on listenAddr whether it is up, and
+// Probe asks the server listening on listenAddr whether it is up, and
 // returns nil only when GET /api/healthz answers 200 with {"status":"ok"}.
 //
 // It is what `recipe-reader --health-check` runs, so the image can carry a
 // HEALTHCHECK without a curl or wget in it. The body is checked as well as the
 // status so that something else answering on the port does not pass for this
 // server.
-func probeHealth(ctx context.Context, listenAddr string) error {
+func Probe(ctx context.Context, listenAddr string) error {
 	addr, err := dialAddr(listenAddr)
 	if err != nil {
 		return fmt.Errorf("health check: %w", err)

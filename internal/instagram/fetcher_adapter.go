@@ -24,14 +24,14 @@ const collectionIDMaxAge = 24 * time.Hour
 // It satisfies pipeline.PostFetcher structurally rather than importing the
 // pipeline package, which keeps the dependency pointing one way: the pipeline
 // knows nothing about Instagram, and this package knows nothing about the
-// pipeline. main.go is the only place the two meet.
+// pipeline. internal/server is the only place the two meet.
 type PipelineFetcher struct {
 	Client         *Client
 	CollectionName string
 
 	// Options bounds one run. Its Known hook is what makes the fetcher skip
 	// past already-imported posts instead of re-collecting the newest page
-	// every time; main.go supplies it from the recipe repository.
+	// every time; internal/server supplies it from the recipe repository.
 	Options FetchOptions
 
 	// mu guards the cached collection id. The worker already runs one import

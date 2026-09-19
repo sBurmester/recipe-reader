@@ -1,4 +1,4 @@
-package main
+package healthcheck
 
 import (
 	"context"
@@ -18,8 +18,8 @@ func TestProbeHealth_PassesAgainstTheRealRouter(t *testing.T) {
 	srv := httptest.NewServer(api.NewRouter(api.Deps{Version: "v1.2.3"}, api.Security{}))
 	defer srv.Close()
 
-	if err := probeHealth(context.Background(), srv.Listener.Addr().String()); err != nil {
-		t.Errorf("probeHealth() error = %v, want nil for a healthy server", err)
+	if err := Probe(context.Background(), srv.Listener.Addr().String()); err != nil {
+		t.Errorf("Probe() error = %v, want nil for a healthy server", err)
 	}
 }
 
@@ -33,8 +33,8 @@ func TestProbeHealth_FailsWhenTheServerIsNotHealthy(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
-			if err := probeHealth(context.Background(), srv.Listener.Addr().String()); err == nil {
-				t.Error("probeHealth() error = nil, want a failure")
+			if err := Probe(context.Background(), srv.Listener.Addr().String()); err == nil {
+				t.Error("Probe() error = nil, want a failure")
 			}
 		})
 	}
@@ -48,8 +48,8 @@ func TestProbeHealth_FailsWhenNothingListens(t *testing.T) {
 	addr := ln.Addr().String()
 	_ = ln.Close()
 
-	if err := probeHealth(context.Background(), addr); err == nil {
-		t.Error("probeHealth() error = nil with nothing listening")
+	if err := Probe(context.Background(), addr); err == nil {
+		t.Error("Probe() error = nil with nothing listening")
 	}
 }
 
@@ -64,11 +64,11 @@ func TestProbeHealth_GivesUpOnAServerThatDoesNotAnswer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	if err := probeHealth(ctx, srv.Listener.Addr().String()); err == nil {
-		t.Error("probeHealth() error = nil for a server that never answered")
+	if err := Probe(ctx, srv.Listener.Addr().String()); err == nil {
+		t.Error("Probe() error = nil for a server that never answered")
 	}
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Errorf("probeHealth() took %v; it should have given up at the deadline", elapsed)
+		t.Errorf("Probe() took %v; it should have given up at the deadline", elapsed)
 	}
 }
 

@@ -20,10 +20,10 @@ func (f *shutdownBlockingFetcher) FetchNewPosts(ctx context.Context) ([]instagra
 }
 
 // go #4: an import triggered through the API ran in a goroutine nobody owned.
-// Shutdown drained the HTTP server and returned from run(), closing the pool
-// under it, and the truncated run was never reported. A triggered run now
-// belongs to the worker: cancelling Start's context stops it, and Wait holds
-// until it has stopped — with the outcome recorded.
+// Shutdown drained the HTTP server and returned from run() (now server.Run),
+// closing the pool under it, and the truncated run was never reported. A
+// triggered run now belongs to the worker: cancelling Start's context stops it,
+// and Wait holds until it has stopped — with the outcome recorded.
 func TestWorker_TriggeredRunIsStoppedByShutdownAndAwaited(t *testing.T) {
 	fetcher := &shutdownBlockingFetcher{started: make(chan struct{})}
 	w := NewWorker(&Pipeline{Fetcher: fetcher, Threshold: 0.6}, time.Hour)
@@ -62,7 +62,7 @@ func TestWorker_WaitWithNothingRunningReturnsAtOnce(t *testing.T) {
 }
 
 // time.NewTicker panics for a non-positive duration, and it runs on the
-// goroutine that calls Start — main's. config.validate rejects one now, which
+// goroutine that calls Start — server.Run's. config.validate rejects one now, which
 // is where an operator's typo belongs, but NewWorker is exported and takes any
 // duration, so Start refuses rather than taking the process down with it.
 // Trigger still works: an on-demand import does not depend on the schedule.
