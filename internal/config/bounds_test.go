@@ -6,9 +6,9 @@ import (
 )
 
 // IMPORT_INTERVAL=0 parses cleanly and then panics time.NewTicker on the
-// goroutine that calls Worker.Start, which is server.Run's — so the process used to
-// abort with a stack trace where every other configuration mistake produces one
-// line from slog.Error. A negative one does the same.
+// goroutine that calls Worker.Start, which is server.Run's — so the process
+// used to abort with a stack trace where every other configuration mistake
+// produces one line from slog.Error. A negative one does the same.
 func TestLoad_RejectsNonPositiveImportInterval(t *testing.T) {
 	for _, interval := range []string{"0", "0s", "-1h"} {
 		t.Setenv("IMPORT_INTERVAL", interval)

@@ -36,10 +36,10 @@ const (
 // newHTTPServer assembles the HTTP server: the API router under /api/ and the
 // embedded frontend beneath it.
 //
-// It is separated from Run so the wiring can be exercised without a database,
-// a signal handler or a listening socket — Run needs a database and a socket, and
-// the composition root is where a mis-wired route or a missing middleware would
-// otherwise go unnoticed until someone opened the page.
+// It is separated from Run so the wiring can be exercised without a database
+// or a listening socket, both of which Run needs, and the composition root is
+// where a mis-wired route or a missing middleware would otherwise go unnoticed
+// until someone opened the page.
 func newHTTPServer(cfg config.Config, deps api.Deps) (*http.Server, error) {
 	// An unauthenticated deployment is reachable only from loopback —
 	// config.Load refuses any other bind without a token — but it is still

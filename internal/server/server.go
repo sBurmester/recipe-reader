@@ -23,6 +23,13 @@ import (
 // Run serves until ctx is cancelled, then drains in-flight requests and any
 // running import before it returns. version is logged at startup and reported
 // by GET /api/healthz.
+//
+// An error return skips that drain. If the HTTP server cannot be built or
+// cannot listen, Run returns at once with the pool closed, while the import
+// schedule it may already have started keeps running under ctx, and so does
+// the goroutine waiting to shut the server down. Both stop when ctx is
+// cancelled, so a caller that carries on after an error rather than exiting
+// cancels ctx first.
 func Run(ctx context.Context, cfg config.Config, version string) error {
 	// Before anything external: a misconfigured extraction mode is a startup
 	// error, and reporting it after a database migration has already run buries
