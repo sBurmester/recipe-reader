@@ -200,6 +200,13 @@ func resolveLookups(ctx context.Context, q *sqlc.Queries, recipe *domain.Recipe)
 // reinsert, inside the caller's transaction. This is the explicit
 // equivalent of what an ORM's association-replace would do — written out
 // by hand here means there's no half-updated association bug to find later.
+//
+// Ingredient lines are written with positions 0..n-1 in slice order, which is
+// the order reads return them in. The same ingredient may appear on two lines,
+// deliberately (persistence P9, decided in T-55): a recipe that sweetens its
+// dough and its topping separately says "Zucker" twice, and merging the lines
+// would lose one of the amounts. What the schema enforces instead is that no
+// two lines share a position (migration 0003), so the order stays total.
 func writeAssociations(ctx context.Context, q *sqlc.Queries, recipe *domain.Recipe) error {
 	if err := q.DeleteRecipeIngredients(ctx, recipe.ID); err != nil {
 		return fmt.Errorf("repository: clear ingredients for recipe %d: %w", recipe.ID, err)
@@ -261,6 +268,18 @@ func (r *pgRecipeRepository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
+// Search returns one page of the recipes matching q, with their associations,
+// and the total number of matches across all pages.
+//
+// The total and the page are read by two separate statements, not from one
+// snapshot, so a write committed between them makes them disagree: total counts
+// a recipe the page never saw, or the reverse, and the pager can offer a page
+// too many or one short until the next load. That is accepted rather than
+// overlooked (persistence P10, review task T-62). Writes are an import every
+// few hours or a person editing one recipe, so the window is milliseconds wide
+// and rarely occupied; the fix — both statements in one REPEATABLE READ
+// transaction — would cost a transaction on the listing the app opens with, to
+// correct a pager that heals itself on the next click.
 func (r *pgRecipeRepository) Search(ctx context.Context, q SearchQuery) ([]domain.Recipe, int64, error) {
 	page, pageSize := q.Page, q.PageSize
 	if page < 1 {

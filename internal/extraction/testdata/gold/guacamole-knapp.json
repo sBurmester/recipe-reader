@@ -6,6 +6,12 @@
   "expect": {
     "no_recipe": false,
     "name": "Schnelle Guacamole",
+    "categories": [
+      "Vorspeise",
+      "Snack",
+      "Vegetarisch",
+      "Vegan"
+    ],
     "ingredients": [
       {
         "name": "Avocados",

@@ -6,6 +6,11 @@
   "expect": {
     "no_recipe": false,
     "name": "Hefezopf",
+    "categories": [
+      "Frühstück",
+      "Backen",
+      "Vegetarisch"
+    ],
     "ingredients": [
       {
         "name": "Mehl",

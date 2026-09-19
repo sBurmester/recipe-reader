@@ -88,7 +88,51 @@ Das Projekt soll ein Rezeptscanner sein, der von Social Media Plattformen wie In
   - Datenbank-Größe
 - Datenschutz oder ethische Überlegungen
   - Instagram API Nutzungsbedingungen
-  - Datenschutzbestimmungen
+  - Datenschutzbestimmungen — siehe 6.1
+
+### 6.1 Datenhaltung und Herkunft der importierten Inhalte
+
+Festgehalten als Entscheidung zu Review-Finding `security` S8 (Aufgabe T-57).
+Der Import speichert Inhalte anderer Personen: den Caption-Text als
+Zubereitung, den Permalink des Posts als `source` und die CDN-Adresse des Bildes
+als `image_url`. Captions können Namen und Handles Dritter enthalten; es sind
+personenbezogene Daten, die nicht von der Nutzerin oder dem Nutzer selbst
+stammen.
+
+**Zweck: eine private Rezeptsammlung für eine Person.** Importiert werden nur
+Posts, die das eigene Konto gespeichert hat. Die Sammlung wird nicht
+veröffentlicht, nicht geteilt und nicht weiterverbreitet. Alles Weitere in
+diesem Abschnitt gilt unter dieser Annahme; fällt sie weg, gilt der letzte
+Absatz.
+
+- **Herkunft.** `source` ist bei jedem importierten Rezept gesetzt, eindeutig
+  und bleibt beim Bearbeiten erhalten. Es ist die Quellenangabe und zugleich der
+  Schlüssel, an dem der Import Duplikate erkennt — es wird nicht entfernt.
+- **Aufbewahrung.** Es gibt keine automatische Löschung. Ein Rezept bleibt, bis
+  es in der Oberfläche (oder per `DELETE /api/recipes/{id}`) gelöscht wird. Wird
+  ein Post auf Instagram gelöscht oder aus der Sammlung entfernt, bleibt das
+  Rezept bestehen: der Import fügt nur hinzu. Das ist für eine private Sammlung
+  gewollt — eine Rezeptsammlung, die sich selbst leert, wenn Dritte etwas
+  löschen, erfüllt ihren Zweck nicht.
+- **Bilder.** `image_url` wird gespeichert, aber nirgends angezeigt. Das bleibt
+  so, bis es bewusst anders entschieden wird: ein angezeigtes Bild würde bei
+  jedem Seitenaufruf aus dem Browser Instagrams CDN abfragen. Die
+  Content-Security-Policy des Frontends (T-48) lässt externe Bilder deshalb
+  nicht zu; wer sie anzeigen will, muss dort `img-src` ändern.
+- **Lesezugriff ist Teilen.** Schreibende Anfragen verlangen ein `API_TOKEN`,
+  lesende nicht (Entscheidung zu `security` S1). Eine Instanz, die über das
+  Netz erreichbar ist — die Compose-Datei veröffentlicht Port 8080 auf allen
+  Schnittstellen —, macht die ganze Sammlung für jeden lesbar, der den Port
+  erreicht. Für den privaten Zweck gehört sie hinter `127.0.0.1`, ein VPN oder
+  einen Reverse-Proxy mit Anmeldung.
+
+**Falls die Sammlung je geteilt oder veröffentlicht werden soll**, trägt die
+Annahme oben nicht mehr, und vorher ist mindestens nötig: die Quelle (`source`)
+in der Oberfläche sichtbar als Quellenangabe anzeigen; eine Regel für
+Aufbewahrung und Löschung festlegen und umsetzen; Lesezugriffe authentifizieren;
+und klären, ob die Verfasserinnen und Verfasser der Posts der Weitergabe
+zustimmen müssen. Das ist eine rechtliche Frage, die dieses Dokument nicht
+beantwortet.
 
 ## 7. Aufgaben für die KI
 - Generierung des Codes für die Rezept-Extraktion

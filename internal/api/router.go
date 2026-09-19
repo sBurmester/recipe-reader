@@ -30,14 +30,16 @@ type Deps struct {
 }
 
 // NewRouter builds the API handler: a method-and-path ServeMux wrapped in the
-// CORS, panic-recovery, logging, authentication, and JSON-write middleware,
+// CORS, logging, panic-recovery, authentication, and JSON-write middleware,
 // outermost first. Recovery sits inside CORS so that a 500 produced by a panic
 // still carries the CORS headers the browser needs in order to read it, and
-// both guards sit inside logging so a rejected write is still logged.
+// inside logging so the request log records that 500 — with logging innermost,
+// the panic unwound past it and a crashed request left no request line at all.
+// Both guards sit inside logging so a rejected write is still logged.
 func NewRouter(deps Deps, sec Security) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /api/healthz", deps.handleHealth)
+	mux.HandleFunc("GET "+healthPath, deps.handleHealth)
 
 	mux.HandleFunc("GET /api/recipes", deps.handleListRecipes)
 	mux.HandleFunc("POST /api/recipes", deps.handleCreateRecipe)
@@ -52,8 +54,12 @@ func NewRouter(deps Deps, sec Security) http.Handler {
 	mux.HandleFunc("POST /api/import/run", deps.handleImportRun)
 	mux.HandleFunc("GET /api/import/status", deps.handleImportStatus)
 
-	return withCORS(sec.AllowedOrigins, withRecovery(withLogging(withAuth(sec.Token, withJSONWrites(mux)))))
+	return withCORS(sec.AllowedOrigins, withLogging(withRecovery(withAuth(sec.Token, withJSONWrites(mux)))))
 }
+
+// healthPath is the liveness endpoint: what the image's HEALTHCHECK probes, and
+// what withLogging keeps out of the default log level when it answers ok.
+const healthPath = "/api/healthz"
 
 // handleHealth answers a liveness probe. It deliberately touches no
 // dependency, so it stays a signal that the process is up and serving rather

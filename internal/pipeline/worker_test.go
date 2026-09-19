@@ -1,4 +1,3 @@
-// internal/pipeline/worker_test.go
 package pipeline
 
 import (
@@ -30,7 +29,10 @@ func TestWorker_RunOnce_ReturnsResultAndUpdatesStatus(t *testing.T) {
 	p := newTestPipeline(t, &fakeFetcher{}, &fakeExtractor{byCaption: map[string]*extraction.ExtractedRecipe{}})
 	w := NewWorker(p, time.Hour)
 
-	result := w.RunOnce(context.Background())
+	result, ran := w.RunOnce(context.Background())
+	if !ran {
+		t.Fatal("RunOnce() ran = false on an idle worker")
+	}
 	if result != (ImportResult{}) {
 		t.Errorf("result = %+v, want zero-value (no posts)", result)
 	}
@@ -79,7 +81,9 @@ func TestWorker_RunOnce_BacksOffAfterARateLimit(t *testing.T) {
 		t.Error("CooldownUntil is zero after a rate-limited run")
 	}
 
-	w.RunOnce(context.Background())
+	if _, ran := w.RunOnce(context.Background()); ran {
+		t.Error("RunOnce() ran = true during the cooldown")
+	}
 
 	fetcher.mu.Lock()
 	calls := fetcher.calls
@@ -101,7 +105,7 @@ func TestWorker_RunOnce_ImportsWhatARateLimitedFetchCollected(t *testing.T) {
 	)
 	w := NewWorker(p, time.Hour)
 
-	result := w.RunOnce(context.Background())
+	result, _ := w.RunOnce(context.Background())
 
 	if result.Imported != 1 {
 		t.Errorf("Imported = %d, want 1 — partial results must still be imported", result.Imported)
@@ -124,7 +128,10 @@ func TestWorker_RunOnce_SkipsConcurrentOverlap(t *testing.T) {
 	go w.RunOnce(context.Background())
 	time.Sleep(50 * time.Millisecond) // let the first RunOnce enter Fetcher.FetchNewPosts and block
 
-	w.RunOnce(context.Background()) // should return immediately without calling the fetcher again
+	// Should return immediately without calling the fetcher again.
+	if result, ran := w.RunOnce(context.Background()); ran || result != (ImportResult{}) {
+		t.Errorf("RunOnce() = (%+v, %v) while a run was in flight, want (zero, false)", result, ran)
+	}
 	close(fetcher.release)
 	time.Sleep(50 * time.Millisecond)
 
@@ -133,5 +140,35 @@ func TestWorker_RunOnce_SkipsConcurrentOverlap(t *testing.T) {
 	fetcher.mu.Unlock()
 	if calls != 1 {
 		t.Errorf("fetcher.calls = %d, want 1 (second RunOnce should have been skipped while running)", calls)
+	}
+}
+
+// go #10: a skip used to return the previous run's result, which a caller
+// could not tell from a fresh one. Here the previous run imported a post and
+// was then rate-limited, so the stale answer would have read as a second
+// successful import.
+func TestWorker_RunOnce_SkipDoesNotReturnTheLastResult(t *testing.T) {
+	post := instagram.SavedPost{Source: "src-stale", Caption: "caption-stale"}
+	p := newTestPipeline(t,
+		&rateLimitedFetcher{posts: []instagram.SavedPost{post}},
+		&fakeExtractor{byCaption: map[string]*extraction.ExtractedRecipe{
+			"caption-stale": {Name: "Alt", Confidence: 0.9},
+		}},
+	)
+	w := NewWorker(p, time.Hour)
+	if first, ran := w.RunOnce(context.Background()); !ran || first.Imported != 1 {
+		t.Fatalf("first RunOnce() = (%+v, %v), want one import", first, ran)
+	}
+
+	result, ran := w.RunOnce(context.Background())
+
+	if ran {
+		t.Error("ran = true during the rate-limit cooldown")
+	}
+	if result != (ImportResult{}) {
+		t.Errorf("result = %+v on a skip, want the zero value rather than the previous run's tally", result)
+	}
+	if got := w.Status().LastResult.Imported; got != 1 {
+		t.Errorf("Status().LastResult.Imported = %d, want 1 — the last run is still reported there", got)
 	}
 }

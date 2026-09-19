@@ -22,6 +22,12 @@ type Config struct {
 	// declared here because kong has no other place to hang a flag.
 	Version kong.VersionFlag `name:"version" help:"Print the version and exit."`
 
+	// HealthCheck is not a setting either: it turns the binary into a probe of
+	// an already running server, for the image's HEALTHCHECK. The runtime image
+	// has no curl or wget, and adding one only to probe ourselves would grow it
+	// for the sake of one GET.
+	HealthCheck bool `name:"health-check" help:"Probe the server already listening on HTTP_ADDR and exit 0 if /api/healthz answers ok, 1 otherwise. For container health checks."`
+
 	// HTTPAddr defaults to loopback rather than all interfaces: the insecure
 	// combination (no token, network-reachable) is then something an operator
 	// has to ask for, not something they get by leaving a field unset.

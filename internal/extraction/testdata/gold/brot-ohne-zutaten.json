@@ -6,6 +6,10 @@
   "expect": {
     "no_recipe": false,
     "name": "Mein Alltagsbrot",
+    "categories": [
+      "Backen",
+      "Vegetarisch"
+    ],
     "ingredients": [],
     "instructions_contain": [
       "über Nacht"

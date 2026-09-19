@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -19,9 +20,14 @@ var defaultCategories = []string{
 	"Vegetarisch", "Vegan", "Backen", "Getränk",
 }
 
-// Seed inserts the default units and categories. It is idempotent — the
-// underlying queries use ON CONFLICT DO UPDATE, so repeated calls neither
-// error nor create duplicates.
+// DefaultCategories returns the categories Seed creates. The rule-based
+// extractor proposes categories from this set by keyword, and its tests hold
+// its list to this one.
+func DefaultCategories() []string { return slices.Clone(defaultCategories) }
+
+// Seed inserts the default units and categories. It is idempotent: the
+// FindOrCreate queries read before they insert, so a boot against a seeded
+// database finds all twenty rows and writes nothing.
 func Seed(ctx context.Context, pool *pgxpool.Pool) error {
 	q := sqlc.New(pool)
 	for _, name := range defaultUnits {

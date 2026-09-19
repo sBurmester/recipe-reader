@@ -1,4 +1,3 @@
-// internal/api/dto_test.go
 package api
 
 import (

@@ -22,7 +22,7 @@ func parse(t *testing.T, dsn string) *pgxpool.Config {
 // The pool used to be built by pgxpool.New, which accepts every default:
 // MinConns 0, so the pool drains to nothing between the six-hourly imports and
 // the first request afterwards pays a full connect; MaxConns max(4, NumCPU), so
-// on a two-CPU container four connections serve a list endpoint that costs
+// on a two-CPU container four connections served a list endpoint that then cost
 // 2+2N queries per page.
 func TestApplyPoolDefaults_FillsInWhatTheDSNOmits(t *testing.T) {
 	cfg := parse(t, baseDSN)

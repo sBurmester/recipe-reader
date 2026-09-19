@@ -22,9 +22,51 @@ type Querier interface {
 	DeleteRecipe(ctx context.Context, id int64) (int64, error)
 	DeleteRecipeCategories(ctx context.Context, recipeID int64) error
 	DeleteRecipeIngredients(ctx context.Context, recipeID int64) error
-	FindOrCreateCategory(ctx context.Context, name string) (Category, error)
-	FindOrCreateIngredient(ctx context.Context, name string) (Ingredient, error)
-	FindOrCreateUnit(ctx context.Context, name string) (Unit, error)
+	// Returns the category row with this name, inserting it first only if there is none.
+	//
+	// It reads before it writes. The plain INSERT ... ON CONFLICT DO UPDATE this
+	// replaces went through the insert path on every call: it spent a sequence
+	// value, wrote a new row version and took a row lock even when the row existed,
+	// which is nearly always. Since recipe writes resolve names inside their own
+	// transaction, that lock was held until the recipe committed, so two writes
+	// naming the same category queued behind each other, and two naming a pair of them
+	// in opposite order could deadlock.
+	//
+	// The INSERT runs only when the read found nothing, and keeps DO UPDATE for the
+	// one case the read cannot see: a row another transaction committed after this
+	// statement's snapshot. DO UPDATE, unlike DO NOTHING, still returns that row,
+	// so the statement always yields exactly one.
+	FindOrCreateCategory(ctx context.Context, name string) (FindOrCreateCategoryRow, error)
+	// Returns the ingredient row with this name, inserting it first only if there is none.
+	//
+	// It reads before it writes. The plain INSERT ... ON CONFLICT DO UPDATE this
+	// replaces went through the insert path on every call: it spent a sequence
+	// value, wrote a new row version and took a row lock even when the row existed,
+	// which is nearly always. Since recipe writes resolve names inside their own
+	// transaction, that lock was held until the recipe committed, so two writes
+	// naming the same ingredient queued behind each other, and two naming a pair of them
+	// in opposite order could deadlock.
+	//
+	// The INSERT runs only when the read found nothing, and keeps DO UPDATE for the
+	// one case the read cannot see: a row another transaction committed after this
+	// statement's snapshot. DO UPDATE, unlike DO NOTHING, still returns that row,
+	// so the statement always yields exactly one.
+	FindOrCreateIngredient(ctx context.Context, name string) (FindOrCreateIngredientRow, error)
+	// Returns the unit row with this name, inserting it first only if there is none.
+	//
+	// It reads before it writes. The plain INSERT ... ON CONFLICT DO UPDATE this
+	// replaces went through the insert path on every call: it spent a sequence
+	// value, wrote a new row version and took a row lock even when the row existed,
+	// which is nearly always. Since recipe writes resolve names inside their own
+	// transaction, that lock was held until the recipe committed, so two writes
+	// naming the same unit queued behind each other, and two naming a pair of them
+	// in opposite order could deadlock.
+	//
+	// The INSERT runs only when the read found nothing, and keeps DO UPDATE for the
+	// one case the read cannot see: a row another transaction committed after this
+	// statement's snapshot. DO UPDATE, unlike DO NOTHING, still returns that row,
+	// so the statement always yields exactly one.
+	FindOrCreateUnit(ctx context.Context, name string) (FindOrCreateUnitRow, error)
 	GetRecipe(ctx context.Context, id int64) (Recipe, error)
 	GetRecipeBySource(ctx context.Context, source string) (Recipe, error)
 	ListCategories(ctx context.Context) ([]Category, error)

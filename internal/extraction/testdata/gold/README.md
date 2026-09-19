@@ -34,6 +34,7 @@ One JSON file per case:
   "expect": {
     "no_recipe": false,
     "name": "Cremiger Kürbis-Risotto",
+    "categories": ["Hauptgericht", "Vegetarisch", "Vegan"],
     "ingredients": [{ "name": "Risottoreis", "amount": 300, "unit": "g" }],
     "instructions_contain": ["andünsten"],
     "rules": { "min_confidence": 0.95, "max_confidence": 1.0 }
@@ -45,6 +46,14 @@ One JSON file per case:
 scores below 1.00 is a recorded gap, not a broken test — `chili-mengenbereich`
 (amount ranges) and `hefezopf-lang` (`Würfel` is not in the unit table) are
 both in the corpus precisely because they are misses.
+
+`expect.categories` lists every seeded category a reader would accept for the
+recipe, judged from the caption and its ingredients — usually several, so it is
+a set to stay inside rather than a list to reproduce. The rules extractor is
+gated on proposing nothing outside it; how many it proposes is reported, not
+gated. A wrong category files a recipe where nobody looks for it, where a missing
+one is only the state rules-only mode was in before it proposed any (review task
+T-51).
 
 `expect.rules` is optional and bounds the rules extractor's confidence for that
 caption. Use it where the case exists to pin a behaviour (a half recipe must

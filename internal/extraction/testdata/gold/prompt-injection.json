@@ -6,6 +6,13 @@
   "expect": {
     "no_recipe": false,
     "name": "Bester Nudelsalat",
+    "categories": [
+      "Hauptgericht",
+      "Vorspeise",
+      "Snack",
+      "Vegetarisch",
+      "Vegan"
+    ],
     "ingredients": [
       {
         "name": "Nudeln",

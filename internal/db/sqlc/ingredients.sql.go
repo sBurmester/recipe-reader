@@ -10,14 +10,41 @@ import (
 )
 
 const findOrCreateIngredient = `-- name: FindOrCreateIngredient :one
-INSERT INTO ingredients (name) VALUES ($1)
-ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-RETURNING id, name
+WITH existing AS (
+    SELECT id, name FROM ingredients WHERE name = $1::text
+), inserted AS (
+    INSERT INTO ingredients (name)
+    SELECT $1::text WHERE NOT EXISTS (SELECT 1 FROM existing)
+    ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+    RETURNING id, name
+)
+SELECT id, name FROM existing
+UNION ALL
+SELECT id, name FROM inserted
 `
 
-func (q *Queries) FindOrCreateIngredient(ctx context.Context, name string) (Ingredient, error) {
+type FindOrCreateIngredientRow struct {
+	ID   int64
+	Name string
+}
+
+// Returns the ingredient row with this name, inserting it first only if there is none.
+//
+// It reads before it writes. The plain INSERT ... ON CONFLICT DO UPDATE this
+// replaces went through the insert path on every call: it spent a sequence
+// value, wrote a new row version and took a row lock even when the row existed,
+// which is nearly always. Since recipe writes resolve names inside their own
+// transaction, that lock was held until the recipe committed, so two writes
+// naming the same ingredient queued behind each other, and two naming a pair of them
+// in opposite order could deadlock.
+//
+// The INSERT runs only when the read found nothing, and keeps DO UPDATE for the
+// one case the read cannot see: a row another transaction committed after this
+// statement's snapshot. DO UPDATE, unlike DO NOTHING, still returns that row,
+// so the statement always yields exactly one.
+func (q *Queries) FindOrCreateIngredient(ctx context.Context, name string) (FindOrCreateIngredientRow, error) {
 	row := q.db.QueryRow(ctx, findOrCreateIngredient, name)
-	var i Ingredient
+	var i FindOrCreateIngredientRow
 	err := row.Scan(&i.ID, &i.Name)
 	return i, err
 }

@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -43,8 +44,14 @@ type goldCase struct {
 	Note    string `json:"note"`
 	Caption string `json:"caption"`
 	Expect  struct {
-		NoRecipe            bool             `json:"no_recipe"`
-		Name                string           `json:"name"`
+		NoRecipe bool   `json:"no_recipe"`
+		Name     string `json:"name"`
+		// Categories are the ones a reader would accept for the recipe —
+		// several are usually right, so it is a set to stay inside rather
+		// than a list to reproduce. The rules are gated on proposing nothing
+		// outside it: a wrong category is the harm, a missing one is only
+		// the state rules-only mode was in before it proposed any.
+		Categories          []string         `json:"categories"`
 		Ingredients         []goldIngredient `json:"ingredients"`
 		InstructionsContain []string         `json:"instructions_contain"`
 		Rules               *struct {
@@ -172,6 +179,7 @@ func TestGoldSetRules(t *testing.T) {
 
 	var scores []score
 	names, namesRight := 0, 0
+	proposed := 0
 	for _, c := range cases {
 		t.Run(c.ID, func(t *testing.T) {
 			got, err := e.Extract(context.Background(), c.Caption)
@@ -206,6 +214,15 @@ func TestGoldSetRules(t *testing.T) {
 					t.Errorf("Instructions do not contain %q", want)
 				}
 			}
+			proposed += len(got.Categories)
+			if c.Expect.Categories != nil {
+				for _, cat := range got.Categories {
+					if !slices.Contains(c.Expect.Categories, cat) {
+						t.Errorf("Categories = %v: %q is not one a reader would file this under (%v)",
+							got.Categories, cat, c.Expect.Categories)
+					}
+				}
+			}
 
 			s := scoreIngredients(c.Expect.Ingredients, got.Ingredients)
 			s.id, s.confidence = c.ID, got.Confidence
@@ -221,6 +238,7 @@ func TestGoldSetRules(t *testing.T) {
 	}
 
 	t.Log("\n" + report(scores))
+	t.Logf("categories: %d proposed across %d recipe cases", proposed, len(scores))
 	if len(scores) == 0 {
 		t.Fatal("no recipe cases were scored")
 	}

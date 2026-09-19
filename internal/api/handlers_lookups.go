@@ -10,7 +10,7 @@ import "net/http"
 func (d Deps) handleListCategories(w http.ResponseWriter, r *http.Request) {
 	categories, err := d.Lookups.ListCategories(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list categories")
+		writeInternalError(w, r, "failed to list categories", err)
 		return
 	}
 	dtos := make([]CategoryDTO, 0, len(categories))
@@ -23,7 +23,7 @@ func (d Deps) handleListCategories(w http.ResponseWriter, r *http.Request) {
 func (d Deps) handleListUnits(w http.ResponseWriter, r *http.Request) {
 	units, err := d.Lookups.ListUnits(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list units")
+		writeInternalError(w, r, "failed to list units", err)
 		return
 	}
 	dtos := make([]UnitDTO, 0, len(units))
@@ -36,7 +36,7 @@ func (d Deps) handleListUnits(w http.ResponseWriter, r *http.Request) {
 func (d Deps) handleListIngredients(w http.ResponseWriter, r *http.Request) {
 	ingredients, err := d.Lookups.ListIngredients(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list ingredients")
+		writeInternalError(w, r, "failed to list ingredients", err)
 		return
 	}
 	dtos := make([]IngredientLookupDTO, 0, len(ingredients))

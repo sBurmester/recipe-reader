@@ -6,6 +6,11 @@
   "expect": {
     "no_recipe": false,
     "name": "Cremiger Kürbis-Risotto",
+    "categories": [
+      "Hauptgericht",
+      "Vegetarisch",
+      "Vegan"
+    ],
     "ingredients": [
       {
         "name": "Risottoreis",

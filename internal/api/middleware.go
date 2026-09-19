@@ -24,12 +24,66 @@ type Security struct {
 
 // withLogging records one line per request after the handler has run, so the
 // logged duration covers the whole handler chain below it.
+//
+// The line carries the response status. Without it every request logged
+// identically, 500s included, and the log could say that something was asked
+// but never how it went.
+//
+// A health probe that succeeds is logged at debug level, below the default. The
+// image's HEALTHCHECK asks every 30 seconds — nearly three thousand identical
+// lines a day, burying the ones worth reading. A probe that fails is still
+// logged at info, because that one is news.
 func withLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		next.ServeHTTP(w, r)
-		slog.Info("http request", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
+		rec := &statusRecorder{ResponseWriter: w}
+		next.ServeHTTP(rec, r)
+
+		status := rec.statusCode()
+		level := slog.LevelInfo
+		if r.URL.Path == healthPath && status == http.StatusOK {
+			level = slog.LevelDebug
+		}
+		slog.Log(r.Context(), level, "http request", "method", r.Method, "path", r.URL.Path,
+			"status", status, "duration", time.Since(start))
 	})
+}
+
+// statusRecorder remembers the status a handler sent, for withLogging.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+// WriteHeader records the first final status. An informational 1xx is not the
+// response's status — the real one follows it — so it is passed on unrecorded.
+func (s *statusRecorder) WriteHeader(code int) {
+	if s.status == 0 && code >= http.StatusOK {
+		s.status = code
+	}
+	s.ResponseWriter.WriteHeader(code)
+}
+
+// Write records the implicit 200 net/http sends when a handler writes a body
+// without calling WriteHeader first.
+func (s *statusRecorder) Write(b []byte) (int, error) {
+	if s.status == 0 {
+		s.status = http.StatusOK
+	}
+	return s.ResponseWriter.Write(b)
+}
+
+// Unwrap lets http.ResponseController reach the underlying writer — Flush,
+// the per-request deadlines — through the wrapper.
+func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
+// statusCode is the status the client received. A handler that wrote nothing
+// at all still answered 200: net/http sends it when the handler returns.
+func (s *statusRecorder) statusCode() int {
+	if s.status == 0 {
+		return http.StatusOK
+	}
+	return s.status
 }
 
 // withRecovery turns a handler panic into a 500 response. net/http already
@@ -37,12 +91,23 @@ func withLogging(next http.Handler) http.Handler {
 // connection without a response; answering with JSON instead means a client
 // bug or an unexpected nil never looks like a network failure to the frontend.
 //
+// http.ErrAbortHandler is the exception, and is re-panicked. It is not a bug:
+// it is how a handler — or httputil.ReverseProxy — deliberately aborts a
+// response, and net/http recognises it and drops the connection without logging
+// a stack. Answering it with a 500 would send a response the handler chose not
+// to send, and log a deliberate abort as a crash.
+//
 // If the handler had already written a response body before panicking the
 // status is fixed by then and only the log line records what happened.
 func withRecovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
+				// Compared by identity, as net/http itself does: a wrapped
+				// abort is not one net/http would recognise either.
+				if rec == http.ErrAbortHandler { //nolint:errorlint // see above
+					panic(rec)
+				}
 				slog.Error("panic recovered", "error", rec, "path", r.URL.Path)
 				writeError(w, http.StatusInternalServerError, "internal server error")
 			}

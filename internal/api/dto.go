@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/sBurmester/recipe-reader/internal/domain"
@@ -20,6 +21,17 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // handling there never has to branch on which endpoint failed.
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// writeInternalError answers 500 with message, and logs err — which the client
+// is deliberately not shown, since it carries SQL and driver detail.
+//
+// Every 500 used to discard its error outright, so a failure left no trace
+// beyond a generic message in the browser; withLogging now records the status,
+// and this is the line above it that says why.
+func writeInternalError(w http.ResponseWriter, r *http.Request, message string, err error) {
+	slog.Error("request failed", "method", r.Method, "path", r.URL.Path, "error", err)
+	writeError(w, http.StatusInternalServerError, message)
 }
 
 // IngredientDTO is one ingredient line as the frontend sees it: free text for

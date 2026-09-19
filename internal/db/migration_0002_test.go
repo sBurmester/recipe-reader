@@ -3,19 +3,10 @@ package db_test
 import (
 	"context"
 	"errors"
-	"net"
-	"net/url"
-	"strconv"
 	"testing"
 
-	"github.com/golang-migrate/migrate/v4"
-	// Reads the migrations straight from ./migrations: this test lives outside
-	// package db (testdb imports db, so an internal test would be an import
-	// cycle) and cannot reach the embedded copy.
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/sBurmester/recipe-reader/internal/db"
 	"github.com/sBurmester/recipe-reader/internal/db/testdb"
 )
 
@@ -25,41 +16,16 @@ import (
 // starting at all, so the backfill is run against a database that took exactly
 // those writes — stopped at 0001, written to, then migrated.
 //
-// It uses a database of its own inside the shared container, because the
-// shared one is already fully migrated.
+// It uses a database of its own (testdb.NewDatabase), because the shared one is
+// already fully migrated.
 func TestMigration0002_BackfillsThenEnforcesStatus(t *testing.T) {
 	ctx := context.Background()
-	admin := testdb.New(t)
-	const name = "migration_0002"
-	if _, err := admin.Exec(ctx, "CREATE DATABASE "+name); err != nil {
-		t.Fatalf("create database: %v", err)
-	}
-	t.Cleanup(func() { _, _ = admin.Exec(context.Background(), "DROP DATABASE "+name+" WITH (FORCE)") })
-
-	cfg := admin.Config().ConnConfig
-	dsn := url.URL{
-		Scheme:   "postgres",
-		User:     url.UserPassword(cfg.User, cfg.Password),
-		Host:     net.JoinHostPort(cfg.Host, strconv.Itoa(int(cfg.Port))),
-		Path:     "/" + name,
-		RawQuery: "sslmode=disable",
-	}
-	migrateURL := dsn
-	migrateURL.Scheme = "pgx5"
-
-	m, err := migrate.New("file://migrations", migrateURL.String())
-	if err != nil {
-		t.Fatalf("migrate.New: %v", err)
-	}
-	defer func() { _, _ = m.Close() }()
+	dsn := testdb.NewDatabase(t, "migration_0002")
+	m := fileMigrator(t, dsn)
 	if err := m.Migrate(1); err != nil {
 		t.Fatalf("migrate to 1: %v", err)
 	}
-
-	pool, err := db.Connect(ctx, dsn.String())
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
+	pool := connect(t, dsn)
 	defer pool.Close()
 
 	if _, err := pool.Exec(ctx, `INSERT INTO recipes (name, source, status) VALUES
@@ -91,7 +57,7 @@ func TestMigration0002_BackfillsThenEnforcesStatus(t *testing.T) {
 	}
 
 	// And from here on the schema refuses it, whoever the writer is.
-	_, err = pool.Exec(ctx, "INSERT INTO recipes (name, source, status) VALUES ('x', 'src-after', 'banana')")
+	_, err := pool.Exec(ctx, "INSERT INTO recipes (name, source, status) VALUES ('x', 'src-after', 'banana')")
 	if pgErr, ok := errors.AsType[*pgconn.PgError](err); !ok || pgErr.Code != "23514" {
 		t.Errorf("insert with bogus status after 0002: err = %v, want check_violation (23514)", err)
 	}

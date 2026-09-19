@@ -55,11 +55,49 @@ func IsPlaceholder() bool {
 	return err != nil || placeholder
 }
 
+// contentSecurityPolicy is the policy the frontend is served under.
+//
+// It can be this strict because the bundle is: Vite emits one same-origin
+// script and one same-origin stylesheet, with no inline script, no inline
+// style, no style attribute, no image and no third-party origin — and
+// embed_test.go fails if an inline script or style is ever added to
+// index.html, rather than leaving the browser to block it silently.
+//
+//   - default-src 'self' covers the script, the stylesheet and the fetch calls
+//     to /api, all same-origin.
+//   - img-src allows data: for the odd inline icon a stylesheet may carry, and
+//     not https:. The stored image_url is never rendered (security S8); if the
+//     UI ever shows it, this is the line to change, and it should be changed
+//     knowingly — rendering it pings Instagram's CDN on every page view.
+//   - frame-ancestors 'none' is the clickjacking defence. The app was
+//     framable, and framing plus a UI redress was an alternative route to the
+//     destructive actions security S1 describes.
+//   - object-src, base-uri and form-action close the usual gaps default-src
+//     leaves open.
+const contentSecurityPolicy = "default-src 'self'; img-src 'self' data:; object-src 'none'; " +
+	"base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+
+// withSecurityHeaders sets the response headers security S7 found missing on
+// every response the frontend handler sends, the index.html fallback included.
+// X-Frame-Options repeats frame-ancestors for browsers that predate it.
+func withSecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		// The app links out to each recipe's Instagram permalink; no-referrer
+		// keeps the local address it is served from out of those requests.
+		h.Set("Referrer-Policy", "no-referrer")
+		next.ServeHTTP(w, r)
+	})
+}
+
 // Handler serves the built frontend, falling back to index.html for any path
 // that is not a real file. The app itself routes on the URL hash, which never
 // reaches the server, so the fallback is not what makes deep links work — it
 // is what stops a typo or a stale bookmark from returning a bare 404 instead
-// of the app.
+// of the app. Every response carries the security headers above.
 func Handler() (http.Handler, error) {
 	sub, _, err := frontend()
 	if err != nil {
@@ -67,7 +105,7 @@ func Handler() (http.Handler, error) {
 	}
 	fileServer := http.FileServer(http.FS(sub))
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return withSecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// TrimPrefix rather than slicing: URL.Path is normally rooted, but an
 		// empty path would make an unchecked r.URL.Path[1:] panic, and fs.Stat
 		// wants a relative name either way.
@@ -79,5 +117,5 @@ func Handler() (http.Handler, error) {
 			}
 		}
 		fileServer.ServeHTTP(w, r)
-	}), nil
+	})), nil
 }

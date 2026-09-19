@@ -6,6 +6,9 @@
   "expect": {
     "no_recipe": false,
     "name": "Bärlauchpesto",
+    "categories": [
+      "Vegetarisch"
+    ],
     "ingredients": [
       {
         "name": "Bärlauch",

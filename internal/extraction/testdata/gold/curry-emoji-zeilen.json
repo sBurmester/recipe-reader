@@ -6,6 +6,11 @@
   "expect": {
     "no_recipe": false,
     "name": "Rotes Linsen-Curry",
+    "categories": [
+      "Hauptgericht",
+      "Vegetarisch",
+      "Vegan"
+    ],
     "ingredients": [
       {
         "name": "Kokosmilch",

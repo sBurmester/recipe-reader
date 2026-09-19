@@ -42,11 +42,15 @@ type Ingredient struct {
 	Name string
 }
 
-// RecipeIngredient carries write-side fields (IngredientID/UnitID, set by
-// callers via LookupRepository.FindOrCreate* before Create/Update) and
-// read-side fields (IngredientName/UnitName, populated from a join by
-// RecipeRepository reads) in the same struct — simpler than two types for
-// what's fundamentally one row.
+// RecipeIngredient carries write-side fields (IngredientID/UnitID, which
+// RecipeRepository fills in from the names inside its write transaction when
+// they are zero) and read-side fields (IngredientName/UnitName, populated from
+// a join by RecipeRepository reads) in the same struct — simpler than two types
+// for what's fundamentally one row.
+//
+// It is one line of a recipe, not one ingredient: a recipe may list the same
+// ingredient on two lines ("200 g Zucker" for the dough, "50 g Zucker" for the
+// topping), and each line keeps its own amount, unit and position.
 type RecipeIngredient struct {
 	IngredientID   int64
 	IngredientName string

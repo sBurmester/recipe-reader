@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/sBurmester/recipe-reader/internal/db/testdb"
@@ -114,5 +116,53 @@ func TestRecipeRepository_FailedWrite_LeavesNoOrphanLookups(t *testing.T) {
 		if i.Name == "Orphan-Zutat" {
 			t.Error("ingredient created for the failed write survived it")
 		}
+	}
+}
+
+// persistence P9, decided in T-55: a recipe may list the same ingredient on
+// two lines, and both survive a write and a read — with their own amounts, in
+// the order given. A UNIQUE (recipe_id, ingredient_id) would have refused this
+// recipe or merged the lines and lost one of the amounts. An update that
+// reorders the lines exercises migration 0003's constraint: the old rows are
+// deleted before the new positions are written, so reuse of a position is fine.
+func TestRecipeRepository_SameIngredientOnTwoLines(t *testing.T) {
+	ctx := context.Background()
+	repo := NewRecipeRepository(testdb.New(t))
+
+	r := &domain.Recipe{
+		Name: "Streuselkuchen", Source: "src-streusel", Status: domain.StatusPublished,
+		Ingredients: []domain.RecipeIngredient{
+			{IngredientName: "Zucker", Amount: 200, UnitName: "g"},
+			{IngredientName: "Mehl", Amount: 400, UnitName: "g"},
+			{IngredientName: "Zucker", Amount: 50, UnitName: "g"},
+		},
+	}
+	if err := repo.Create(ctx, r); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	assertLines(t, repo, r.ID, []string{"Zucker 200", "Mehl 400", "Zucker 50"})
+
+	r.Ingredients = []domain.RecipeIngredient{
+		{IngredientName: "Zucker", Amount: 60, UnitName: "g"},
+		{IngredientName: "Zucker", Amount: 180, UnitName: "g"},
+	}
+	if err := repo.Update(ctx, r); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	assertLines(t, repo, r.ID, []string{"Zucker 60", "Zucker 180"})
+}
+
+func assertLines(t *testing.T, repo RecipeRepository, id int64, want []string) {
+	t.Helper()
+	got, err := repo.GetByID(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	lines := make([]string, 0, len(got.Ingredients))
+	for _, ing := range got.Ingredients {
+		lines = append(lines, fmt.Sprintf("%s %g", ing.IngredientName, ing.Amount))
+	}
+	if !slices.Equal(lines, want) {
+		t.Errorf("ingredient lines = %v, want %v", lines, want)
 	}
 }

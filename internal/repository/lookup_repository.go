@@ -1,4 +1,3 @@
-// internal/repository/lookup_repository.go
 package repository
 
 import (
@@ -11,6 +10,16 @@ import (
 	"github.com/sBurmester/recipe-reader/internal/domain"
 )
 
+// LookupRepository reads and extends the three shared vocabularies a recipe
+// refers to: categories, units and ingredients. They are shared across every
+// recipe, which is why the API serves them to the frontend's pickers and why the
+// import may only attach a category that is already in the list.
+//
+// The List methods return rows ordered by name. The FindOrCreate methods return
+// the row with exactly that name, inserting it first if there is none; they are
+// safe to call concurrently for the same name. Recipe writes do not go through
+// them — RecipeRepository resolves names inside its own transaction — so they
+// exist for callers that need a lookup row on its own.
 type LookupRepository interface {
 	ListCategories(ctx context.Context) ([]domain.Category, error)
 	ListUnits(ctx context.Context) ([]domain.Unit, error)
@@ -24,6 +33,7 @@ type pgLookupRepository struct {
 	queries *sqlc.Queries
 }
 
+// NewLookupRepository returns a Postgres-backed LookupRepository over pool.
 func NewLookupRepository(pool *pgxpool.Pool) LookupRepository {
 	return &pgLookupRepository{queries: sqlc.New(pool)}
 }

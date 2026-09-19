@@ -6,6 +6,10 @@
   "expect": {
     "no_recipe": false,
     "name": "Ofengemüse mit Feta",
+    "categories": [
+      "Hauptgericht",
+      "Vegetarisch"
+    ],
     "ingredients": [
       {
         "name": "Zucchini",

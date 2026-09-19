@@ -28,10 +28,10 @@ var migrationsFS embed.FS
 // pgxpool parameter. They replace pgxpool's own, which are tuned for a service
 // with far more traffic than this one and were being accepted by default.
 const (
-	// defaultMaxConns is raised above pgxpool's max(4, NumCPU). A single page
-	// of search costs 2+2N queries (persistence P4, deferred deliberately), so
-	// on a two-CPU container the four connections pgxpool would pick make the
-	// list endpoint the pool's bottleneck under even light concurrent use.
+	// defaultMaxConns is raised above pgxpool's max(4, NumCPU), which is four
+	// on a two-CPU container — few enough that an import and a couple of
+	// browser tabs contend for them. (This was first argued from search costing
+	// 2+2N queries a page; persistence P4 has since cut that to four.)
 	defaultMaxConns = 10
 	// defaultMinConns is above pgxpool's 0 so the pool does not drain to
 	// nothing between the six-hourly imports, leaving the first request after
@@ -115,19 +115,50 @@ func dsnParams(dsn string) map[string]struct{} {
 // Migrate applies all pending embedded migrations against dsn (a
 // postgres:// URL — the same one passed to Connect).
 func Migrate(dsn string) error {
-	src, err := iofs.New(migrationsFS, "migrations")
+	m, err := newMigrate(dsn)
 	if err != nil {
-		return fmt.Errorf("db: migration source: %w", err)
-	}
-	m, err := migrate.NewWithSourceInstance("iofs", src, migrateURL(dsn))
-	if err != nil {
-		return fmt.Errorf("db: migration init: %w", err)
+		return err
 	}
 	defer func() { _, _ = m.Close() }()
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("db: migrate up: %w", err)
 	}
 	return nil
+}
+
+// MigrateDown reverts every applied migration against dsn, newest first,
+// leaving no application tables behind. It destroys every row in them.
+//
+// Nothing in the binary calls it. It exists so the down migrations run through
+// the same embedded source and the same URL handling as Migrate, which is what
+// a rollback of a deployed binary would have to use — the image carries no
+// migration files for the golang-migrate CLI to read. A down migration that has
+// never been run is not a rollback plan: until TestMigrations_UpDownUp ran this,
+// the only evidence that 0001 drops its tables in a workable order was reading
+// it.
+func MigrateDown(dsn string) error {
+	m, err := newMigrate(dsn)
+	if err != nil {
+		return err
+	}
+	defer func() { _, _ = m.Close() }()
+	if err := m.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("db: migrate down: %w", err)
+	}
+	return nil
+}
+
+// newMigrate builds a migrator over the embedded migrations for dsn.
+func newMigrate(dsn string) (*migrate.Migrate, error) {
+	src, err := iofs.New(migrationsFS, "migrations")
+	if err != nil {
+		return nil, fmt.Errorf("db: migration source: %w", err)
+	}
+	m, err := migrate.NewWithSourceInstance("iofs", src, migrateURL(dsn))
+	if err != nil {
+		return nil, fmt.Errorf("db: migration init: %w", err)
+	}
+	return m, nil
 }
 
 // migrateURL rewrites a postgres:// / postgresql:// DSN to the pgx5:// scheme

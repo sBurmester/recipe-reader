@@ -40,6 +40,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # No healthcheck: block here, deliberately. The service inherits the
+    # image's HEALTHCHECK (`recipe-reader --health-check` against
+    # /api/healthz), so `docker compose ps` already reports it and a service
+    # added later can wait on `condition: service_healthy`. Restating it here
+    # would be a second copy of the same probe, free to drift from the first.
     environment:
       # Built from the same variables the db service uses, so the two cannot
       # drift. Set DB_DSN yourself to override it wholesale — which is also the

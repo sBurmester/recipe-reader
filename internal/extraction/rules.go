@@ -30,6 +30,8 @@ const untitledRecipe = "Unbenanntes Rezept"
 // RuleBasedExtractor is a fast, dependency-free Extractor that parses captions
 // following the common German "Zutaten:/Zubereitung:" layout. It never returns
 // an error; a caption it does not understand comes back with Confidence 0.
+// Categories come from keywords in the caption's title and hashtags (see
+// categoriesFor).
 type RuleBasedExtractor struct{}
 
 // NewRuleBasedExtractor returns a ready-to-use RuleBasedExtractor. It is safe
@@ -79,6 +81,11 @@ func (e *RuleBasedExtractor) Extract(_ context.Context, caption string) (*Extrac
 	// len(ingredientLines) is the denominator of the coverage term: how many
 	// lines the ingredients section offered, against how many parsed.
 	result.Confidence = confidenceFor(result, len(ingredientLines))
+	// Only for something the pipeline will store: a caption that scores 0 is
+	// "no recipe here", and categories on it would describe nothing.
+	if result.Confidence > 0 {
+		result.Categories = categoriesFor(lines)
+	}
 	return result, nil
 }
 
