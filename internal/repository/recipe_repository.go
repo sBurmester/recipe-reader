@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 
 	"github.com/jackc/pgx/v5"
@@ -21,6 +22,12 @@ import (
 // ErrNotFound is returned by single-row lookups when no row matches.
 var ErrNotFound = errors.New("repository: not found")
 
+// ErrDuplicateSource is returned by Create when a recipe with the same source
+// already exists. It is a normal outcome rather than a failure: source is the
+// import's identity for a post, so a second insert of one is a duplicate, not
+// an error — see CreateRecipe's ON CONFLICT clause.
+var ErrDuplicateSource = errors.New("repository: a recipe with this source already exists")
+
 // SearchQuery is the filter and pagination input for RecipeRepository.Search.
 type SearchQuery struct {
 	Text       string
@@ -33,6 +40,7 @@ type SearchQuery struct {
 // RecipeRepository persists and queries recipes together with their
 // ingredient and category associations.
 type RecipeRepository interface {
+	// Create returns ErrDuplicateSource when r.Source is already stored.
 	Create(ctx context.Context, r *domain.Recipe) error
 	GetByID(ctx context.Context, id int64) (*domain.Recipe, error)
 	GetBySource(ctx context.Context, source string) (*domain.Recipe, error)
@@ -55,6 +63,9 @@ func NewRecipeRepository(pool *pgxpool.Pool) RecipeRepository {
 // transaction, resolving any association given by name rather than id (see
 // resolveLookups). recipe is updated with the stored ids and timestamps only
 // once the transaction has committed; after a failure it is left as passed.
+//
+// It returns ErrDuplicateSource when a recipe with the same source is already
+// stored. Callers that import are expected to treat that as a skip.
 func (r *pgRecipeRepository) Create(ctx context.Context, recipe *domain.Recipe) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -68,6 +79,13 @@ func (r *pgRecipeRepository) Create(ctx context.Context, recipe *domain.Recipe) 
 		Name: staged.Name, Instructions: staged.Instructions,
 		ImageUrl: staged.ImageURL, Source: staged.Source, Status: string(staged.Status),
 	})
+	// ON CONFLICT (source) DO NOTHING returns no row on a duplicate, which pgx
+	// reports as ErrNoRows. That is the dedupe firing, not a failure, so it
+	// gets its own sentinel — and it fires inside the transaction, before any
+	// lookup row has been written, so the rollback leaves nothing behind.
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrDuplicateSource
+	}
 	if err != nil {
 		return fmt.Errorf("repository: create recipe: %w", err)
 	}
@@ -269,6 +287,19 @@ func (r *pgRecipeRepository) Search(ctx context.Context, q SearchQuery) ([]domai
 		return nil, 0, fmt.Errorf("repository: count recipes: %w", err)
 	}
 
+	// The OFFSET column is int32 on the wire, and page arrives from
+	// strconv.Atoi on a query parameter with only its lower bound clamped. An
+	// unchecked conversion wrapped: page=214748365 became offset=-16, which
+	// Postgres rejects as a 500, and a value that wrapped to a small positive
+	// offset was worse — it returned page 1's rows while claiming to be page
+	// N, with no error at all. The guard divides rather than multiplying, so
+	// the product that would overflow is never computed.
+	if page-1 > math.MaxInt32/pageSize {
+		// Past the last addressable page. The count still stands: this is an
+		// empty page of a real result set, not a failure.
+		return []domain.Recipe{}, total, nil
+	}
+
 	// SearchRecipes orders by (name, id): recipes.name is not unique, so id is
 	// the tiebreaker that keeps paging stable across successive page fetches.
 	rows, err := r.queries.SearchRecipes(ctx, sqlc.SearchRecipesParams{
@@ -279,44 +310,76 @@ func (r *pgRecipeRepository) Search(ctx context.Context, q SearchQuery) ([]domai
 		return nil, 0, fmt.Errorf("repository: search recipes: %w", err)
 	}
 
-	// One assemble() round trip per result row (list + ingredients +
-	// categories queries). Fine at personal-recipe-collection scale; if
-	// this ever shows up in profiling, batch it with a single joined query
-	// instead of guessing at that optimization now.
-	recipes := make([]domain.Recipe, 0, len(rows))
-	for _, row := range rows {
-		full, err := r.assemble(ctx, row)
-		if err != nil {
-			return nil, 0, err
-		}
-		recipes = append(recipes, *full)
+	recipes, err := r.assemblePage(ctx, rows)
+	if err != nil {
+		return nil, 0, err
 	}
 	return recipes, total, nil
 }
 
-func (r *pgRecipeRepository) assemble(ctx context.Context, row sqlc.Recipe) (*domain.Recipe, error) {
-	recipe := &domain.Recipe{
-		ID: row.ID, Name: row.Name, Instructions: row.Instructions,
-		ImageURL: row.ImageUrl, Source: row.Source, Status: domain.RecipeStatus(row.Status),
-		CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+// assemblePage fills in the associations for a whole page of search results in
+// two queries, rather than the two per row assemble costs.
+//
+// A page used to be assembled one row at a time, so one GET /api/recipes cost
+// 2 + 2N round trips: 42 at the default page size of 20, 202 at the maximum of
+// 100. The in-code note that deferred this was right that the scale does not
+// demand it and wrong about the constant — it is two queries per row, not one.
+// Both child queries take the page's ids at once and are grouped here, so the
+// page costs four queries whatever its size.
+func (r *pgRecipeRepository) assemblePage(ctx context.Context, rows []sqlc.Recipe) ([]domain.Recipe, error) {
+	if len(rows) == 0 {
+		return []domain.Recipe{}, nil
 	}
+
+	ids := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+
+	ingredientRows, err := r.queries.ListIngredientsForRecipes(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list ingredients for %d recipes: %w", len(ids), err)
+	}
+	// The query orders by (recipe_id, position, id), so appending in row order
+	// reproduces the per-recipe order the single-row query returns.
+	ingredients := make(map[int64][]domain.RecipeIngredient, len(ids))
+	for _, ir := range ingredientRows {
+		ingredients[ir.RecipeID] = append(ingredients[ir.RecipeID],
+			toRecipeIngredient(ir.IngredientID, ir.IngredientName, ir.Amount, ir.UnitID, ir.UnitName))
+	}
+
+	categoryRows, err := r.queries.ListCategoriesForRecipes(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list categories for %d recipes: %w", len(ids), err)
+	}
+	categories := make(map[int64][]domain.Category, len(ids))
+	for _, cr := range categoryRows {
+		categories[cr.RecipeID] = append(categories[cr.RecipeID], domain.Category{ID: cr.ID, Name: cr.Name})
+	}
+
+	recipes := make([]domain.Recipe, 0, len(rows))
+	for _, row := range rows {
+		recipe := baseRecipe(row)
+		recipe.Ingredients = ingredients[row.ID]
+		recipe.Categories = categories[row.ID]
+		recipes = append(recipes, recipe)
+	}
+	return recipes, nil
+}
+
+// assemble loads one recipe's associations. GetByID and GetBySource use it;
+// Search uses assemblePage, which asks the same two questions for a whole page
+// at once.
+func (r *pgRecipeRepository) assemble(ctx context.Context, row sqlc.Recipe) (*domain.Recipe, error) {
+	recipe := baseRecipe(row)
 
 	ingredientRows, err := r.queries.ListRecipeIngredients(ctx, row.ID)
 	if err != nil {
 		return nil, fmt.Errorf("repository: list ingredients for recipe %d: %w", row.ID, err)
 	}
 	for _, ir := range ingredientRows {
-		ing := domain.RecipeIngredient{
-			IngredientID: ir.IngredientID, IngredientName: ir.IngredientName,
-			Amount: ir.Amount, UnitName: ir.UnitName,
-		}
-		// Populate the write-side UnitID too, so a load-modify-save round trip
-		// through Update preserves the unit instead of nulling it.
-		if ir.UnitID.Valid {
-			v := ir.UnitID.Int64
-			ing.UnitID = &v
-		}
-		recipe.Ingredients = append(recipe.Ingredients, ing)
+		recipe.Ingredients = append(recipe.Ingredients,
+			toRecipeIngredient(ir.IngredientID, ir.IngredientName, ir.Amount, ir.UnitID, ir.UnitName))
 	}
 
 	categoryRows, err := r.queries.ListRecipeCategories(ctx, row.ID)
@@ -327,5 +390,32 @@ func (r *pgRecipeRepository) assemble(ctx context.Context, row sqlc.Recipe) (*do
 		recipe.Categories = append(recipe.Categories, domain.Category{ID: cr.ID, Name: cr.Name})
 	}
 
-	return recipe, nil
+	return &recipe, nil
+}
+
+// baseRecipe maps a recipes row onto the domain model, associations excluded.
+func baseRecipe(row sqlc.Recipe) domain.Recipe {
+	return domain.Recipe{
+		ID: row.ID, Name: row.Name, Instructions: row.Instructions,
+		ImageURL: row.ImageUrl, Source: row.Source, Status: domain.RecipeStatus(row.Status),
+		CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+	}
+}
+
+// toRecipeIngredient builds one association from the columns both the
+// single-row and the batched ingredient query return. It takes the columns
+// rather than a row type because sqlc generates a distinct struct per query,
+// and the two would otherwise need two copies of this mapping to drift apart.
+func toRecipeIngredient(ingredientID int64, ingredientName string, amount float64, unitID pgtype.Int8, unitName string) domain.RecipeIngredient {
+	ing := domain.RecipeIngredient{
+		IngredientID: ingredientID, IngredientName: ingredientName,
+		Amount: amount, UnitName: unitName,
+	}
+	// Populate the write-side UnitID too, so a load-modify-save round trip
+	// through Update preserves the unit instead of nulling it.
+	if unitID.Valid {
+		v := unitID.Int64
+		ing.UnitID = &v
+	}
+	return ing
 }

@@ -1,0 +1,38 @@
+{
+  "id": "ofengemuese-hook",
+  "origin": "synthetic",
+  "note": "A long hook on the first line — the case the old 'first line is the title' rule got wrong.",
+  "caption": "Ihr Lieben, ihr fragt mich jede Woche nach diesem Rezept und heute kommt es endlich!\nOfengemüse mit Feta\n\nZutaten:\n- 1 Zucchini\n- 2 Paprika\n- 200 g Feta\n- 3 EL Olivenöl\n\nZubereitung:\nGemüse in grobe Stücke schneiden und mit Öl vermengen.\nFeta darüber bröseln und 25 Minuten bei 200 Grad backen.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Ofengemüse mit Feta",
+    "ingredients": [
+      {
+        "name": "Zucchini",
+        "amount": 1,
+        "unit": ""
+      },
+      {
+        "name": "Paprika",
+        "amount": 2,
+        "unit": ""
+      },
+      {
+        "name": "Feta",
+        "amount": 200,
+        "unit": "g"
+      },
+      {
+        "name": "Olivenöl",
+        "amount": 3,
+        "unit": "EL"
+      }
+    ],
+    "instructions_contain": [
+      "200 Grad"
+    ],
+    "rules": {
+      "min_confidence": 0.9
+    }
+  }
+}

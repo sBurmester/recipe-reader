@@ -1,0 +1,43 @@
+{
+  "id": "linsensuppe",
+  "origin": "synthetic",
+  "note": "Headers without a colon, and 'Anleitung' rather than 'Zubereitung'.",
+  "caption": "Deftige Linsensuppe\n\nZutaten\n200 g rote Linsen\n1 Karotte\n1 Zwiebel\n800 ml Gemüsebrühe\n1 TL Kreuzkümmel\n\nAnleitung\nZwiebel und Karotte würfeln und anbraten.\nLinsen und Brühe zugeben und 20 Minuten köcheln lassen.\nMit Kreuzkümmel, Salz und Pfeffer abschmecken.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Deftige Linsensuppe",
+    "ingredients": [
+      {
+        "name": "rote Linsen",
+        "amount": 200,
+        "unit": "g"
+      },
+      {
+        "name": "Karotte",
+        "amount": 1,
+        "unit": ""
+      },
+      {
+        "name": "Zwiebel",
+        "amount": 1,
+        "unit": ""
+      },
+      {
+        "name": "Gemüsebrühe",
+        "amount": 800,
+        "unit": "ml"
+      },
+      {
+        "name": "Kreuzkümmel",
+        "amount": 1,
+        "unit": "TL"
+      }
+    ],
+    "instructions_contain": [
+      "köcheln"
+    ],
+    "rules": {
+      "min_confidence": 0.95
+    }
+  }
+}

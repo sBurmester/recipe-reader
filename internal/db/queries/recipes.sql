@@ -1,6 +1,13 @@
 -- name: CreateRecipe :one
+-- ON CONFLICT DO NOTHING makes the unique index on source the dedupe itself:
+-- the insert either stores the recipe or returns no row, with no window in
+-- between for a second importer to slip through. The check-then-act this
+-- replaced (GetBySource, then Create) was one query more expensive and could
+-- only ever narrow that window, not close it. A conflict surfaces as
+-- pgx.ErrNoRows, which the repository translates to ErrDuplicateSource.
 INSERT INTO recipes (name, instructions, image_url, source, status)
 VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (source) DO NOTHING
 RETURNING *;
 
 -- name: GetRecipe :one
@@ -18,20 +25,36 @@ RETURNING *;
 -- name: DeleteRecipe :execrows
 DELETE FROM recipes WHERE id = $1;
 
+-- The category filter is a semi-join, not a join.
+--
+-- It used to be a LEFT JOIN onto recipe_categories that was always present,
+-- even though it only ever served the optional category_id filter. With no
+-- category given, every recipe came back once per category it carries and a
+-- DISTINCT over all eight columns removed the copies again — a sort or hash
+-- aggregate on the full row width, on the unfiltered listing that loads first.
+-- EXISTS asks the same question without multiplying the rows, so the DISTINCT
+-- is gone and the planner can skip the subquery entirely when the argument is
+-- NULL. It also frees the ORDER BY: under SELECT DISTINCT, every column
+-- ordered on has to appear in the select list.
+
 -- name: SearchRecipes :many
-SELECT DISTINCT r.* FROM recipes r
-LEFT JOIN recipe_categories rc ON rc.recipe_id = r.id
-WHERE (sqlc.narg(text)::text IS NULL OR lower(r.name) LIKE '%' || lower(sqlc.narg(text)::text) || '%')
-  AND (sqlc.narg(category_id)::bigint IS NULL OR rc.category_id = sqlc.narg(category_id)::bigint)
+SELECT r.* FROM recipes r
+WHERE (sqlc.narg(text)::text IS NULL OR lower(r.name) LIKE '%' || replace(replace(replace(
+      lower(sqlc.narg(text)::text), '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
+  AND (sqlc.narg(category_id)::bigint IS NULL OR EXISTS (
+        SELECT 1 FROM recipe_categories rc
+        WHERE rc.recipe_id = r.id AND rc.category_id = sqlc.narg(category_id)::bigint))
   AND (sqlc.narg(status)::text IS NULL OR r.status = sqlc.narg(status)::text)
 ORDER BY r.name, r.id
 LIMIT $1 OFFSET $2;
 
 -- name: CountRecipes :one
-SELECT COUNT(DISTINCT r.id) FROM recipes r
-LEFT JOIN recipe_categories rc ON rc.recipe_id = r.id
-WHERE (sqlc.narg(text)::text IS NULL OR lower(r.name) LIKE '%' || lower(sqlc.narg(text)::text) || '%')
-  AND (sqlc.narg(category_id)::bigint IS NULL OR rc.category_id = sqlc.narg(category_id)::bigint)
+SELECT COUNT(*) FROM recipes r
+WHERE (sqlc.narg(text)::text IS NULL OR lower(r.name) LIKE '%' || replace(replace(replace(
+      lower(sqlc.narg(text)::text), '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
+  AND (sqlc.narg(category_id)::bigint IS NULL OR EXISTS (
+        SELECT 1 FROM recipe_categories rc
+        WHERE rc.recipe_id = r.id AND rc.category_id = sqlc.narg(category_id)::bigint))
   AND (sqlc.narg(status)::text IS NULL OR r.status = sqlc.narg(status)::text);
 
 -- name: ListRecipeIngredients :many
@@ -47,6 +70,31 @@ SELECT c.id, c.name FROM categories c
 JOIN recipe_categories rc ON rc.category_id = c.id
 WHERE rc.recipe_id = $1
 ORDER BY c.name;
+
+-- ListIngredientsForRecipes and ListCategoriesForRecipes are the batched forms
+-- of the two queries above: one page of search used to cost 2 + 2N round
+-- trips, because every row was assembled on its own. At the default page size
+-- of 20 that is 42 queries for the listing the app opens on, and 202 at the
+-- maximum page size of 100. These two take the page's ids at once and are
+-- grouped in Go, so a page costs four queries whatever its size.
+--
+-- The single-row queries above stay: GetByID and GetBySource fetch one recipe,
+-- where a batch of one would be the same work with more ceremony.
+
+-- name: ListIngredientsForRecipes :many
+SELECT ri.recipe_id, ri.ingredient_id, i.name AS ingredient_name, ri.amount, ri.unit_id,
+       COALESCE(u.name, '') AS unit_name
+FROM recipe_ingredients ri
+JOIN ingredients i ON i.id = ri.ingredient_id
+LEFT JOIN units u ON u.id = ri.unit_id
+WHERE ri.recipe_id = ANY($1::bigint[])
+ORDER BY ri.recipe_id, ri.position, ri.id;
+
+-- name: ListCategoriesForRecipes :many
+SELECT rc.recipe_id, c.id, c.name FROM categories c
+JOIN recipe_categories rc ON rc.category_id = c.id
+WHERE rc.recipe_id = ANY($1::bigint[])
+ORDER BY rc.recipe_id, c.name;
 
 -- name: AddRecipeIngredient :one
 INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, unit_id, position)

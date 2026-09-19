@@ -22,6 +22,11 @@ type Deps struct {
 	Recipes repository.RecipeRepository
 	Lookups repository.LookupRepository
 	Worker  *pipeline.Worker
+
+	// Version is the build stamp reported by GET /api/healthz. Empty in tests
+	// and in a plain `go build`, where the field is simply omitted from the
+	// response rather than reported as an empty string.
+	Version string
 }
 
 // NewRouter builds the API handler: a method-and-path ServeMux wrapped in the
@@ -32,7 +37,7 @@ type Deps struct {
 func NewRouter(deps Deps, sec Security) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /api/healthz", handleHealth)
+	mux.HandleFunc("GET /api/healthz", deps.handleHealth)
 
 	mux.HandleFunc("GET /api/recipes", deps.handleListRecipes)
 	mux.HandleFunc("POST /api/recipes", deps.handleCreateRecipe)
@@ -53,6 +58,14 @@ func NewRouter(deps Deps, sec Security) http.Handler {
 // handleHealth answers a liveness probe. It deliberately touches no
 // dependency, so it stays a signal that the process is up and serving rather
 // than a database check.
-func handleHealth(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+//
+// It also reports the build, which makes a running instance self-identifying
+// over HTTP: for something that ships as one binary in one image, "what is
+// actually deployed" otherwise has no answer short of hashing the file.
+func (d Deps) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	resp := map[string]string{"status": "ok"}
+	if d.Version != "" {
+		resp["version"] = d.Version
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

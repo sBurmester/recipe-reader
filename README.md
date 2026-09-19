@@ -12,9 +12,9 @@ and serves a searchable web UI. Single Go binary with the frontend embedded; Pos
 - **Docker + Docker Compose** — Postgres for dev and production, and `go test` starts ephemeral
   Postgres containers through testcontainers-go
 - **golangci-lint** — for `make lint`
-- **sqlc** — only if you change `internal/db/queries/*.sql` or `internal/db/migrations/*.sql`
-  and need to regenerate `internal/db/sqlc/`. `make sqlc-generate` expects it on `PATH`; CI runs
-  it through `go run` instead, so no install is needed there.
+- **sqlc** — no install needed. It is a pinned tool dependency in `go.mod`, so
+  `make sqlc-generate` and CI both run `go tool sqlc` at exactly the same version. Bump it with
+  `go get -tool github.com/sqlc-dev/sqlc/cmd/sqlc@latest`, which shows up as a commit.
 
 ## Setup
 
@@ -24,8 +24,11 @@ and serves a searchable web UI. Single Go binary with the frontend embedded; Pos
     # app still runs — it serves the API and UI over whatever is already in the database, and
     # extraction falls back to rules only.
 
-    make db-up      # starts Postgres via docker compose
-    make run        # builds the frontend, then serves on 127.0.0.1:8080
+    POSTGRES_PASSWORD=dev make db-up   # Postgres on 127.0.0.1:5432 via docker compose
+    make run                           # builds the frontend, then serves on 127.0.0.1:8080
+
+`POSTGRES_PASSWORD` has no default and compose refuses to start without it. Put the same password
+in your `.env` `DB_DSN` so the locally run binary can reach the container.
 
 ## Configuration
 
@@ -38,6 +41,20 @@ full list. See `.env.example` for the environment-variable names and their defau
 `ANTHROPIC_API_KEY` have no flag form: a value passed on the command line is visible to every user
 on the host through `ps`, and lands in shell history. `recipe-reader --help` names them in its
 description, since there is no flag entry to list them under.
+
+**Values that parse but cannot be meant are refused at startup**, with one line rather than a stack
+trace or a silent substitution:
+
+| Setting | Rule | What accepting it used to do |
+| --- | --- | --- |
+| `IMPORT_INTERVAL` | must be positive | `0` panicked `time.NewTicker` on the startup goroutine |
+| `IMPORT_MAX_ITEMS`, `IMPORT_MAX_PAGES` | at least 1 | `0`, plausibly meant as "pause", imported the default 50 instead |
+| `EXTRACTION_CONFIDENCE_THRESHOLD` | between 0 and 1 | `80`, meaning a percentage, called the paid LLM for every post forever |
+| `EXTRACTION_PUBLISH_THRESHOLD` | between 0 and 1 | `80` sent every recipe to `needs_review` |
+| `HTTP_ADDR` | non-loopback needs `API_TOKEN` | see [Access control](#access-control) |
+
+Both threshold endpoints are legal: `0` for the confidence threshold means "never fall back to the
+LLM", and `1` for the publish threshold means "publish nothing unreviewed".
 
 ### Access control
 
@@ -75,9 +92,9 @@ headers must arrive within 10s and the whole request within 30s, a response must
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/api/healthz` | Liveness probe — `{"status":"ok"}`. |
+| `GET` | `/api/healthz` | Liveness probe — `{"status":"ok","version":"..."}`. Touches no dependency, so it reports that the process is serving, not that the database is reachable. `version` is omitted from an unstamped build. |
 | `GET` | `/api/recipes` | Search and list recipes. Query params: `q` (free text), `category_id`, `status`, `page`, `page_size` — all optional; malformed numerics are ignored rather than rejected. Returns `{"recipes":[...],"total":N}`. |
-| `POST` | `/api/recipes` | Create a recipe. `name` and `source` are required; `status` defaults to `published` and otherwise must be `needs_review` or `published`. |
+| `POST` | `/api/recipes` | Create a recipe. `name` and `source` are required; `status` defaults to `published` and otherwise must be `needs_review` or `published`. A `source` that already exists is answered `409`. |
 | `GET` | `/api/recipes/{id}` | Fetch one recipe. |
 | `PUT` | `/api/recipes/{id}` | Replace a recipe. `name` is required and `status` must be `needs_review` or `published` — a replacement has no defaults. |
 | `DELETE` | `/api/recipes/{id}` | Delete a recipe. |
@@ -85,7 +102,7 @@ headers must arrive within 10s and the whole request within 30s, a response must
 | `GET` | `/api/units` | List all units. |
 | `GET` | `/api/ingredients` | List all known ingredients. |
 | `POST` | `/api/import/run` | Trigger an import. Returns `202` immediately; the run happens in the background. Answers `429` with `Retry-After` while an Instagram rate-limit cooldown is in effect. |
-| `GET` | `/api/import/status` | Last run's tally (`seen`/`imported`/`skipped`/`no_recipe`/`degraded`/`failed`), timestamp, whether a run is in flight, and `cooldown_until`/`cooldown_seconds` while rate-limited. |
+| `GET` | `/api/import/status` | Last run's tally (`seen`/`imported`/`skipped`/`no_recipe`/`degraded`/`failed`), timestamp, whether a run is in flight, `cooldown_until`/`cooldown_seconds` while rate-limited, and `error`/`error_message` when the last run failed. |
 
 Recipe ingredients and categories are written by name — the API resolves them to lookup rows,
 creating any it hasn't seen before, so callers never deal in lookup IDs.
@@ -104,8 +121,16 @@ The two `/api/import/*` routes return `503 {"error":"import worker not configure
 Instagram account is configured (`INSTAGRAM_USERNAME` unset), since there is no worker to drive.
 Every other route works normally in that state, serving whatever is already in the database.
 
+A failed run is reported as a **classification, never as the error text**. `error` is one of
+`rate_limited`, `instagram_auth`, `instagram_schema_drift`, `fetch_failed`, `cancelled` or
+`import_failed`, and `error_message` is a fixed sentence per code; both fields are absent when the
+last run succeeded. The underlying chain wraps whatever the Instagram client returned — the endpoint
+it called, fragments of the upstream response, and with a database error in it, parts of the DSN —
+and this endpoint has no authenticated callers to restrict that to. The full chain is logged
+server-side, where it is useful. Add codes, do not rename them: the frontend branches on them.
+
 A login that fails at startup does not disable imports. The server logs it, the import status
-reports it as the last error straight away, and the next import — scheduled or triggered — logs in
+reports it as `instagram_auth` straight away, and the next import — scheduled or triggered — logs in
 before it fetches. Login attempts are rationed to one every 15 minutes, because repeated logins are
 what Instagram flags; a run triggered sooner than that reports the floor instead of trying.
 
@@ -169,10 +194,61 @@ what actually came back — how many ingredients, how long the instructions are,
 ingredients got an amount. A confident model cannot publish a threadbare result, and a rich result
 cannot talk an uncertain model up.
 
+The rule-based score is continuous too. It used to return only `0`, `0.5` or `1.0`, which
+collapsed both float thresholds to three behaviours — every setting in `(0.5, 1.0]` meant the same
+thing, so tuning one from `0.6` to `0.9` changed nothing until it crossed an invisible cliff. It
+now weighs how many ingredients were found, what fraction of the ingredient section's lines
+actually parsed, how many of them carried an amount, and how long the instructions are. The
+boundaries callers were tuned against still hold: no ingredients and no instructions is exactly
+`0`, one section alone cannot exceed `0.5`, and a clean full caption still reaches `1.0`. A
+caption that offered no usable title scores three quarters of what it otherwise would, because a
+nameless caption is weak evidence of a recipe.
+
 A caption with no recipe in it produces `extraction.ErrNoRecipe` and stores nothing. Previously
 such a post became a recipe row whose instructions were the literal string `NO_RECIPE_FOUND` —
 and since `source` is `UNIQUE` and the pipeline skips anything already present, that row
 permanently blocked the post from being re-imported by a better extractor.
+
+### Titles
+
+The recipe name is what the search filter runs against, so a bad title degrades search and not
+only display. The rules extractor no longer takes the caption's first line: it scans down to the
+first section header, skipping hashtag blocks and long hooks, and prefers a line that reads like a
+name — short, carrying a letter, not itself a header ending in `:`. Whatever it picks is stripped
+of its leading emoji run and trailing hashtag block. A caption that offers nothing usable gets
+`Unbenanntes Rezept` and a reduced confidence.
+
+### Prompt injection
+
+The caption is attacker-controlled: anyone can post content designed to be saved. It reaches the
+model inside a `<caption>` span the system prompt names, with a statement that everything between
+the tags is data rather than instructions — including the confidence field, since a caption that
+talks the score up is a caption that publishes without review. A caption carrying a `<caption>` or
+`</caption>` tag of its own has it neutralised first, so it cannot close the span early.
+
+Two things already bounded the blast radius and still do: `ToolChoice` is pinned to
+`record_recipe`, so there is no second tool to steer the model into, and the output schema is
+closed. Two more are new. The categories an import may attach are now closed to the vocabulary
+already in the database — the seeded set plus anything a human has created — so an injected
+caption can no longer write an arbitrary row into the table every user's picker reads. Ingredient
+and unit names cannot be a closed set, so they are bounded instead: a name is collapsed to one
+line and truncated, which keeps a row a label rather than a payload.
+
+### Measuring extraction quality
+
+`internal/extraction/testdata/gold/` holds a gold set — captions with the extraction a human says
+is correct for each — and `gold_test.go` scores the extractors against it, on ingredient-level
+precision and recall rather than exact equality.
+
+    go test ./internal/extraction -run GoldSetRules -v      # hermetic, runs in CI
+
+    RECIPE_READER_EVAL_LLM=1 ANTHROPIC_API_KEY=sk-... \
+      go test ./internal/extraction -run GoldSetLLM -v      # opt-in; costs money
+
+Both print a per-case table. The aggregate floors are a regression signal, not a target; read
+`testdata/gold/README.md` before changing them, and note the provenance caveat there — the corpus
+is written rather than collected, because the Instagram endpoints have still not been run against
+a real account.
 
 ## Importing a backlog
 
@@ -232,12 +308,26 @@ The frontend build is embedded into the binary with `go:embed`, so the applicati
 single file with no assets to deploy beside it. Anything not under `/api/` is served from that
 embedded directory, falling back to the app shell rather than a 404.
 
-    API_TOKEN=$(openssl rand -hex 32) docker compose up --build   # app on :8080, Postgres on :5432
+    API_TOKEN=$(openssl rand -hex 32) POSTGRES_PASSWORD=$(openssl rand -hex 16) \
+      docker compose up --build        # app on :8080, Postgres on 127.0.0.1:5432
     docker compose down
 
-The compose stack publishes port 8080, so the container binds every interface — the case the
-server refuses without a token. `API_TOKEN` is therefore mandatory here, and compose fails with
-that message if it is unset rather than starting something open to the network.
+Two variables are mandatory and have no defaults; compose fails with a message naming each one
+rather than starting something open to the network.
+
+`API_TOKEN`, because the compose stack publishes port 8080 and the container therefore binds every
+interface — the case the server refuses without a token.
+
+`POSTGRES_PASSWORD`, because it used to be the literal `recipes`, for user `recipes` on database
+`recipes`, with Postgres published on every host interface. On a laptop that is a convenience; on
+the VPS a working compose file invites you to copy it to, it is an internet-exposed database with
+a three-way-guessable credential. The published port is now bound to `127.0.0.1` as well — the app
+reaches `db` by name over the compose network and never needed it published at all; it is there
+only so `make db-up` can serve a binary running on the host.
+
+`POSTGRES_USER` and `POSTGRES_DB` still default to `recipes`, and `DB_DSN` is built from all three
+so the app and the database cannot disagree. Set `DB_DSN` yourself to override it wholesale, which
+is also the answer for a password containing characters a URL would have to percent-encode.
 
 The image builds the frontend and the Go binary in separate stages and ships only the binary on
 Alpine — about 20 MB, running as a non-root user. Credentials come from the environment (see
@@ -245,27 +335,91 @@ Alpine — about 20 MB, running as a non-root user. Credentials come from the en
 not log in again on every restart, which Instagram rate-limits.
 
 `make db-up` starts only the Postgres service, for running the Go binary locally against the same
-database the container would use.
+database the container would use. It needs `POSTGRES_PASSWORD` too.
+
+### Version stamping
+
+The binary identifies itself. `make build` and `make docker` stamp `git describe --tags --always
+--dirty` into `main.version` with `-ldflags`, and it is reported two ways:
+
+    recipe-reader --version          # v0.1.0-4-g1a2b3c4-dirty
+    curl -s localhost:8080/api/healthz   # {"status":"ok","version":"v0.1.0-4-g1a2b3c4"}
+
+A plain `go build` or `go run` leaves it at `dev`, and `/api/healthz` then omits the field rather
+than reporting an empty one. The `--dirty` suffix is deliberate: a build from an unclean tree is
+not the commit it names.
+
+`.dockerignore` excludes `.git`, so an image build has no history to describe itself from — the
+version is passed in as a build argument instead:
+
+    docker build --build-arg VERSION="$(git describe --tags --always --dirty)" -t recipe-reader .
+    VERSION="$(git describe --tags --always --dirty)" docker compose up --build
+
+`make docker` and CI both do this. A bare `docker build` with no `--build-arg` produces `dev`.
 
 ## Testing & linting
 
-    make check   # gofmt + go vet + golangci-lint + govulncheck + go test -race
+    make check   # gofmt + go vet + golangci-lint + frontend typecheck/build
+                 # + govulncheck + go test -race
                  # go test starts one ephemeral Postgres container per database package
                  # via testcontainers-go — Docker must be running.
 
+    make frontend-check   # just the frontend half: npm run typecheck && npm run build
+
+`check` covers the frontend because CI does: a TypeScript error or a broken Vite build used to
+pass the local gate and fail only after the push. The `npm ci` behind it is keyed on
+`web/package-lock.json`, so it reruns only when the lockfile actually changes.
+
+    make cover       # the twenty least-covered functions
+    make cover-html  # the same profile as a browsable report
+
     npm --prefix web run typecheck
     npm --prefix web run build
+
+Coverage is measured and reported, and **nothing is gated on it**. `make test` writes `cover.out`
+and prints the total; `go test` prints each package's percentage as it goes, which is the per-package
+ranking that says where a test is worth writing next. There is deliberately no threshold: a
+percentage target produces tests written to move the number rather than to catch anything. CI prints
+the total in the job summary and uploads `cover.out` as an artifact, including on a failed run.
 
 CI (`.github/workflows/ci.yml`) runs the same checks on every pull request, a guard that fails if
 the committed `internal/db/sqlc/` has drifted from the queries and migrations it was generated
 from, and a `docker build` followed by a smoke test of the image:
 
-    docker build -t recipe-reader:ci .
-    scripts/smoke-test-image.sh recipe-reader:ci
+    docker build --build-arg VERSION="$(git describe --tags --always --dirty)" -t recipe-reader:ci .
+    scripts/smoke-test-image.sh recipe-reader:ci "$(git describe --tags --always --dirty)"
 
 The script starts the image against a throwaway Postgres and fails unless `/api/healthz` answers,
-`/api/recipes` answers (so the migrations ran against a real database), and `/` serves the built
-frontend rather than the placeholder page. It runs the same way locally as in CI.
+`/api/recipes` answers (so the migrations ran against a real database), `/` serves the built
+frontend rather than the placeholder page, and `--version` and `/api/healthz` agree on a version
+that is not the unstamped `dev` — the link-time stamp is the one part of the build no unit test can
+reach. The expected version is optional; without it the script only refuses `dev`. It runs the same
+way locally as in CI.
+
+## Database
+
+The connection pool is configured rather than taken as `pgxpool` hands it over: **10** maximum
+connections (above pgxpool's `max(4, NumCPU)`, because one page of search still costs `2+2N`
+queries), a floor of **2** so the pool does not drain to nothing between the six-hourly imports and
+leave the next request paying a full connect, and a **5s** connect timeout. Every one of these is
+overridden by the DSN when it names the corresponding parameter, so they are defaults and not
+decisions taken away from the operator:
+
+    DB_DSN="postgres://recipes:recipes@localhost:5432/recipes?sslmode=disable&pool_max_conns=25&pool_min_conns=5"
+
+`pool_max_conns`, `pool_min_conns`, `pool_max_conn_lifetime`, `pool_max_conn_idle_time`,
+`pool_health_check_period` and `connect_timeout` are all read from the DSN. A `pool_max_conns` below
+the floor lowers the floor with it rather than producing a configuration that refuses to start.
+
+**Search treats `%`, `_` and `\` as literals.** They are `LIKE` metacharacters, and the search box
+hands them straight to the pattern: searching for `50%` used to match every recipe and `a_b` used to
+match `axb`. The escaping is done in SQL, in both `SearchRecipes` and `CountRecipes`, so the page
+and its `total` cannot disagree about what matched.
+
+**The insert is the duplicate check.** `CreateRecipe` carries `ON CONFLICT (source) DO NOTHING`, so
+the unique index on `source` decides, with no window between a check and a write for a second
+importer to slip through. The repository reports the conflict as `ErrDuplicateSource`; the import
+pipeline counts it as `skipped`, and `POST /api/recipes` answers `409`.
 
 ## Changing the database schema
 
@@ -290,3 +444,15 @@ unofficial private API through the `instago` library. Those endpoints are not do
 supported, so they can break without notice if Instagram changes them, and using them carries
 real Terms of Service risk. Treat this as personal automation against your own account for your
 own recipe collection — not as a scraping service for other people's data.
+
+**They have not been verified against a live account.** Nothing in this repository records a
+successful run: that `feed/saved/posts/` is the right endpoint, that saved entries wrap the media
+in a `media` key, and that `next_max_id` is this endpoint's cursor are all still assumptions. What
+has changed is that a wrong assumption is now diagnosable rather than silent. The response is
+decoded into named types instead of walked as `map[string]any`; a page that does not decode at all
+comes back as `ErrSchemaDrift`; an item that does not decode is counted with a reason ("no media
+code" and "undecodable item" point at different upstream changes); and items returned with none of
+them readable is an error rather than an empty success.
+
+Verifying this is a release gate and is still open. Run it against a real account, commit the
+response as a `testdata/` fixture, and the three assumptions above become a test.

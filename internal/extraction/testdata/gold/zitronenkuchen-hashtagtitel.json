@@ -1,0 +1,43 @@
+{
+  "id": "zitronenkuchen-hashtagtitel",
+  "origin": "synthetic",
+  "note": "The title carries its own hashtag tail.",
+  "caption": "Zitronenkuchen #backen #sonntagskuchen\n\nZutaten:\n- 200 g Mehl\n- 150 g Zucker\n- 2 Zitronen\n- 3 Eier\n- 125 g Butter\n\nZubereitung:\nButter und Zucker cremig rühren, Eier unterrühren.\nMehl und den Abrieb der Zitronen unterheben.\n40 Minuten bei 180 Grad backen und mit Zitronenguss überziehen.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Zitronenkuchen",
+    "ingredients": [
+      {
+        "name": "Mehl",
+        "amount": 200,
+        "unit": "g"
+      },
+      {
+        "name": "Zucker",
+        "amount": 150,
+        "unit": "g"
+      },
+      {
+        "name": "Zitronen",
+        "amount": 2,
+        "unit": ""
+      },
+      {
+        "name": "Eier",
+        "amount": 3,
+        "unit": ""
+      },
+      {
+        "name": "Butter",
+        "amount": 125,
+        "unit": "g"
+      }
+    ],
+    "instructions_contain": [
+      "Zitronenguss"
+    ],
+    "rules": {
+      "min_confidence": 0.95
+    }
+  }
+}

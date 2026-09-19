@@ -61,10 +61,12 @@ func (q *Queries) AddRecipeIngredient(ctx context.Context, arg AddRecipeIngredie
 }
 
 const countRecipes = `-- name: CountRecipes :one
-SELECT COUNT(DISTINCT r.id) FROM recipes r
-LEFT JOIN recipe_categories rc ON rc.recipe_id = r.id
-WHERE ($1::text IS NULL OR lower(r.name) LIKE '%' || lower($1::text) || '%')
-  AND ($2::bigint IS NULL OR rc.category_id = $2::bigint)
+SELECT COUNT(*) FROM recipes r
+WHERE ($1::text IS NULL OR lower(r.name) LIKE '%' || replace(replace(replace(
+      lower($1::text), '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
+  AND ($2::bigint IS NULL OR EXISTS (
+        SELECT 1 FROM recipe_categories rc
+        WHERE rc.recipe_id = r.id AND rc.category_id = $2::bigint))
   AND ($3::text IS NULL OR r.status = $3::text)
 `
 
@@ -84,6 +86,7 @@ func (q *Queries) CountRecipes(ctx context.Context, arg CountRecipesParams) (int
 const createRecipe = `-- name: CreateRecipe :one
 INSERT INTO recipes (name, instructions, image_url, source, status)
 VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (source) DO NOTHING
 RETURNING id, name, instructions, image_url, source, status, created_at, updated_at
 `
 
@@ -95,6 +98,12 @@ type CreateRecipeParams struct {
 	Status       string
 }
 
+// ON CONFLICT DO NOTHING makes the unique index on source the dedupe itself:
+// the insert either stores the recipe or returns no row, with no window in
+// between for a second importer to slip through. The check-then-act this
+// replaced (GetBySource, then Create) was one query more expensive and could
+// only ever narrow that window, not close it. A conflict surfaces as
+// pgx.ErrNoRows, which the repository translates to ErrDuplicateSource.
 func (q *Queries) CreateRecipe(ctx context.Context, arg CreateRecipeParams) (Recipe, error) {
 	row := q.db.QueryRow(ctx, createRecipe,
 		arg.Name,
@@ -187,6 +196,95 @@ func (q *Queries) GetRecipeBySource(ctx context.Context, source string) (Recipe,
 	return i, err
 }
 
+const listCategoriesForRecipes = `-- name: ListCategoriesForRecipes :many
+SELECT rc.recipe_id, c.id, c.name FROM categories c
+JOIN recipe_categories rc ON rc.category_id = c.id
+WHERE rc.recipe_id = ANY($1::bigint[])
+ORDER BY rc.recipe_id, c.name
+`
+
+type ListCategoriesForRecipesRow struct {
+	RecipeID int64
+	ID       int64
+	Name     string
+}
+
+func (q *Queries) ListCategoriesForRecipes(ctx context.Context, dollar_1 []int64) ([]ListCategoriesForRecipesRow, error) {
+	rows, err := q.db.Query(ctx, listCategoriesForRecipes, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCategoriesForRecipesRow
+	for rows.Next() {
+		var i ListCategoriesForRecipesRow
+		if err := rows.Scan(&i.RecipeID, &i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIngredientsForRecipes = `-- name: ListIngredientsForRecipes :many
+
+SELECT ri.recipe_id, ri.ingredient_id, i.name AS ingredient_name, ri.amount, ri.unit_id,
+       COALESCE(u.name, '') AS unit_name
+FROM recipe_ingredients ri
+JOIN ingredients i ON i.id = ri.ingredient_id
+LEFT JOIN units u ON u.id = ri.unit_id
+WHERE ri.recipe_id = ANY($1::bigint[])
+ORDER BY ri.recipe_id, ri.position, ri.id
+`
+
+type ListIngredientsForRecipesRow struct {
+	RecipeID       int64
+	IngredientID   int64
+	IngredientName string
+	Amount         float64
+	UnitID         pgtype.Int8
+	UnitName       string
+}
+
+// ListIngredientsForRecipes and ListCategoriesForRecipes are the batched forms
+// of the two queries above: one page of search used to cost 2 + 2N round
+// trips, because every row was assembled on its own. At the default page size
+// of 20 that is 42 queries for the listing the app opens on, and 202 at the
+// maximum page size of 100. These two take the page's ids at once and are
+// grouped in Go, so a page costs four queries whatever its size.
+//
+// The single-row queries above stay: GetByID and GetBySource fetch one recipe,
+// where a batch of one would be the same work with more ceremony.
+func (q *Queries) ListIngredientsForRecipes(ctx context.Context, dollar_1 []int64) ([]ListIngredientsForRecipesRow, error) {
+	rows, err := q.db.Query(ctx, listIngredientsForRecipes, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIngredientsForRecipesRow
+	for rows.Next() {
+		var i ListIngredientsForRecipesRow
+		if err := rows.Scan(
+			&i.RecipeID,
+			&i.IngredientID,
+			&i.IngredientName,
+			&i.Amount,
+			&i.UnitID,
+			&i.UnitName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecipeCategories = `-- name: ListRecipeCategories :many
 SELECT c.id, c.name FROM categories c
 JOIN recipe_categories rc ON rc.category_id = c.id
@@ -258,10 +356,13 @@ func (q *Queries) ListRecipeIngredients(ctx context.Context, recipeID int64) ([]
 }
 
 const searchRecipes = `-- name: SearchRecipes :many
-SELECT DISTINCT r.id, r.name, r.instructions, r.image_url, r.source, r.status, r.created_at, r.updated_at FROM recipes r
-LEFT JOIN recipe_categories rc ON rc.recipe_id = r.id
-WHERE ($3::text IS NULL OR lower(r.name) LIKE '%' || lower($3::text) || '%')
-  AND ($4::bigint IS NULL OR rc.category_id = $4::bigint)
+
+SELECT r.id, r.name, r.instructions, r.image_url, r.source, r.status, r.created_at, r.updated_at FROM recipes r
+WHERE ($3::text IS NULL OR lower(r.name) LIKE '%' || replace(replace(replace(
+      lower($3::text), '\', '\\'), '%', '\%'), '_', '\_') || '%' ESCAPE '\')
+  AND ($4::bigint IS NULL OR EXISTS (
+        SELECT 1 FROM recipe_categories rc
+        WHERE rc.recipe_id = r.id AND rc.category_id = $4::bigint))
   AND ($5::text IS NULL OR r.status = $5::text)
 ORDER BY r.name, r.id
 LIMIT $1 OFFSET $2
@@ -275,6 +376,17 @@ type SearchRecipesParams struct {
 	Status     pgtype.Text
 }
 
+// The category filter is a semi-join, not a join.
+//
+// It used to be a LEFT JOIN onto recipe_categories that was always present,
+// even though it only ever served the optional category_id filter. With no
+// category given, every recipe came back once per category it carries and a
+// DISTINCT over all eight columns removed the copies again — a sort or hash
+// aggregate on the full row width, on the unfiltered listing that loads first.
+// EXISTS asks the same question without multiplying the rows, so the DISTINCT
+// is gone and the planner can skip the subquery entirely when the argument is
+// NULL. It also frees the ORDER BY: under SELECT DISTINCT, every column
+// ordered on has to appear in the select list.
 func (q *Queries) SearchRecipes(ctx context.Context, arg SearchRecipesParams) ([]Recipe, error) {
 	rows, err := q.db.Query(ctx, searchRecipes,
 		arg.Limit,

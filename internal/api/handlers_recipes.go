@@ -97,7 +97,16 @@ func (d Deps) handleCreateRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	recipe := dtoToRecipe(dto)
-	if err := d.Recipes.Create(r.Context(), recipe); err != nil {
+	err := d.Recipes.Create(r.Context(), recipe)
+	// The insert itself is the duplicate check now, so the collision arrives
+	// here as a sentinel rather than as a unique-violation wrapped in a 500.
+	// 409 is what it always was: the request was well-formed and the client can
+	// act on the answer by editing the existing recipe instead.
+	if errors.Is(err, repository.ErrDuplicateSource) {
+		writeError(w, http.StatusConflict, "a recipe with this source already exists")
+		return
+	}
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, "create failed")
 		return
 	}

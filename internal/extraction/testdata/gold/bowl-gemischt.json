@@ -1,0 +1,38 @@
+{
+  "id": "bowl-gemischt",
+  "origin": "synthetic",
+  "note": "An English title over a German body — the mixed caption the prompt describes.",
+  "caption": "Sweet Potato Bowl 🍠\n\nZutaten:\n- 2 Süßkartoffeln\n- 150 g Kichererbsen\n- 2 EL Tahini\n- 1 Limette\n\nZubereitung:\nSüßkartoffeln würfeln und 25 Minuten bei 200 Grad rösten.\nKichererbsen zugeben, mit Tahini und Limettensaft anmachen.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Sweet Potato Bowl",
+    "ingredients": [
+      {
+        "name": "Süßkartoffeln",
+        "amount": 2,
+        "unit": ""
+      },
+      {
+        "name": "Kichererbsen",
+        "amount": 150,
+        "unit": "g"
+      },
+      {
+        "name": "Tahini",
+        "amount": 2,
+        "unit": "EL"
+      },
+      {
+        "name": "Limette",
+        "amount": 1,
+        "unit": ""
+      }
+    ],
+    "instructions_contain": [
+      "rösten"
+    ],
+    "rules": {
+      "min_confidence": 0.9
+    }
+  }
+}

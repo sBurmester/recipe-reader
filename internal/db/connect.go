@@ -8,7 +8,9 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	// Registers the "pgx5://" database URL scheme with golang-migrate. The
@@ -22,10 +24,44 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
+// Pool defaults applied when the DSN does not name the corresponding
+// pgxpool parameter. They replace pgxpool's own, which are tuned for a service
+// with far more traffic than this one and were being accepted by default.
+const (
+	// defaultMaxConns is raised above pgxpool's max(4, NumCPU). A single page
+	// of search costs 2+2N queries (persistence P4, deferred deliberately), so
+	// on a two-CPU container the four connections pgxpool would pick make the
+	// list endpoint the pool's bottleneck under even light concurrent use.
+	defaultMaxConns = 10
+	// defaultMinConns is above pgxpool's 0 so the pool does not drain to
+	// nothing between the six-hourly imports, leaving the first request after
+	// an idle stretch to pay a full connect and TLS handshake.
+	defaultMinConns = 2
+	// defaultConnectTimeout bounds establishing one connection. Without it the
+	// driver default applies and a Postgres that accepts the TCP connection but
+	// never completes the handshake holds the caller for as long as it likes.
+	defaultConnectTimeout = 5 * time.Second
+)
+
 // Connect opens a pgx connection pool against dsn and verifies it with a
 // ping. dsn is a postgres:// URL.
+//
+// The pool is configured rather than taken as it comes. pgxpool.New accepts
+// every default, and the defaults an operator most wants to move — pool size,
+// above all — are then reachable only by editing this file. Going through
+// ParseConfig keeps the DSN's own pool_* parameters authoritative where they
+// are given (pool_max_conns, pool_min_conns, pool_max_conn_lifetime,
+// pool_max_conn_idle_time, pool_health_check_period, connect_timeout) and
+// supplies the constants above only where the DSN is silent, so the operator
+// has a lever that needs no rebuild.
 func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("db: parse dsn: %w", err)
+	}
+	applyPoolDefaults(cfg, dsn)
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("db: connect: %w", err)
 	}
@@ -34,6 +70,46 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("db: ping: %w", err)
 	}
 	return pool, nil
+}
+
+// applyPoolDefaults fills in the pool settings dsn did not name. ParseConfig
+// has already substituted pgxpool's defaults for those, and the two are
+// indistinguishable afterwards — hence the second look at the DSN rather than a
+// comparison against pgxpool's values.
+func applyPoolDefaults(cfg *pgxpool.Config, dsn string) {
+	params := dsnParams(dsn)
+	if _, ok := params["pool_max_conns"]; !ok {
+		cfg.MaxConns = defaultMaxConns
+	}
+	if _, ok := params["pool_min_conns"]; !ok {
+		cfg.MinConns = defaultMinConns
+	}
+	if _, ok := params["connect_timeout"]; !ok {
+		cfg.ConnConfig.ConnectTimeout = defaultConnectTimeout
+	}
+	// A DSN that sets pool_max_conns below our MinConns would otherwise produce
+	// a config pgxpool rejects at construction, turning an operator lowering the
+	// ceiling into a server that will not start.
+	if cfg.MinConns > cfg.MaxConns {
+		cfg.MinConns = cfg.MaxConns
+	}
+}
+
+// dsnParams reports which settings a URL-form DSN names, as a set. A
+// keyword/value DSN ("host=... port=...") parses as a URL with no query, so it
+// yields the empty set and every default above applies — acceptable because
+// every DSN this project builds or documents is a URL, and the cost of being
+// wrong is a default where an explicit value was meant, not a failure.
+func dsnParams(dsn string) map[string]struct{} {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return nil
+	}
+	params := make(map[string]struct{}, len(u.Query()))
+	for key := range u.Query() {
+		params[key] = struct{}{}
+	}
+	return params
 }
 
 // Migrate applies all pending embedded migrations against dsn (a

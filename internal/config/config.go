@@ -17,6 +17,11 @@ import (
 // environment variable, then the built-in default. The four credentials are the
 // exception — they have no flag form at all; see readCredentials.
 type Config struct {
+	// Version is not a setting: it is kong's --version flag, which prints the
+	// version Load was given and exits before anything else is parsed. It is
+	// declared here because kong has no other place to hang a flag.
+	Version kong.VersionFlag `name:"version" help:"Print the version and exit."`
+
 	// HTTPAddr defaults to loopback rather than all interfaces: the insecure
 	// combination (no token, network-reachable) is then something an operator
 	// has to ask for, not something they get by leaving a field unset.
@@ -121,17 +126,26 @@ func (c Config) LLMSettings() (LLMSettings, bool) {
 
 // Load parses configuration from the process command-line arguments and the
 // environment. See Config for the precedence rules.
-func Load() (Config, error) {
-	return load(os.Args[1:])
+//
+// version is what --version prints. It is passed in rather than read here
+// because it is stamped into the binary at link time, which only the main
+// package can own.
+func Load(version string) (Config, error) {
+	return load(os.Args[1:], version)
 }
 
 // load is the testable core of Load, taking an explicit argument slice.
-func load(args []string) (Config, error) {
+//
+// opts are appended to the parser's own. Load passes none; it exists so a test
+// can supply kong.Exit, which --version calls after printing and which would
+// otherwise take the test binary down with it.
+func load(args []string, version string, opts ...kong.Option) (Config, error) {
 	var cfg Config
-	parser, err := kong.New(&cfg,
+	parser, err := kong.New(&cfg, append([]kong.Option{
 		kong.Name("recipe-reader"),
 		kong.Description(description),
-	)
+		kong.Vars{"version": version},
+	}, opts...)...)
 	if err != nil {
 		return Config{}, fmt.Errorf("config: %w", err)
 	}
@@ -172,6 +186,19 @@ func (c *Config) readCredentials() {
 // The second is a run bound below one. The fetcher would quietly replace it
 // with its own default, so IMPORT_MAX_ITEMS=0 — plausibly meant as "pause
 // imports" — would import fifty posts instead, which is the opposite.
+//
+// The third is an import interval at or below zero. time.NewTicker panics for
+// one, on the calling goroutine, inside Worker.Start — so IMPORT_INTERVAL=0
+// used to abort the process with a stack trace instead of the clean
+// slog.Error("fatal") path main was built around.
+//
+// The fourth and fifth are the two extraction thresholds outside 0..1. Both are
+// compared against a confidence the extractors only ever produce in that range,
+// so a value outside it does not fail: it silently makes one branch
+// unreachable. EXTRACTION_PUBLISH_THRESHOLD=80, meaning a percentage, would
+// send every recipe to needs_review, and EXTRACTION_CONFIDENCE_THRESHOLD=80
+// would call the LLM for every post — on a paid API, indefinitely, with nothing
+// in the logs pointing at the configuration.
 func (c Config) validate() error {
 	if c.APIToken == "" && !isLoopbackAddr(c.HTTPAddr) {
 		return fmt.Errorf(
@@ -184,6 +211,25 @@ func (c Config) validate() error {
 	}
 	if c.ImportMaxPages < 1 {
 		return fmt.Errorf("config: IMPORT_MAX_PAGES must be at least 1, got %d", c.ImportMaxPages)
+	}
+	if c.ImportInterval <= 0 {
+		return fmt.Errorf("config: IMPORT_INTERVAL must be positive, got %s", c.ImportInterval)
+	}
+	if err := validateThreshold("EXTRACTION_CONFIDENCE_THRESHOLD", c.ExtractionThreshold); err != nil {
+		return err
+	}
+	if err := validateThreshold("EXTRACTION_PUBLISH_THRESHOLD", c.ExtractionPublishThreshold); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateThreshold rejects a confidence threshold outside 0..1. NaN fails the
+// comparison in both directions, which is why the test is written as "not
+// inside the range" rather than as two bounds checks.
+func validateThreshold(name string, v float64) error {
+	if !(v >= 0 && v <= 1) {
+		return fmt.Errorf("config: %s must be between 0 and 1, got %v", name, v)
 	}
 	return nil
 }

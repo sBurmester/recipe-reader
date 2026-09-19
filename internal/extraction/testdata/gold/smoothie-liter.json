@@ -1,0 +1,43 @@
+{
+  "id": "smoothie-liter",
+  "origin": "synthetic",
+  "note": "Litres and millilitres side by side.",
+  "caption": "Grüner Power-Smoothie\n\nZutaten:\n- 1 l Wasser\n- 200 ml Apfelsaft\n- 100 g Spinat\n- 1 Banane\n- 1 TL Leinsamen\n\nZubereitung:\nAlles in den Mixer geben und eine Minute auf höchster Stufe mixen.\nSofort trinken, sonst setzt sich der Spinat ab.",
+  "expect": {
+    "no_recipe": false,
+    "name": "Grüner Power-Smoothie",
+    "ingredients": [
+      {
+        "name": "Wasser",
+        "amount": 1,
+        "unit": "l"
+      },
+      {
+        "name": "Apfelsaft",
+        "amount": 200,
+        "unit": "ml"
+      },
+      {
+        "name": "Spinat",
+        "amount": 100,
+        "unit": "g"
+      },
+      {
+        "name": "Banane",
+        "amount": 1,
+        "unit": ""
+      },
+      {
+        "name": "Leinsamen",
+        "amount": 1,
+        "unit": "TL"
+      }
+    ],
+    "instructions_contain": [
+      "Mixer"
+    ],
+    "rules": {
+      "min_confidence": 0.95
+    }
+  }
+}

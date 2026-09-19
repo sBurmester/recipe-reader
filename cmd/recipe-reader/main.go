@@ -32,7 +32,7 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.Load()
+	cfg, err := config.Load(version)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,13 @@ func run() error {
 	if fetcher != nil {
 		p := &pipeline.Pipeline{
 			Fetcher: fetcher, Extractor: extractor,
-			Recipes:          recipes,
+			Recipes: recipes,
+			// The same lookup repository the API serves the category picker
+			// from, which is the point: an import may only attach a category
+			// the picker already offers. Without it an attacker-authored
+			// caption can talk the model into proposing any string and the
+			// import creates that row for every user.
+			Categories:       lookups,
 			Threshold:        cfg.ExtractionThreshold,
 			PublishThreshold: cfg.ExtractionPublishThreshold,
 		}
@@ -81,12 +87,15 @@ func run() error {
 		if loginErr != nil {
 			// Reported now rather than after the first scheduled run, which
 			// is hours away: the import page shows it as the last error.
-			worker.RecordFailure(fmt.Errorf("instagram login failed at startup; the next import retries it: %w", loginErr))
+			// Wrapped in pipeline.ErrLogin so the status endpoint classifies it
+			// as an authentication problem rather than as a generic run
+			// failure — it is the one error that reaches Status without a run.
+			worker.RecordFailure(fmt.Errorf("%w at startup; the next import retries it: %w", pipeline.ErrLogin, loginErr))
 		}
 		worker.Start(ctx)
 	}
 
-	server, err := newServer(cfg, api.Deps{Recipes: recipes, Lookups: lookups, Worker: worker})
+	server, err := newServer(cfg, api.Deps{Recipes: recipes, Lookups: lookups, Worker: worker, Version: version})
 	if err != nil {
 		return err
 	}
@@ -115,7 +124,7 @@ func run() error {
 		}
 	}()
 
-	slog.Info("recipe-reader listening", "addr", cfg.HTTPAddr)
+	slog.Info("recipe-reader listening", "addr", cfg.HTTPAddr, "version", version)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

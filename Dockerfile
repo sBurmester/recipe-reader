@@ -14,10 +14,17 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+# VERSION is stamped into the binary, which is what makes a deployed container
+# able to identify itself — `--version`, and the version field of
+# /api/healthz. It has to be passed in: .dockerignore excludes .git, so there is
+# no history in the build context for `git describe` to read. `make docker`
+# supplies it; a bare `docker build` leaves it at dev.
+ARG VERSION=dev
+
 # sqlc's generated code is committed, so this stage needs no sqlc CLI — it is
 # building ordinary Go source. The frontend build lands where go:embed expects.
 COPY --from=frontend /app/web/dist ./internal/webui/dist
-RUN CGO_ENABLED=0 go build -o /recipe-reader ./cmd/recipe-reader
+RUN CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" -o /recipe-reader ./cmd/recipe-reader
 
 FROM alpine:3.23
 # ca-certificates is required, not optional: the app makes outbound HTTPS calls
