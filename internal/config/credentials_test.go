@@ -11,7 +11,7 @@ import (
 func TestLoad_RejectsCredentialFlags(t *testing.T) {
 	for _, flag := range []string{"--api-token", "--instagram-password", "--anthropic-api-key", "--llm-api-key"} {
 		if _, err := loadArgs([]string{flag, "secret"}); err == nil {
-			t.Errorf("load(%s secret) error = nil, want an unknown-flag refusal", flag)
+			t.Errorf("loadArgs(%s secret) error = nil, want an unknown-flag refusal", flag)
 		}
 	}
 }
@@ -25,7 +25,7 @@ func TestLoad_ReadsCredentialsFromTheEnvironment(t *testing.T) {
 
 	cfg, err := loadArgs(nil)
 	if err != nil {
-		t.Fatalf("load() error = %v", err)
+		t.Fatalf("loadArgs() error = %v", err)
 	}
 	if cfg.APIToken != "tok" || cfg.InstagramPassword != "pw" || cfg.AnthropicAPIKey != "sk-ant" || cfg.LLMAPIKey != "sk-llm" {
 		t.Errorf("credentials = %q %q %q %q, want tok pw sk-ant sk-llm",

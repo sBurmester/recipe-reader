@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
@@ -152,6 +153,35 @@ func TestParse_ServeStillValidates(t *testing.T) {
 
 	if _, _, err := parse(t); err == nil {
 		t.Error("parse() error = nil, want serve to refuse a non-loopback bind without API_TOKEN")
+	}
+}
+
+// serve's settings pick up the four credentials in BeforeApply, which kong has
+// to run before Validate, or the API_TOKEN rule never sees the token (E4). The
+// config tests parse Config as the app itself; serve runs it embedded in a
+// command, named or not, and this is the one test that sets the credentials in
+// that shape. The non-loopback address fails the parse unless the token
+// arrived before Validate.
+func TestParse_ServeReadsCredentialsFromTheEnvironment(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("HTTP_ADDR", ":8080")
+	t.Setenv("API_TOKEN", "tok")
+	t.Setenv("INSTAGRAM_PASSWORD", "pw")
+	t.Setenv("LLM_API_KEY", "llm-key")
+	t.Setenv("ANTHROPIC_API_KEY", "ant-key")
+
+	for _, args := range [][]string{nil, {"serve"}} {
+		root, _, err := parse(t, args...)
+		if err != nil {
+			t.Fatalf("parse(%q) error = %v, want API_TOKEN read before Validate", args, err)
+		}
+		cfg := root.Serve.Config
+		got := []string{
+			cfg.APIToken, cfg.InstagramPassword, cfg.LLMAPIKey, cfg.AnthropicAPIKey,
+		}
+		if want := []string{"tok", "pw", "llm-key", "ant-key"}; !slices.Equal(got, want) {
+			t.Errorf("parse(%q) credentials = %q, want %q", args, got, want)
+		}
 	}
 }
 
