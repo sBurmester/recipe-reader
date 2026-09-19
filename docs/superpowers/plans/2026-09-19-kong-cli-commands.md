@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Die flache kong-Flag-Struktur wird zu einem Kommandobaum (`serve`, `healthcheck`, `migrate`) mit `Run`-Methoden, Optionsgruppen und kong-Hooks umgebaut. `cmd/recipe-reader` besteht danach nur noch aus einer `main.go` mit wenigen Zeilen.
+**Goal:** Die flache kong-Flag-Struktur wird zu einem Kommandobaum (`serve`, `healthcheck`, `migrate`) mit `Run`-Methoden, Optionsgruppen und kong-Hooks umgebaut. `cmd/recipe-reader/main.go` parst die Kommandozeile und führt das gewählte Kommando aus; die Arbeit liegt in `internal/*` (E13).
 
-**Architecture:** `main.go` übergibt `os.Args` und die per Linker gesetzte Version an `internal/cli`. Dort liegt der kong-Baum; jedes Kommando delegiert in seinem `Run` sofort an das Paket, das die eigentliche Arbeit macht (`internal/server` = Composition Root, `internal/healthcheck` = Probe, `internal/db` = Migration). Settings werden in `internal/config` als eingebettete kong-Gruppen deklariert und über `Validate()` bzw. `BeforeApply()` geprüft. kong ruft beide nur für das gewählte Kommando auf.
+**Architecture:** `cmd/recipe-reader/main.go` enthält den kong-Baum, parst die Kommandozeile mit gebundenem Kontext und gebundener Version, lehnt verirrte Flags ab und führt das gewählte Kommando aus (E13). In `internal/cli` liegen nur die Kommandos; jedes delegiert in seinem `Run` sofort an das Paket, das die eigentliche Arbeit macht (`internal/server` = Composition Root, `internal/healthcheck` = Probe, `internal/db` = Migration). Settings werden in `internal/config` als eingebettete kong-Gruppen deklariert und über `Validate()` bzw. `BeforeApply()` geprüft. kong ruft beide nur für das gewählte Kommando auf.
 
 **Tech Stack:** Go 1.27.1, `github.com/alecthomas/kong` v1.16.1 (bereits in `go.mod`, laut `go list -m -u` am 2026-09-19 die aktuelle Version), pgx/v5, testcontainers-go, Docker.
 
@@ -56,9 +56,9 @@
 
 | # | Ziel | Messbar an |
 | --- | --- | --- |
-| Z1 | CLI nach kong-Best-Practices: Kommandobaum, `Run`-Methoden, DI über Bindings, `Validate()`/Hooks statt manueller Nachbearbeitung | `internal/cli` mit `serve`, `healthcheck`, `migrate`; keine manuellen `validate`/`readCredentials`-Aufrufe mehr |
-| Z2 | `main.go` so schlank wie möglich | ≤ 25 Zeilen, Body von `main()` ist eine Zeile |
-| Z3 | Paket `main` so schlank wie möglich | `cmd/recipe-reader/` enthält **nur** `main.go`; Imports: `os` + `internal/cli` |
+| Z1 | CLI nach kong-Best-Practices: Kommandobaum, `Run`-Methoden, DI über Bindings, `Validate()`/Hooks statt manueller Nachbearbeitung | kong-Baum in `main.go`, die Kommandos `serve`, `healthcheck`, `migrate` in `internal/cli` (E13); keine manuellen `validate`/`readCredentials`-Aufrufe mehr |
+| Z2 | `main.go` so schlank wie möglich | ~~≤ 25 Zeilen, Body von `main()` ist eine Zeile~~ geändert durch E13: `main()` ruft nur `run()` und endet bei einem Fehler mit 1; `run()` parst mit kong und dispatcht; die Kommandos liegen in `internal/cli` |
+| Z3 | Paket `main` so schlank wie möglich | ~~`cmd/recipe-reader/` enthält **nur** `main.go`; Imports: `os` + `internal/cli`~~ geändert durch E13: `cmd/recipe-reader/` enthält `main.go` und dessen Tests; von `internal/*` importiert `main.go` nur `internal/cli` (ab Task 4 zusätzlich `internal/config` für `config.Groups`) |
 | Z4 | Jedes Kommando sieht und validiert nur die Settings, die es liest | `healthcheck` akzeptiert eine Umgebung, die `serve` ablehnt (Test) |
 | Z5 | Kein Verhaltensbruch für bestehende Deployments | `recipe-reader` ohne Argumente und mit allen bisherigen Flags/Envs startet den Server; Smoke-Test grün |
 
@@ -85,8 +85,8 @@
 - [ ] Ein Flag vor dem Kommandonamen wird abgelehnt (Exit 1), statt stillschweigend verloren zu gehen: `recipe-reader --http-addr 10.0.0.1:9090 healthcheck` prüft nicht die Default-Adresse, sondern scheitert mit dem Hinweis, Flags hinter das Kommando zu schreiben (Entscheidung E11).
 
 **US3: Entwickler.** *Als Entwickler möchte ich Wiring und CLI ohne `os.Exit` und ohne Datenbank testen können.*
-- [ ] `cmd/recipe-reader/` enthält nur `main.go`; die Logik liegt in `internal/cli`, `internal/server` und `internal/healthcheck` und ist dort getestet.
-- [ ] `cli.Run(ctx, args, version, opts...)` ist ohne Prozess-Exit testbar (kong-`Exit`/`Writers` injizierbar).
+- [ ] Die Logik der Kommandos liegt in `internal/cli`, `internal/server` und `internal/healthcheck` und ist dort getestet; `cmd/recipe-reader/` enthält nur `main.go` (Kommandobaum, Parsen und Dispatch, E13) und dessen Tests.
+- [ ] `run(args, opts...)` in `main.go` ist ohne Prozess-Exit testbar (kong-`Exit`/`Writers` injizierbar); den Exit-Status von `main()` prüft ein Test in einem Kindprozess (E13).
 
 **US4: Betreiber liest die Hilfe.** *Als Betreiber möchte ich schnell finden, was ich einstellen kann.*
 - [ ] `recipe-reader --help` listet die Kommandos.
@@ -107,13 +107,14 @@
 | E3 | `--version` bleibt ein globales Flag (`kong.VersionFlag`), kein `version`-Kommando | Der Smoke-Test, die README und die Gewohnheit der Betreiber nutzen `--version`. Es funktioniert mit und ohne Kommando. |
 | E4 | Credentials werden in **`BeforeApply`**-Hooks gelesen, nicht in `AfterApply` | kong v1.16.1 ruft `Validate()` **vor** `AfterApply` auf (`kong.go`, `Parse`). Die `API_TOKEN`-Regel muss den Token aber sehen. |
 | E5 | Validierung über `Validate()`-Methoden pro Gruppe | kong validiert nur Knoten auf dem gewählten Kommandopfad (`context.go`, `Validate`). Damit ist Z4 automatisch erfüllt. `Validate` auf eingebetteten Structs wird gefunden (`getValidators` → `walkEmbedded`). |
-| E6 | Kein `kong.Parse`/`FatalIfErrorf`; `cli.Main` loggt eine Zeile und gibt 1 zurück | Beide lesen `os.Args` bzw. rufen `os.Exit` auf und sind damit nicht testbar. `FatalIfErrorf` liefert bei Parse-Fehlern Exit 80, was mit dem 0/1-Kontrakt des `HEALTHCHECK` kollidiert. Das Log-Format (`slog.Error("fatal", …)`) bleibt wie bisher. |
-| E7 | Pakete: `internal/cli` (Baum), `internal/server` (Composition Root für `serve`), `internal/healthcheck` (Probe), `internal/config` (Flag-Gruppen); `var version` bleibt in `main` | Aufteilung nach Verantwortung. `-X main.version` bleibt gültig, sodass `Makefile` und `Dockerfile` keine ldflags-Änderung brauchen. |
+| E6 | Kein `kong.Parse`/`FatalIfErrorf`; `main()` loggt eine Zeile und endet mit 1 (ursprünglich `cli.Main`, siehe E13) | Beide lesen `os.Args` bzw. rufen `os.Exit` auf und sind damit nicht testbar. `FatalIfErrorf` liefert bei Parse-Fehlern Exit 80, was mit dem 0/1-Kontrakt des `HEALTHCHECK` kollidiert. Das Log-Format (`slog.Error("fatal", …)`) bleibt wie bisher. |
+| E7 | Pakete: `internal/cli` (die Kommandos; den Baum hält nach E13 `main.go`), `internal/server` (Composition Root für `serve`), `internal/healthcheck` (Probe), `internal/config` (Flag-Gruppen); `var version` bleibt in `main` | Aufteilung nach Verantwortung. `-X main.version` bleibt gültig, sodass `Makefile` und `Dockerfile` keine ldflags-Änderung brauchen. |
 | E8 | DI über kong-Bindings: `kong.BindTo(ctx, (*context.Context)(nil))` und `kong.Bind(BuildVersion(v))` | kong bindet über den **konkreten** Typ (`callbacks.go`, `bindings.add`). Ein `kong.Bind(ctx)` würde einen `context.Context`-Parameter also nicht bedienen. |
 | E9 | `migrate` ist im Scope, ein einmaliges `import` landet im Backlog | `migrate` ist ein bereits existierender, klar abgegrenzter Schritt und kostet wenig. `import` teilt sich die Session-Datei und die Login-Rationierung (15-Minuten-Floor) mit einem laufenden Server und braucht ein eigenes Design. |
 | E10 | `Dockerfile` bekommt `CMD ["serve"]` | Macht den Default sichtbar; `docker run <image> migrate` bzw. `--version` überschreiben `CMD` wie gewohnt. |
-| E11 | `cli.Run` lehnt nach dem Parsen jedes Flag ab, das nicht zu einem Knoten auf dem gewählten Kommandopfad gehört (`rejectMisplacedFlags`) | Wegen `withargs` liest kong ein Flag vor dem Kommandonamen als `serve`-Flag und wechselt erst danach das Kommando. `recipe-reader --http-addr X healthcheck` prüfte so still die Default-Adresse, `--db-dsn X migrate` würde die Default-Datenbank migrieren. Im Review vom 2026-09-19 per Prototyp gegen kong v1.16.1 nachgewiesen, ebenso der Guard. |
+| E11 | `run` in `main.go` lehnt nach dem Parsen jedes Flag ab, das nicht zu einem Knoten auf dem gewählten Kommandopfad gehört (`rejectMisplacedFlags`; ursprünglich in `cli.Run`, siehe E13) | Wegen `withargs` liest kong ein Flag vor dem Kommandonamen als `serve`-Flag und wechselt erst danach das Kommando. `recipe-reader --http-addr X healthcheck` prüfte so still die Default-Adresse, `--db-dsn X migrate` würde die Default-Datenbank migrieren. Im Review vom 2026-09-19 per Prototyp gegen kong v1.16.1 nachgewiesen, ebenso der Guard. |
 | E12 | Die Gruppen werden über `kong.ExplicitGroups(config.Groups())` deklariert; die Beschreibungen von HTTP, Instagram und LLM nennen die env-only Credentials der Gruppe | `serve --help` zeigt die App-Beschreibung nicht (Prototyp), also dort, wo die Flags stehen, bisher auch keine Credentials. Die Beschreibungen liegen in `internal/config` neben den Feldern. Der API_TOKEN-Satz wandert aus dem Help-Text von `Listen` in die HTTP-Beschreibung, damit `healthcheck --help` nicht behauptet, die Probe brauche einen Token. |
+| E13 | **Kommandobaum, Parsen und Dispatch liegen in `cmd/recipe-reader/main.go`; `internal/cli` enthält nur die Kommandos** (Nutzerentscheidungen vom 2026-09-19, während M2). `main.go` enthält den Baum `CLI` (Felder `cli.ServeCmd`, `cli.HealthCheckCmd`, ab Task 5 `cli.MigrateCmd`), `description`, `rejectMisplacedFlags` (E11), `newParser` und `run`. `main()` ruft `run(os.Args[1:])`, loggt einen Fehler als eine Zeile und endet mit 1. `run` bindet den Signal-Kontext (`BindTo`, E8) und `cli.BuildVersion`, parst, ruft `rejectMisplacedFlags` und `kctx.Run()`. `internal/cli` enthält die Kommando-Typen mit ihren `Run`-Methoden und `BuildVersion`. Die Tests der Kommandozeile liegen in `cmd/recipe-reader/main_test.go` | Der Nutzer will `run` in `main.go` und kein `cli.Main`, das `main` aufruft. Den kong-Parser baut `main.go` selbst (Variante „alles in main.go“ statt eines `cli.Parse`-Helfers). Ein eigenes Paket für Baum und Dispatch ergibt keinen Sinn, in `internal/cli` gehören nur die Kommandos. Ersetzt die ursprüngliche Endform aus Task 3 (`main.go` ≤ 25 Zeilen, Imports `os` + `internal/cli`, `cli.Main`/`cli.Run`). `newParser` ist gegenüber der Skizze des Nutzers ausgelagert, damit die Parse-Tests denselben Parser nutzen, ohne ein Kommando auszuführen. |
 
 ### Risiken
 
@@ -130,7 +131,7 @@
 
 - [ ] Alle Tasks in dieser Datei abgehakt.
 - [ ] Commit-Gate und Docker-Gate grün.
-- [ ] `cmd/recipe-reader/` enthält nur `main.go` (≤ 25 Zeilen) mit den Imports `os` und `internal/cli`.
+- [ ] `cmd/recipe-reader/` enthält nur `main.go` und dessen Tests; `main.go` enthält Baum, Parsen und Dispatch; `internal/cli` enthält nur die Kommandos (E13).
 - [ ] Die Flag-Liste von `serve --help` ist identisch mit der Baseline von `--help`, abgesehen vom entfernten `--health-check`.
 - [ ] README (Commands, Configuration, Health check, Architecture) aktualisiert.
 
@@ -159,13 +160,14 @@
 
 ```
 cmd/recipe-reader/
-  main.go                  # ≤ 25 Zeilen: var version; main() → os.Exit(cli.Main(...))
-internal/cli/
-  cli.go                   # CLI-Root, BuildVersion, description, Main, Run, rejectMisplacedFlags, newParser
+  main.go                  # var version; CLI (Baum), description; main() → run(); run: newParser, BindTo/Bind,
+                           # Parse, rejectMisplacedFlags, kctx.Run() (E13)
+  main_test.go, migrate_test.go, testmain_test.go (TestMain → testdb.Main)
+internal/cli/              # nur die Kommandos (E13)
+  cli.go                   # Paket-Doc, BuildVersion
   serve.go                 # ServeCmd → server.Run
   healthcheck.go           # HealthCheckCmd → healthcheck.Probe
   migrate.go               # MigrateCmd → db.Open
-  cli_test.go, migrate_test.go, testmain_test.go (TestMain → testdb.Main)
 internal/server/
   server.go                # Run: Composition Root + Graceful Shutdown (war main.run)
   extractor.go             # newExtractor
@@ -196,7 +198,7 @@ internal/db/
 | `ImportInterval` | `Import.Interval` | `AnthropicAPIKey` | `LLM.AnthropicAPIKey` |
 | `ImportMaxItems` | `Import.MaxItems` | `AnthropicModel` | `LLM.AnthropicModel` |
 | `ImportMaxPages` | `Import.MaxPages` | `Config.LLMSettings()` | `LLM.Settings()` |
-| `Version` | → `cli.CLI.Version` (Task 3) | `HealthCheck` | → Kommando `healthcheck` (Task 3) |
+| `Version` | → `CLI.Version` in `main.go` (Task 3, E13) | `HealthCheck` | → Kommando `healthcheck` (Task 3) |
 
 ---
 
@@ -209,7 +211,7 @@ Es gibt vier Milestones. Jeder endet in einem **releasefähigen Stand**: Tests, 
 | Milestone | Tasks | Ergebnis | Für Betreiber sichtbar |
 | --- | --- | --- | --- |
 | **M1:** Paket `main` entschlackt | Vorbereitung, Task 1, Task 2 | Health-Probe und Composition Root liegen außerhalb von `main`; das Verhalten ist unverändert | nein |
-| **M2:** kong-Kommandobaum | Task 3 | `serve` (Default) und `healthcheck` als Kommandos; `main.go` in Endform | ja: `healthcheck` ersetzt `--health-check` (**Breaking**) |
+| **M2:** kong-Kommandobaum | Task 3 | `serve` (Default) und `healthcheck` als Kommandos; `main.go` parst und dispatcht (E13) | ja: `healthcheck` ersetzt `--health-check` (**Breaking**) |
 | **M3:** Konfiguration gruppiert | Task 4 | Settings in sechs Gruppen, jede validiert sich selbst; gruppierte Hilfe | ja: `serve --help` gruppiert |
 | **M4:** `migrate` und Abschluss | Task 5, Abschluss-Verifikation | Kommando `migrate`; Definition of Done erfüllt | ja: neues Kommando `migrate` |
 
@@ -228,11 +230,11 @@ Deckt ab: die Vorarbeit für Z3 und US3.
 
 #### M2: kong-Kommandobaum
 
-**Ergebnis:** Der Kern des Auftrags. Das CLI ist ein kong-Kommandobaum mit `Run`-Methoden, Bindings, `Validate` und `BeforeApply`, und `main.go` ist auf eine Zeile Logik geschrumpft.
+**Ergebnis:** Der Kern des Auftrags. Das CLI ist ein kong-Kommandobaum mit `Run`-Methoden, Bindings, `Validate` und `BeforeApply`, und `main.go` enthält den Baum, parst und dispatcht; die Kommandos liegen in `internal/cli` (E13).
 
 Abnahmekriterien:
 - [ ] Die Akzeptanzkriterien von US1, US2 und US3 in Teil A sind abgehakt.
-- [ ] `main.go` hat seine Endform: höchstens 25 Zeilen, Imports `os` und `internal/cli`. `version.go` ist entfernt.
+- [ ] `main.go` hat seine Endform nach E13: `main()` ruft nur `run()` und endet bei einem Fehler mit 1; `run()` parst und dispatcht; kein `cli.Main`/`cli.Run`. `version.go` ist entfernt.
 - [ ] Das Docker-Gate ist grün, und der Image-`HEALTHCHECK` meldet mit dem neuen Kommando `healthy`.
 - [ ] Der Breaking Change ist in der README (Abschnitt „Commands“) und als `BREAKING CHANGE:`-Footer in der PR-Beschreibung dokumentiert (siehe „Branches und PRs“).
 
@@ -288,7 +290,7 @@ Entschieden am 2026-09-19: **ein PR pro Milestone**, wie zuletzt im Repo üblich
   - [x] **Task 2:** Composition Root nach `internal/server` (M)
   - [x] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
 - [ ] **M2: kong-Kommandobaum**
-  - [ ] **Task 3:** kong-Kommandobaum in `internal/cli`; `healthcheck` ersetzt `--health-check` (L)
+  - [x] **Task 3:** kong-Kommandobaum in `internal/cli` (nach E13: Baum in `main.go`, Kommandos in `internal/cli`); `healthcheck` ersetzt `--health-check` (L)
   - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
 - [ ] **M3: Konfiguration gruppiert**
   - [ ] **Task 4:** Settings in Optionsgruppen pro Belang (M)
@@ -872,7 +874,7 @@ Kern des Umbaus. `config.Load` entfällt. kong parst jetzt einen Baum `CLI{Versi
   - `func (c *HealthCheckCmd) Run(ctx context.Context) error`; `HealthCheckCmd{ Addr string }`
   - `func (c *config.Config) BeforeApply() error`, `func (c config.Config) Validate() error`
 
-- [ ] **Step 0: Basis-Images im `Dockerfile` prüfen** (Pflicht laut `~/.claude/CLAUDE.md`, weil dieser Task das `Dockerfile` ändert)
+- [x] **Step 0: Basis-Images im `Dockerfile` prüfen** (Pflicht laut `~/.claude/CLAUDE.md`, weil dieser Task das `Dockerfile` ändert)
 
 ```bash
 grep -n '^FROM' Dockerfile
@@ -891,7 +893,7 @@ Erwartet (Stand 2026-09-19, so auch geprüft): `1.27-alpine`, `26-alpine`, `3.24
 - `postgres:18-alpine` (Compose, Smoke-Test, `testdb`) bleibt unangetastet. Ein Major-Wechsel braucht das Upgrade-Verfahren aus der README („Upgrading from Postgres 17“) und ist kein Nebenbei-Bump.
 - Gibt es einen Bump: Docker-Gate laufen lassen und **vor** allen weiteren Steps separat committen: `git add Dockerfile .github/workflows/ci.yml && git commit -m "build: bump the image base versions"` (mit Footer). So trägt der Refactoring-Commit keine Versionsänderung.
 
-- [ ] **Step 1: Failing Tests für den Kommandobaum schreiben** (`internal/cli/cli_test.go`)
+- [x] **Step 1: Failing Tests für den Kommandobaum schreiben** (`internal/cli/cli_test.go`)
 
 Alle Tests, die parsen oder `Run`/`Main` aufrufen, beginnen mit `clearEnv(t)`. Die Config-Tests machen es mit ihrem eigenen `clearEnv` genauso. Ohne den Helper hängt das Ergebnis von der Shell ab, in der `go test` läuft: Ein exportiertes `HTTP_ADDR=:8080` ohne `API_TOKEN` oder ein `IMPORT_INTERVAL=0` ließe `serve` scheitern, bevor der Test prüft, was er prüfen soll. Der Helper leitet die Namen aus dem kong-Modell ab, damit ein neues Flag automatisch mit abgedeckt ist.
 
@@ -1172,7 +1174,7 @@ func TestDescription_NamesEveryCredential(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Config-Tests auf kong-Parse umstellen**
+- [x] **Step 2: Config-Tests auf kong-Parse umstellen**
 
 `internal/config/config_test.go`: den Block von `// testVersion is what loadArgs stamps` bis zum Ende von `func loadArgs` ersetzen durch
 
@@ -1200,12 +1202,12 @@ git rm internal/config/version_test.go
 
 `internal/config/credentials_test.go`: `TestDescription_NamesEveryCredential` samt Kommentar löschen (liegt jetzt in `cli_test.go`) und den dann unbenutzten Import `"strings"` entfernen.
 
-- [ ] **Step 3: Tests laufen lassen, sie müssen fehlschlagen**
+- [x] **Step 3: Tests laufen lassen, sie müssen fehlschlagen**
 
 Run: `go test ./internal/cli/ ./internal/config/`
 Expected: FAIL. `internal/cli` kompiliert nicht (`undefined: CLI`, `newParser`, `Run`, `Main`, `description`). In `internal/config` schlagen u. a. `TestLoad_RejectsNonLoopbackBindWithoutToken` (kein Validate-Aufruf) und `TestLoad_AllowsNonLoopbackBindWithToken` bzw. `TestLoad_ReadsCredentialsFromTheEnvironment` (keine Credentials gelesen) fehl.
 
-- [ ] **Step 4: `internal/config/config.go` auf kong-Hooks umbauen**
+- [x] **Step 4: `internal/config/config.go` auf kong-Hooks umbauen**
 
 1. Paket-Doc (Zeilen 1–2) ersetzen durch:
 
@@ -1234,7 +1236,7 @@ func (c *Config) BeforeApply() error {
 5. `func (c Config) validate() error` → `func (c Config) Validate() error`. Die erste Doc-Zeile `// validate rejects configurations that parse but cannot be what the operator` wird zu `// Validate is called by kong after parsing. It rejects configurations that` und die zweite zu `// parse but cannot be what the operator meant.` (Rest des Kommentars unverändert.)
 6. Import `"github.com/alecthomas/kong"` entfernen, da er nicht mehr benutzt wird.
 
-- [ ] **Step 5: `internal/cli/cli.go` anlegen**
+- [x] **Step 5: `internal/cli/cli.go` anlegen**
 
 ```go
 // Package cli is recipe-reader's command line: the kong command tree, the flags
@@ -1356,7 +1358,7 @@ func newParser(root *CLI, version string, opts ...kong.Option) (*kong.Kong, erro
 }
 ```
 
-- [ ] **Step 6: `internal/cli/serve.go` und `internal/cli/healthcheck.go` anlegen**
+- [x] **Step 6: `internal/cli/serve.go` und `internal/cli/healthcheck.go` anlegen**
 
 ```go
 package cli
@@ -1427,7 +1429,7 @@ Danach in `internal/api/middleware.go` den Absatz von `// Token is the bearer to
 
 *Nachgetragen im Milestone-Review von M1 (F9):* Die `middleware.go:15`-Zeile, die Aufteilung des grep und die Zeilennummer `healthcheck.go:25` fehlten in der ursprünglichen Fassung. Ohne sie hätte der grep garantiert zwei Treffer geliefert.
 
-- [ ] **Step 7: `main.go` in die Endform bringen**
+- [x] **Step 7: `main.go` in die Endform bringen**
 
 ```bash
 git rm cmd/recipe-reader/version.go
@@ -1464,7 +1466,7 @@ Danach den grep aus Step 6 über beide Verzeichnisse wiederholen:
 grep -rn 'config\.Load\|Load refuses\|onfig\.validate' internal cmd   # Expected: keine Treffer
 ```
 
-- [ ] **Step 8: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 8: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go build ./... && go test ./internal/cli/ ./internal/config/ ./internal/server/ ./internal/healthcheck/`
 Expected: PASS in allen vier Paketen.
@@ -1479,7 +1481,7 @@ go run ./cmd/recipe-reader --health-check; echo "exit=$?"   # unknown flag, exit
 go run ./cmd/recipe-reader --http-addr 127.0.0.1:1 healthcheck; echo "exit=$?"   # "put flags after the command name", exit=1
 ```
 
-- [ ] **Step 9: Image, Compose, Smoke-Test umstellen**
+- [x] **Step 9: Image, Compose, Smoke-Test umstellen**
 
 `Dockerfile`: den Kommentar- und `HEALTHCHECK`-Block am Ende ersetzen durch
 
@@ -1503,7 +1505,7 @@ CMD ["serve"]
 
 `scripts/smoke-test-image.sh:78-81`: `# The image's own HEALTHCHECK — the binary probing itself with --health-check —` → `# The image's own HEALTHCHECK — the binary probing itself with its healthcheck command —`, und `# is reached by no unit test. A renamed flag, a wrong binary path or a probe` → `# is reached by no unit test. A renamed command, a wrong binary path or a probe`.
 
-- [ ] **Step 10: README aktualisieren**
+- [x] **Step 10: README aktualisieren**
 
 a) Neuer Abschnitt `## Commands` zwischen `## Setup` und `## Configuration`:
 
@@ -1547,11 +1549,11 @@ composition root that wires database, extraction, Instagram, import worker and H
 `internal/config`.
 ```
 
-- [ ] **Step 11: Docker-Gate** (siehe Global Constraints)
+- [x] **Step 11: Docker-Gate** (siehe Global Constraints)
 
 Expected: `smoke test passed: recipe-reader:ci (smoke)`, insbesondere die Stufe „the image's HEALTHCHECK reports … healthy“.
 
-- [ ] **Step 12: Commit-Gate und Commit**
+- [x] **Step 12: Commit-Gate und Commit**
 
 ```bash
 git add -A cmd internal Dockerfile docker-compose.yml scripts README.md
@@ -1561,6 +1563,22 @@ git commit -m "refactor!: dispatch through a kong command tree" \
 ```
 
 Der Footer hier dokumentiert den Commit. `main` erreicht er nur über die PR-Beschreibung, weil per Squash gemergt wird (siehe „Branches und PRs“).
+
+**Abweichung nach dem Task-Commit (E13, Nutzerentscheidung vom 2026-09-19):** Der Nutzer will `run` in `main.go` und kein `cli.Main`, das `main` aufruft. Ein eigener Commit `refactor: parse and dispatch in main.go` nach dem Task-Commit setzt das um:
+- `cli.Main`, `cli.Run` und `newParser` entfallen in `internal/cli`.
+- `main.go` enthält `main()` (loggt einen Fehler, `os.Exit(1)`), `run(args, opts...)` und `newParser(root, opts...)`, jeweils mit den Kommentaren, die vorher an `cli.Main`, `cli.Run` und `newParser` standen.
+- `description` wird zu `cli.Description`, `rejectMisplacedFlags` zu `cli.RejectMisplacedFlags`.
+- `internal/cli/cli_test.go` zieht nach `cmd/recipe-reader/main_test.go`. `TestMain_ExitStatus` prüft den Exit-Status jetzt in einem Kindprozess (die Testbinary, neu gestartet), weil `main()` den Prozess selbst beendet.
+- Die README-Architektur beschreibt den neuen Schnitt.
+
+Direkt danach hat der Nutzer den Schnitt nachgeschärft: In `internal/cli` bleiben **nur die Kommandos** (`ServeCmd`, `HealthCheckCmd`, später `MigrateCmd`, dazu `BuildVersion`, das in der Signatur von `ServeCmd.Run` steht). Nach `main.go` ziehen:
+- der Baum `CLI`,
+- `description` (war `Description`),
+- `rejectMisplacedFlags` (war `RejectMisplacedFlags`).
+
+Beides steckt in einem Commit (`refactor: parse and dispatch in main.go`). Der Paket-Doc von `internal/config` bleibt, weil `ServeCmd` in `internal/cli` die `Config` weiterhin einbettet.
+
+Die Code-Blöcke von Step 1, 5, 6 und 7 oben zeigen den ursprünglichen Stand. Task 4 und Task 5 sind auf E13 umgestellt.
 
 ---
 
@@ -1572,12 +1590,12 @@ Der Footer hier dokumentiert den Commit. `main` erreicht er nur über die PR-Bes
 - Modify: `internal/config/config.go` (komplett ersetzt, Code in Step 4)
 - Modify: `internal/config/config_test.go` (`TestLLMSettings_Precedence`, plus `TestLLMSettings_FallbacksAreProviderScoped` aus `internal/server/server_test.go`), plus `sed` über alle Config-Tests
 - Modify: `internal/server/*.go` (`sed`, einschließlich `run_test.go` aus Task 2), `internal/server/server_test.go` (`baseConfig`; `TestLLMSettings_FallbacksAreProviderScoped` zieht nach `internal/config`)
-- Modify: `internal/cli/healthcheck.go` (bettet `config.Listen` ein), `internal/cli/cli.go` (`kong.ExplicitGroups`), `internal/cli/cli_test.go` (`sed` + zwei neue Help-Tests)
+- Modify: `internal/cli/healthcheck.go` (bettet `config.Listen` ein), `cmd/recipe-reader/main.go` (`kong.ExplicitGroups` in `newParser`, E13), `cmd/recipe-reader/main_test.go` (`sed` + zwei neue Help-Tests)
 - Modify (nur Kommentare): `internal/pipeline/worker.go:74`, `internal/pipeline/worker_lifecycle_test.go:65`, `internal/api/middleware.go:173` (`config.Config.Validate` → die Gruppe, die die Regel jetzt trägt)
 - Modify: `README.md` (Configuration)
 
 **Interfaces:**
-- Consumes: `ServeCmd`, `HealthCheckCmd`, `newParser`, `exitOf`, `panicOnExit`, `clearEnv`, `credentialEnvs` (Task 3)
+- Consumes: `ServeCmd`, `HealthCheckCmd` (Task 3); `newParser` in `main.go` sowie `exitOf`, `panicOnExit`, `clearEnv`, `credentialEnvs` in `main_test.go` (Task 3 nach E13)
 - Produces:
   - `func config.Groups() []kong.Group` (Überschriften und Beschreibungen für `kong.ExplicitGroups`)
   - `type config.Config struct { HTTP HTTP; Database Database; Instagram Instagram; Extraction Extraction; LLM LLM; Import Import }` (alle `embed:""` mit `group:"…"`)
@@ -1589,7 +1607,7 @@ Der Footer hier dokumentiert den Commit. `main` erreicht er nur über die PR-Bes
   - `type config.Import struct { Interval time.Duration; MaxItems, MaxPages int }`
   - `HealthCheckCmd{ config.Listen \`embed:""\` }` (Feldzugriff `c.Addr` bleibt)
 
-- [ ] **Step 1: Failing Tests für die gruppierte Hilfe** (an `internal/cli/cli_test.go` anhängen)
+- [ ] **Step 1: Failing Tests für die gruppierte Hilfe** (an `cmd/recipe-reader/main_test.go` anhängen; E13)
 
 ```go
 // serveHelp returns what `recipe-reader serve --help` prints.
@@ -1599,7 +1617,7 @@ func serveHelp(t *testing.T) string {
 	var out bytes.Buffer
 	_, exited := exitOf(func() {
 		var root CLI
-		parser, err := newParser(&root, testVersion, panicOnExit(), kong.Writers(&out, &out))
+		parser, err := newParser(&root, panicOnExit(), kong.Writers(&out, &out))
 		if err != nil {
 			t.Fatalf("newParser() error = %v", err)
 		}
@@ -1641,7 +1659,7 @@ func TestHelp_ServeNamesEveryCredential(t *testing.T) {
 Das `sed`-Skript **genau einmal** ausführen. Ein zweiter Lauf würde z. B. `.HTTP.APIToken` zu `.HTTP.HTTP.APIToken` machen. Der Guard bricht ab, wenn schon umgeschriebene Zugriffe existieren.
 
 ```bash
-! grep -rq '\.HTTP\.Addr\|\.LLM\.Settings()' internal/server internal/cli internal/config \
+! grep -rq '\.HTTP\.Addr\|\.LLM\.Settings()' internal/server cmd/recipe-reader internal/config \
   || { echo "field rename already applied"; exit 1; }
 fields=$(mktemp)
 cat > "$fields" <<'EOF'
@@ -1668,7 +1686,7 @@ s/\.ImportMaxItems\b/.Import.MaxItems/g
 s/\.ImportMaxPages\b/.Import.MaxPages/g
 s/\.LLMSettings()/.LLM.Settings()/g
 EOF
-sed -i -f "$fields" internal/server/*.go internal/config/*_test.go internal/cli/*_test.go
+sed -i -f "$fields" internal/server/*.go internal/config/*_test.go cmd/recipe-reader/*_test.go
 ```
 
 Struct-Literale erfasst `sed` nicht. Diese drei Stellen von Hand ersetzen (die zweite zieht dabei um):
@@ -1728,7 +1746,7 @@ func baseConfig(mode string) config.Config {
 
 - [ ] **Step 3: Tests laufen lassen, sie müssen fehlschlagen**
 
-Run: `go test ./internal/config/ ./internal/server/ ./internal/cli/`
+Run: `go test ./internal/config/ ./internal/server/ ./cmd/recipe-reader/`
 Expected: FAIL beim Kompilieren (`cfg.HTTP undefined`, `undefined: LLM`, `undefined: config.Listen` …)
 
 - [ ] **Step 4: `internal/config/config.go` durch die gruppierte Fassung ersetzen**
@@ -2050,10 +2068,10 @@ func (c *HealthCheckCmd) Run(ctx context.Context) error {
 }
 ```
 
-b) In `internal/cli/cli.go` die Gruppen in `newParser` explizit machen und `"github.com/sBurmester/recipe-reader/internal/config"` importieren (eigene Gruppe nach `github.com/alecthomas/kong`):
+b) In `cmd/recipe-reader/main.go` (E13) die Gruppen in `newParser` explizit machen und `"github.com/sBurmester/recipe-reader/internal/config"` importieren (in die Gruppe mit `internal/cli`):
 
 ```go
-func newParser(root *CLI, version string, opts ...kong.Option) (*kong.Kong, error) {
+func newParser(root *CLI, opts ...kong.Option) (*kong.Kong, error) {
 	return kong.New(root, append([]kong.Option{
 		kong.Name("recipe-reader"),
 		kong.Description(description),
@@ -2076,7 +2094,7 @@ Danach die beiden Absätze mit `config.Import.Validate rejects one now` (`intern
 
 - [ ] **Step 6: Tests laufen lassen, sie müssen grün sein**
 
-Run: `go build ./... && go test ./internal/config/ ./internal/server/ ./internal/cli/`
+Run: `go build ./... && go test ./internal/config/ ./internal/server/ ./cmd/recipe-reader/`
 Expected: PASS, einschließlich `TestHelp_ServeGroupsFlagsByConcern` und `TestHelp_ServeNamesEveryCredential`.
 
 Zusätzlich die Flag-Namen gegen die Baseline aus der Vorbereitung prüfen:
@@ -2110,13 +2128,13 @@ Führt Migration und Seed aus und beendet sich. `serve` und `migrate` teilen sic
 - Modify: `internal/db/connect.go` (+ `Open`)
 - Modify: `internal/db/db_test.go` (+ `TestOpen_…`)
 - Modify: `internal/server/server.go` (nutzt `db.Open`)
-- Create: `internal/cli/migrate.go`, `internal/cli/migrate_test.go`, `internal/cli/testmain_test.go` (Dateiname wie in den anderen Paketen mit `testdb.Main`)
-- Modify: `internal/cli/cli.go` (Feld `Migrate` im `CLI`)
-- Modify: `internal/cli/cli_test.go` (`migrate`-Fall in `TestRun_FlagBeforeAnotherCommandIsRefused`)
+- Create: `internal/cli/migrate.go`, `cmd/recipe-reader/migrate_test.go`, `cmd/recipe-reader/testmain_test.go` (Dateiname wie in den anderen Paketen mit `testdb.Main`; die Tests liegen nach E13 bei `run` in `package main`)
+- Modify: `cmd/recipe-reader/main.go` (Feld `Migrate` in `CLI`; E13)
+- Modify: `cmd/recipe-reader/main_test.go` (`migrate`-Fall in `TestRun_FlagBeforeAnotherCommandIsRefused`)
 - Modify: `README.md` (Commands, Architecture)
 
 **Interfaces:**
-- Consumes: `config.Database` (Task 4), `Run`, `parse`, `clearEnv`, `unreachableDSN` (Task 3), `testdb.NewDatabase(t, name) string`, `testdb.Main(m)`
+- Consumes: `config.Database` (Task 4), `run` (`main.go`), `parse`, `clearEnv`, `unreachableDSN` (`main_test.go`; Task 3 nach E13), `testdb.NewDatabase(t, name) string`, `testdb.Main(m)`
 - Produces: `func db.Open(ctx context.Context, dsn string) (*pgxpool.Pool, error)` (der Aufrufer schließt den Pool), `type cli.MigrateCmd struct { config.Database }`, `func (c *MigrateCmd) Run(ctx context.Context) error`
 
 - [ ] **Step 1: Failing Test für `db.Open`** (an `internal/db/db_test.go` anhängen)
@@ -2152,10 +2170,10 @@ func TestOpen_MigratesAndSeedsAnEmptyDatabase(t *testing.T) {
 
 - [ ] **Step 2: Failing Tests für `migrate`**
 
-`internal/cli/testmain_test.go`:
+`cmd/recipe-reader/testmain_test.go`:
 
 ```go
-package cli
+package main
 
 import (
 	"testing"
@@ -2164,14 +2182,15 @@ import (
 )
 
 // The migrate tests need Postgres. testdb starts its container on first use,
-// so the rest of this package's tests still run without one.
+// so the rest of this package's tests still run without one — including the
+// children TestMain_ExitStatus re-executes, which never touch it.
 func TestMain(m *testing.M) { testdb.Main(m) }
 ```
 
-`internal/cli/migrate_test.go`:
+`cmd/recipe-reader/migrate_test.go`:
 
 ```go
-package cli
+package main
 
 import (
 	"context"
@@ -2188,13 +2207,13 @@ func TestRun_MigrateMigratesAndSeedsAnEmptyDatabase(t *testing.T) {
 	dsn := testdb.NewDatabase(t, "cli_migrate")
 	args := []string{"migrate", "--db-dsn", dsn}
 
-	if err := Run(ctx, args, testVersion); err != nil {
-		t.Fatalf("Run(migrate) error = %v", err)
+	if err := run(args); err != nil {
+		t.Fatalf("run(migrate) error = %v", err)
 	}
 	// Idempotent: migrate after migrate is the normal case for an operator who
 	// runs it ahead of every rollout.
-	if err := Run(ctx, args, testVersion); err != nil {
-		t.Fatalf("second Run(migrate) error = %v", err)
+	if err := run(args); err != nil {
+		t.Fatalf("second run(migrate) error = %v", err)
 	}
 
 	pool, err := pgxpool.New(ctx, dsn)
@@ -2227,7 +2246,7 @@ func TestParse_MigrateIgnoresServeValidation(t *testing.T) {
 }
 ```
 
-In `internal/cli/cli_test.go` die Tabelle von `TestRun_FlagBeforeAnotherCommandIsRefused` um den Fall ergänzen, der ohne E11 der gefährlichere wäre, weil er still die Default-Datenbank migrieren würde:
+In `cmd/recipe-reader/main_test.go` die Tabelle von `TestRun_FlagBeforeAnotherCommandIsRefused` um den Fall ergänzen, der ohne E11 der gefährlichere wäre, weil er still die Default-Datenbank migrieren würde:
 
 ```go
 		{"--db-dsn", unreachableDSN, "migrate"},
@@ -2235,8 +2254,8 @@ In `internal/cli/cli_test.go` die Tabelle von `TestRun_FlagBeforeAnotherCommandI
 
 - [ ] **Step 3: Tests laufen lassen, sie müssen fehlschlagen**
 
-Run: `go test ./internal/db/ ./internal/cli/`
-Expected: FAIL, `undefined: db.Open`. In `internal/cli` scheitert `parse(migrate)` mit `unexpected argument migrate`, und der neue Fall in `TestRun_FlagBeforeAnotherCommandIsRefused` scheitert mit derselben Meldung statt mit dem Hinweis „after the command name“.
+Run: `go test ./internal/db/ ./cmd/recipe-reader/`
+Expected: FAIL, `undefined: db.Open`. In `cmd/recipe-reader` scheitert `parse(migrate)` mit `unexpected argument migrate`, und der neue Fall in `TestRun_FlagBeforeAnotherCommandIsRefused` scheitert mit derselben Meldung statt mit dem Hinweis „after the command name“.
 
 - [ ] **Step 4: `db.Open` implementieren** (`internal/db/connect.go`, nach `Connect`)
 
@@ -2324,15 +2343,15 @@ func (c *MigrateCmd) Run(ctx context.Context) error {
 }
 ```
 
-In `internal/cli/cli.go` im `CLI`-Struct nach `HealthCheck` ergänzen:
+In `cmd/recipe-reader/main.go` im `CLI`-Struct nach `HealthCheck` ergänzen (E13; gofmt richtet die Spalten aus):
 
 ```go
-	Migrate     MigrateCmd     `cmd:"" help:"Apply pending database migrations and seed the lookup tables, then exit. serve does the same at every start."`
+	Migrate     cli.MigrateCmd `cmd:"" help:"Apply pending database migrations and seed the lookup tables, then exit. serve does the same at every start."`
 ```
 
 - [ ] **Step 7: Tests laufen lassen, sie müssen grün sein**
 
-Run: `go build ./... && go test ./internal/db/ ./internal/cli/ ./internal/server/`
+Run: `go build ./... && go test ./internal/db/ ./cmd/recipe-reader/ ./internal/server/`
 Expected: PASS
 
 - [ ] **Step 8: README**
@@ -2364,7 +2383,7 @@ wc -l cmd/recipe-reader/main.go
 go list -f '{{join .Imports " "}}' ./cmd/recipe-reader
 ```
 
-Expected: nur `main.go`; ≤ 25 Zeilen; Imports `github.com/sBurmester/recipe-reader/internal/cli os`.
+Expected (E13): `main.go` und dessen Tests (`main_test.go`, `migrate_test.go`, `testmain_test.go`); `main()` ruft nur `run()`; aus `internal/*` importiert `main.go` nur `internal/cli` und `internal/config` (für `config.Groups`).
 
 - [ ] **Step 2: Commit-Gate komplett** (siehe Global Constraints). Alles grün.
 
@@ -2406,6 +2425,6 @@ git commit -m "docs: mark M4 done in the kong CLI plan"
 | Umbau auf `alecthomas/kong` mit Best Practices | Task 3 (Kommandobaum, `Run`-Methoden, Bindings, `Validate`, `BeforeApply`, Default-Kommando, `VersionFlag`), Task 4 (eingebettete Gruppen, `group`-Tags, geteilte `Listen`-Gruppe) |
 | Umbau CLI-Parameter-Parsing | Task 3 (`config.Load` entfällt; kong parst, hookt und validiert), Task 4 (gruppierte Optionen) |
 | Umbau auf Commands (`ServerCmd` u. a.) | Task 3 (`ServeCmd` als `serve`, `HealthCheckCmd` als `healthcheck`), Task 5 (`MigrateCmd` als `migrate`) |
-| `main.go` so schlank wie möglich | Task 3, Step 7 (Endform: `os.Exit(cli.Main(os.Args[1:], version))`) |
+| `main.go` so schlank wie möglich | Task 3, Step 7; nach E13: `main()` → `run()`, `main.go` enthält Baum, Parsen und Dispatch; die Kommandos liegen in `internal/cli`, ihre Arbeit in `internal/*` |
 | Review vom 2026-09-19 (Punkte 1–9) | E11 + Task 3/5 (Flags vor dem Kommando), E12 + Task 4 (Credentials in `serve --help`), Task 2/3/4 (Kommentar-Verweise), Task 3/4/5 (`clearEnv`, `unreachableDSN`), Task 2 (`run_test.go`, isolierte Stichprobe) und Abschluss, Step 4 (eigenes Compose-Projekt), Ablauf (Briefing), Vorbereitung, Step 2 und Task 3, Step 0 (Versionen), „Branches und PRs“ (Plan-PR, Squash-Footer) |
 | Paket `main` so schlank wie möglich | Task 1 (Probe raus), Task 2 (Composition Root raus), Task 3 (`version.go` in `main.go`); geprüft in der Abschluss-Verifikation, Step 1 |
