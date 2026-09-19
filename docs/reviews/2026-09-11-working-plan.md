@@ -1302,3 +1302,12 @@ file, the test container and the smoke test all stay on 17. That is a major
 version under a persistent volume — an existing 17 data directory does not
 start under 18 without `pg_upgrade` or a dump and restore, and the 18 image
 also moved `PGDATA` — so it is an upgrade to plan, not a tag to bump.
+**DONE, all three on `postgres:18-alpine` (18.6 at the time).** The compose
+volume now mounts at `/var/lib/postgresql`, since 18 keeps `PGDATA` at
+`/var/lib/postgresql/18/docker` and refuses a volume at the old `.../data`
+path. The README's "Upgrading from Postgres 17" section gives the dump and
+restore steps. They were run against a throwaway compose project: a 17 volume
+with a recipe written through the app was dumped and dropped, then restored on
+18, and the app started on it with nothing to migrate and its sequences intact.
+The run also showed that 18 on an unconverted 17 volume exits with an error
+naming the old data, rather than starting an empty database.

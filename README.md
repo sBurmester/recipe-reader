@@ -378,6 +378,47 @@ not log in again on every restart, which Instagram rate-limits.
 `make db-up` starts only the Postgres service, for running the Go binary locally against the same
 database the container would use. It needs `POSTGRES_PASSWORD` too.
 
+### Postgres version
+
+The database is **Postgres 18** (`postgres:18-alpine`). The tag names only the major version, so
+patch releases arrive with `docker compose pull`; they share the on-disk format. The test
+containers and `scripts/smoke-test-image.sh` run the same image, so tests cover the version you
+deploy.
+
+The volume is mounted at `/var/lib/postgresql`, not `/var/lib/postgresql/data` as it was on 17. The
+18 image keeps its data one level down, in a per-version directory (`18/docker`), and refuses to
+start with a volume at the old path.
+
+### Upgrading from Postgres 17
+
+A volume created by the 17 compose file does not start under 18. A major version changes the
+on-disk format, and the 18 image exits with an error naming the old data rather than starting an
+empty database over it. Move the data with a dump and restore. For a database this size it takes
+seconds, and it avoids needing both versions' binaries, as `pg_upgrade` would.
+
+Every compose command needs `POSTGRES_PASSWORD` and `API_TOKEN` set, as usual; `down` and `exec`
+fail without them too. Replace `recipes` with your `POSTGRES_USER` / `POSTGRES_DB` if you changed
+them.
+
+    # 1. Still on the 17 compose file: dump the database, then stop.
+    docker compose up -d --wait db
+    docker compose exec -T db pg_dump -U recipes -d recipes -Fc > recipes.dump
+    docker compose down
+
+    # 2. Remove the 17 volume. Compose prefixes it with the project name (the directory
+    #    name by default), so check `docker volume ls` first. Keep recipes.dump until step 3
+    #    has succeeded: from here on it is the only copy.
+    docker volume rm recipe-reader_db-data
+
+    # 3. On the 18 compose file: start the database alone, restore into it, then start the app.
+    docker compose up -d --wait db
+    docker compose exec -T db pg_restore -U recipes -d recipes --no-owner --exit-on-error < recipes.dump
+    docker compose up -d
+
+Restore before the app starts. On first start the app runs migrations and seeds the lookup
+tables, and the restore would then collide with the tables and rows it created. The restored `schema_migrations`
+table leaves the app nothing to migrate, and the ID sequences carry on from where they were.
+
 ### Health check
 
 The image declares a `HEALTHCHECK`, and the probe is the binary itself:

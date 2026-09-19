@@ -1,6 +1,9 @@
 services:
   db:
-    image: postgres:17-alpine
+    # The major version only: patch releases (18.x) share the on-disk format
+    # and arrive with `docker compose pull`. A major version does not — see
+    # "Upgrading from Postgres 17" in the README before changing this.
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-recipes}
       POSTGRES_USER: ${POSTGRES_USER:-recipes}
@@ -12,7 +15,13 @@ services:
       # Anthropic credentials are already handled below.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD - there is no default}
     volumes:
-      - db-data:/var/lib/postgresql/data
+      # The parent directory, not .../data. From 18 the image keeps its data
+      # in a per-major-version subdirectory (PGDATA=/var/lib/postgresql/18/docker),
+      # which lets a later pg_upgrade --link see both versions on one volume.
+      # The image refuses to start with a volume at the old .../data path. It
+      # also refuses a volume holding a 17 data directory, so an old volume
+      # fails loudly and is never silently replaced by an empty database.
+      - db-data:/var/lib/postgresql
     ports:
       # Loopback, not every interface. The app reaches db by name over the
       # compose network and needs no published port at all; this one exists

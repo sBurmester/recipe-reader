@@ -45,7 +45,7 @@ docker network create "$net" >/dev/null
 docker run -d --name "$db" --network "$net" \
 	-e POSTGRES_DB=recipes -e POSTGRES_USER=recipes -e POSTGRES_PASSWORD=recipes \
 	--health-cmd "pg_isready -U recipes" --health-interval 1s --health-retries 60 \
-	postgres:17-alpine >/dev/null
+	postgres:18-alpine >/dev/null
 
 for _ in $(seq 1 60); do
 	[ "$(docker inspect -f '{{.State.Health.Status}}' "$db")" = healthy ] && break

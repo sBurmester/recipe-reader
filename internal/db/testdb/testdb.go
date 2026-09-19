@@ -110,7 +110,7 @@ func start() {
 	// Postgres, runs init scripts, then restarts) and then for the mapped port
 	// to be served on localhost. v0.44's tcpostgres.Run sets no wait strategy
 	// of its own, so this must be passed explicitly or migrate races startup.
-	container, err := tcpostgres.Run(ctx, "postgres:17-alpine",
+	container, err := tcpostgres.Run(ctx, "postgres:18-alpine",
 		tcpostgres.WithDatabase("recipes_test"),
 		tcpostgres.WithUsername("recipes"),
 		tcpostgres.WithPassword("recipes"),
