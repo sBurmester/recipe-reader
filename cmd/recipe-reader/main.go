@@ -19,8 +19,13 @@ import (
 
 // version identifies this build. It is stamped at link time — the Makefile and
 // the Dockerfile both pass `-ldflags "-X main.version=..."` from `git describe`
-// — and stays "dev" for a plain `go build` or `go run`. It is surfaced as
-// `recipe-reader --version` and as the version field of GET /api/healthz.
+// — and stays "dev" for a plain `go build` or `go run`.
+//
+// A single binary that cannot say what it is has to be identified by hashing
+// it, which is the one thing nobody does at the moment they need the answer.
+// So it is surfaced twice: `recipe-reader --version` for whoever has a shell on
+// the host, and the `version` field of GET /api/healthz for whoever has only
+// the port.
 var version = "dev"
 
 // CLI is the root of the command tree.
@@ -29,8 +34,8 @@ var version = "dev"
 // ("withargs"), so `recipe-reader` and `recipe-reader --http-addr ...` start
 // the server exactly as they did before there were commands.
 type CLI struct {
-	// Version is kong's --version flag: it prints the version run was given
-	// and exits before any command runs. It has no env tag, so a VERSION
+	// Version is kong's --version flag: it prints the version stamped at link
+	// time and exits before any command runs. It has no env tag, so a VERSION
 	// variable in a .env file cannot trigger it.
 	Version kong.VersionFlag `help:"Print the version and exit."`
 

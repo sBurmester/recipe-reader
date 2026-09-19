@@ -23,7 +23,8 @@ func clearEnv(t *testing.T, keys ...string) {
 }
 
 // loadArgs parses args into a Config the way the serve command does: kong
-// applies flags, environment and defaults, then runs BeforeApply and Validate.
+// applies defaults and environment, runs BeforeApply, applies the flags, then
+// runs Validate.
 func loadArgs(args []string) (Config, error) {
 	var cfg Config
 	parser, err := kong.New(&cfg, kong.Name("recipe-reader"))
