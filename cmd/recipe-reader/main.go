@@ -18,6 +18,7 @@ import (
 	"github.com/sBurmester/recipe-reader/internal/config"
 	"github.com/sBurmester/recipe-reader/internal/db"
 	"github.com/sBurmester/recipe-reader/internal/extraction"
+	"github.com/sBurmester/recipe-reader/internal/healthcheck"
 	"github.com/sBurmester/recipe-reader/internal/instagram"
 	"github.com/sBurmester/recipe-reader/internal/pipeline"
 	"github.com/sBurmester/recipe-reader/internal/repository"
@@ -37,9 +38,9 @@ func run() error {
 		return err
 	}
 	// A probe of another process, not a server: it touches no database and
-	// starts nothing. See probeHealth.
+	// starts nothing. See healthcheck.Probe.
 	if cfg.HealthCheck {
-		return probeHealth(context.Background(), cfg.HTTPAddr)
+		return healthcheck.Probe(context.Background(), cfg.HTTPAddr)
 	}
 
 	// Before anything external: a misconfigured extraction mode is a startup
