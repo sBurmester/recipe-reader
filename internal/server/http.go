@@ -45,10 +45,10 @@ func newHTTPServer(cfg config.Config, deps api.Deps) (*http.Server, error) {
 	// config validation refuses any other bind without a token — but it is still
 	// worth naming at boot, because "it works without one" is how it stays
 	// that way when the address later changes.
-	if cfg.APIToken == "" {
-		slog.Warn("no API_TOKEN configured; writes are unauthenticated and the server is bound to loopback only", "addr", cfg.HTTPAddr)
+	if cfg.HTTP.APIToken == "" {
+		slog.Warn("no API_TOKEN configured; writes are unauthenticated and the server is bound to loopback only", "addr", cfg.HTTP.Addr)
 	}
-	apiRouter := api.NewRouter(deps, api.Security{Token: cfg.APIToken, AllowedOrigins: cfg.CORSOrigins})
+	apiRouter := api.NewRouter(deps, api.Security{Token: cfg.HTTP.APIToken, AllowedOrigins: cfg.HTTP.CORSOrigins})
 
 	frontend, err := webui.Handler()
 	if err != nil {
@@ -66,7 +66,7 @@ func newHTTPServer(cfg config.Config, deps api.Deps) (*http.Server, error) {
 	mux.Handle("/", frontend)
 
 	return &http.Server{
-		Addr:              cfg.HTTPAddr,
+		Addr:              cfg.HTTP.Addr,
 		Handler:           mux,
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,

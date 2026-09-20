@@ -46,26 +46,26 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	// Loopback, not ":8080": the default deployment must not be reachable
 	// from the network while its writes are unauthenticated.
-	if cfg.HTTPAddr != "127.0.0.1:8080" {
-		t.Errorf("HTTPAddr = %q, want 127.0.0.1:8080", cfg.HTTPAddr)
+	if cfg.HTTP.Addr != "127.0.0.1:8080" {
+		t.Errorf("HTTP.Addr = %q, want 127.0.0.1:8080", cfg.HTTP.Addr)
 	}
-	if len(cfg.CORSOrigins) != 1 || cfg.CORSOrigins[0] != "http://localhost:5173" {
-		t.Errorf("CORSOrigins = %v, want the Vite dev server only", cfg.CORSOrigins)
+	if len(cfg.HTTP.CORSOrigins) != 1 || cfg.HTTP.CORSOrigins[0] != "http://localhost:5173" {
+		t.Errorf("HTTP.CORSOrigins = %v, want the Vite dev server only", cfg.HTTP.CORSOrigins)
 	}
-	if cfg.DBDSN == "" {
-		t.Error("expected a default DBDSN")
+	if cfg.Database.DSN == "" {
+		t.Error("expected a default Database.DSN")
 	}
-	if cfg.ImportInterval != 6*time.Hour {
-		t.Errorf("ImportInterval = %v, want 6h", cfg.ImportInterval)
+	if cfg.Import.Interval != 6*time.Hour {
+		t.Errorf("Import.Interval = %v, want 6h", cfg.Import.Interval)
 	}
-	if cfg.ExtractionThreshold != 0.6 {
-		t.Errorf("ExtractionThreshold = %v, want 0.6", cfg.ExtractionThreshold)
+	if cfg.Extraction.Threshold != 0.6 {
+		t.Errorf("Extraction.Threshold = %v, want 0.6", cfg.Extraction.Threshold)
 	}
-	if cfg.ExtractionMode != "hybrid" {
-		t.Errorf("ExtractionMode = %q, want hybrid", cfg.ExtractionMode)
+	if cfg.Extraction.Mode != "hybrid" {
+		t.Errorf("Extraction.Mode = %q, want hybrid", cfg.Extraction.Mode)
 	}
-	if cfg.AnthropicModel != "claude-opus-5" {
-		t.Errorf("AnthropicModel = %q, want claude-opus-5", cfg.AnthropicModel)
+	if cfg.LLM.AnthropicModel != "claude-opus-5" {
+		t.Errorf("LLM.AnthropicModel = %q, want claude-opus-5", cfg.LLM.AnthropicModel)
 	}
 }
 
@@ -92,14 +92,14 @@ func TestLoad_EnvOverridesDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadArgs() error = %v", err)
 	}
-	if cfg.HTTPAddr != "127.0.0.1:9999" {
-		t.Errorf("HTTPAddr = %q, want 127.0.0.1:9999", cfg.HTTPAddr)
+	if cfg.HTTP.Addr != "127.0.0.1:9999" {
+		t.Errorf("HTTP.Addr = %q, want 127.0.0.1:9999", cfg.HTTP.Addr)
 	}
-	if cfg.ImportInterval != 12*time.Hour {
-		t.Errorf("ImportInterval = %v, want 12h", cfg.ImportInterval)
+	if cfg.Import.Interval != 12*time.Hour {
+		t.Errorf("Import.Interval = %v, want 12h", cfg.Import.Interval)
 	}
-	if cfg.AnthropicAPIKey != "sk-test" {
-		t.Errorf("AnthropicAPIKey = %q, want sk-test", cfg.AnthropicAPIKey)
+	if cfg.LLM.AnthropicAPIKey != "sk-test" {
+		t.Errorf("LLM.AnthropicAPIKey = %q, want sk-test", cfg.LLM.AnthropicAPIKey)
 	}
 }
 
@@ -114,14 +114,14 @@ func TestLoad_FlagsOverrideEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadArgs() error = %v", err)
 	}
-	if cfg.HTTPAddr != "127.0.0.1:7777" {
-		t.Errorf("HTTPAddr = %q, want 127.0.0.1:7777 (flag should beat env)", cfg.HTTPAddr)
+	if cfg.HTTP.Addr != "127.0.0.1:7777" {
+		t.Errorf("HTTP.Addr = %q, want 127.0.0.1:7777 (flag should beat env)", cfg.HTTP.Addr)
 	}
-	if cfg.ExtractionMode != "rule" {
-		t.Errorf("ExtractionMode = %q, want rule", cfg.ExtractionMode)
+	if cfg.Extraction.Mode != "rule" {
+		t.Errorf("Extraction.Mode = %q, want rule", cfg.Extraction.Mode)
 	}
-	if cfg.ImportInterval != 30*time.Minute {
-		t.Errorf("ImportInterval = %v, want 30m", cfg.ImportInterval)
+	if cfg.Import.Interval != 30*time.Minute {
+		t.Errorf("Import.Interval = %v, want 30m", cfg.Import.Interval)
 	}
 }
 
@@ -151,8 +151,8 @@ func TestLoad_AllowsNonLoopbackBindWithToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadArgs() error = %v, want success once a token is configured", err)
 	}
-	if cfg.APIToken != "s3cret-token" {
-		t.Errorf("APIToken = %q", cfg.APIToken)
+	if cfg.HTTP.APIToken != "s3cret-token" {
+		t.Errorf("HTTP.APIToken = %q", cfg.HTTP.APIToken)
 	}
 }
 
@@ -176,8 +176,8 @@ func TestLoad_CORSOriginsSplitOnComma(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadArgs() error = %v", err)
 	}
-	if len(cfg.CORSOrigins) != 2 || cfg.CORSOrigins[1] != "https://recipes.example" {
-		t.Errorf("CORSOrigins = %v, want both origins", cfg.CORSOrigins)
+	if len(cfg.HTTP.CORSOrigins) != 2 || cfg.HTTP.CORSOrigins[1] != "https://recipes.example" {
+		t.Errorf("HTTP.CORSOrigins = %v, want both origins", cfg.HTTP.CORSOrigins)
 	}
 }
 
@@ -210,32 +210,47 @@ func TestLoad_PublishThresholdDefaultsAboveTheFallbackThreshold(t *testing.T) {
 	}
 	// Publishing without review must be the stricter of the two questions;
 	// they were one number, which is what made needs_review unreachable.
-	if cfg.ExtractionPublishThreshold <= cfg.ExtractionThreshold {
+	if cfg.Extraction.PublishThreshold <= cfg.Extraction.Threshold {
 		t.Errorf("publish threshold %v is not stricter than the fallback threshold %v",
-			cfg.ExtractionPublishThreshold, cfg.ExtractionThreshold)
+			cfg.Extraction.PublishThreshold, cfg.Extraction.Threshold)
 	}
 }
 
 // LLM_* wins where set, and the older ANTHROPIC_* names stay authoritative for
 // the provider they were named after.
 func TestLLMSettings_Precedence(t *testing.T) {
-	cfg := Config{
-		LLMProvider: "anthropic", LLMAPIKey: "sk-llm", LLMModel: "claude-new",
+	llm := LLM{
+		Provider: "anthropic", APIKey: "sk-llm", Model: "claude-new",
 		AnthropicAPIKey: "sk-ant", AnthropicModel: "claude-old",
 	}
-	settings, ok := cfg.LLMSettings()
+	settings, ok := llm.Settings()
 	if !ok || settings.APIKey != "sk-llm" || settings.Model != "claude-new" {
 		t.Errorf("settings = %+v, ok = %v, want the LLM_* values to win", settings, ok)
 	}
 
-	fallback := Config{LLMProvider: "", AnthropicAPIKey: "sk-ant", AnthropicModel: "claude-old"}
-	settings, ok = fallback.LLMSettings()
+	fallback := LLM{Provider: "", AnthropicAPIKey: "sk-ant", AnthropicModel: "claude-old"}
+	settings, ok = fallback.Settings()
 	if !ok || settings.Provider != "anthropic" || settings.APIKey != "sk-ant" || settings.Model != "claude-old" {
 		t.Errorf("settings = %+v, ok = %v, want the ANTHROPIC_* fallbacks", settings, ok)
 	}
 
-	none := Config{LLMProvider: "anthropic"}
-	if _, ok := none.LLMSettings(); ok {
-		t.Error("LLMSettings() ok = true with no key configured anywhere")
+	none := LLM{Provider: "anthropic"}
+	if _, ok := none.Settings(); ok {
+		t.Error("Settings() ok = true with no key configured anywhere")
+	}
+}
+
+// The anthropic provider does not fall back to an OpenAI key, and the openai
+// provider does not borrow ANTHROPIC_API_KEY.
+func TestLLMSettings_FallbacksAreProviderScoped(t *testing.T) {
+	anthropic := LLM{Provider: "anthropic", AnthropicAPIKey: "sk-ant", AnthropicModel: "claude-x"}
+	settings, ok := anthropic.Settings()
+	if !ok || settings.APIKey != "sk-ant" || settings.Model != "claude-x" {
+		t.Errorf("anthropic settings = %+v, ok = %v", settings, ok)
+	}
+
+	openAI := LLM{Provider: "openai", AnthropicAPIKey: "sk-ant"}
+	if settings, ok := openAI.Settings(); ok {
+		t.Errorf("openai settings = %+v, ok = %v — ANTHROPIC_API_KEY must not carry over", settings, ok)
 	}
 }

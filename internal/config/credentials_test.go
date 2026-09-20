@@ -27,8 +27,8 @@ func TestLoad_ReadsCredentialsFromTheEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadArgs() error = %v", err)
 	}
-	if cfg.APIToken != "tok" || cfg.InstagramPassword != "pw" || cfg.AnthropicAPIKey != "sk-ant" || cfg.LLMAPIKey != "sk-llm" {
+	if cfg.HTTP.APIToken != "tok" || cfg.Instagram.Password != "pw" || cfg.LLM.AnthropicAPIKey != "sk-ant" || cfg.LLM.APIKey != "sk-llm" {
 		t.Errorf("credentials = %q %q %q %q, want tok pw sk-ant sk-llm",
-			cfg.APIToken, cfg.InstagramPassword, cfg.AnthropicAPIKey, cfg.LLMAPIKey)
+			cfg.HTTP.APIToken, cfg.Instagram.Password, cfg.LLM.AnthropicAPIKey, cfg.LLM.APIKey)
 	}
 }

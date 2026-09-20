@@ -24,14 +24,14 @@ import (
 // it would pass as well.
 func TestRun_ServesUntilCancelledThenReturnsNil(t *testing.T) {
 	cfg := baseConfig("rule")
-	cfg.HTTPAddr = freeLoopbackAddr(t)
-	cfg.DBDSN = testdb.NewDatabase(t, "server_run")
+	cfg.HTTP.Addr = freeLoopbackAddr(t)
+	cfg.Database.DSN = testdb.NewDatabase(t, "server_run")
 	// An account with no password: instago refuses the startup login before
 	// any request, so the worker exists without the test touching the network.
-	// ImportInterval is set because a zero one leaves the schedule unstarted.
-	cfg.InstagramUsername = "someone"
-	cfg.InstagramSessionPath = filepath.Join(t.TempDir(), "session.json")
-	cfg.ImportInterval = time.Hour
+	// Import.Interval is set because a zero one leaves the schedule unstarted.
+	cfg.Instagram.Username = "someone"
+	cfg.Instagram.SessionPath = filepath.Join(t.TempDir(), "session.json")
+	cfg.Import.Interval = time.Hour
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -39,7 +39,7 @@ func TestRun_ServesUntilCancelledThenReturnsNil(t *testing.T) {
 	go func() { done <- Run(ctx, cfg, "v0.0.0-test") }()
 
 	deadline := time.Now().Add(30 * time.Second)
-	for healthcheck.Probe(context.Background(), cfg.HTTPAddr) != nil {
+	for healthcheck.Probe(context.Background(), cfg.HTTP.Addr) != nil {
 		select {
 		case err := <-done:
 			t.Fatalf("Run() returned before it served: %v", err)
@@ -51,7 +51,7 @@ func TestRun_ServesUntilCancelledThenReturnsNil(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	resp, err := http.Get("http://" + cfg.HTTPAddr + "/api/import/status")
+	resp, err := http.Get("http://" + cfg.HTTP.Addr + "/api/import/status")
 	if err != nil {
 		t.Fatalf("GET /api/import/status: %v", err)
 	}

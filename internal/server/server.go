@@ -39,10 +39,10 @@ func Run(ctx context.Context, cfg config.Config, version string) error {
 		return err
 	}
 
-	if err := db.Migrate(cfg.DBDSN); err != nil {
+	if err := db.Migrate(cfg.Database.DSN); err != nil {
 		return err
 	}
-	pool, err := db.Connect(ctx, cfg.DBDSN)
+	pool, err := db.Connect(ctx, cfg.Database.DSN)
 	if err != nil {
 		return err
 	}
@@ -71,10 +71,10 @@ func Run(ctx context.Context, cfg config.Config, version string) error {
 			// caption can talk the model into proposing any string and the
 			// import creates that row for every user.
 			Categories:       lookups,
-			Threshold:        cfg.ExtractionThreshold,
-			PublishThreshold: cfg.ExtractionPublishThreshold,
+			Threshold:        cfg.Extraction.Threshold,
+			PublishThreshold: cfg.Extraction.PublishThreshold,
 		}
-		worker = pipeline.NewWorker(p, cfg.ImportInterval)
+		worker = pipeline.NewWorker(p, cfg.Import.Interval)
 		if loginErr != nil {
 			// Reported now rather than after the first scheduled run, which
 			// is hours away: the import page shows it as the last error.
@@ -115,7 +115,7 @@ func Run(ctx context.Context, cfg config.Config, version string) error {
 		}
 	}()
 
-	slog.Info("recipe-reader listening", "addr", cfg.HTTPAddr, "version", version)
+	slog.Info("recipe-reader listening", "addr", cfg.HTTP.Addr, "version", version)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

@@ -29,8 +29,8 @@ func TestLoad_AcceptsPositiveImportInterval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadArgs() error = %v", err)
 	}
-	if cfg.ImportInterval.Minutes() != 30 {
-		t.Errorf("ImportInterval = %v, want 30m", cfg.ImportInterval)
+	if cfg.Import.Interval.Minutes() != 30 {
+		t.Errorf("Import.Interval = %v, want 30m", cfg.Import.Interval)
 	}
 }
 
@@ -72,8 +72,8 @@ func TestLoad_AcceptsThresholdEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadArgs() error = %v", err)
 	}
-	if cfg.ExtractionThreshold != 0 || cfg.ExtractionPublishThreshold != 1 {
+	if cfg.Extraction.Threshold != 0 || cfg.Extraction.PublishThreshold != 1 {
 		t.Errorf("thresholds = %v / %v, want 0 / 1",
-			cfg.ExtractionThreshold, cfg.ExtractionPublishThreshold)
+			cfg.Extraction.Threshold, cfg.Extraction.PublishThreshold)
 	}
 }

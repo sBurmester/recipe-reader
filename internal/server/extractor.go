@@ -8,7 +8,7 @@ import (
 	"github.com/sBurmester/recipe-reader/internal/extraction"
 )
 
-// newExtractor builds the extraction engine for cfg.ExtractionMode.
+// newExtractor builds the extraction engine for cfg.Extraction.Mode.
 //
 // Each mode now does what its name says. Before, only "hybrid" was ever
 // inspected: EXTRACTION_MODE=llm fell through to exactly the same nil-LLM
@@ -23,7 +23,7 @@ import (
 // the cheapest possible contradiction of a wrong assumption.
 func newExtractor(cfg config.Config) (extraction.Extractor, error) {
 	rules := extraction.NewRuleBasedExtractor()
-	settings, hasAPIKey := cfg.LLMSettings()
+	settings, hasAPIKey := cfg.LLM.Settings()
 
 	newLLM := func() (*extraction.LLMExtractor, error) {
 		return extraction.NewLLMExtractor(extraction.LLMConfig{
@@ -35,7 +35,7 @@ func newExtractor(cfg config.Config) (extraction.Extractor, error) {
 		})
 	}
 
-	switch cfg.ExtractionMode {
+	switch cfg.Extraction.Mode {
 	case "rule":
 		slog.Info("extraction mode selected", "mode", "rule", "llm", "disabled")
 		return rules, nil
@@ -48,7 +48,7 @@ func newExtractor(cfg config.Config) (extraction.Extractor, error) {
 		if !hasAPIKey {
 			return nil, fmt.Errorf(
 				"extraction mode %q needs an API key: set LLM_API_KEY (or ANTHROPIC_API_KEY for the anthropic provider)",
-				cfg.ExtractionMode)
+				cfg.Extraction.Mode)
 		}
 		llm, err := newLLM()
 		if err != nil {
@@ -64,20 +64,20 @@ func newExtractor(cfg config.Config) (extraction.Extractor, error) {
 			// rules-only is a coherent answer. It is still said out loud.
 			slog.Warn("extraction mode selected", "mode", "hybrid", "llm", "disabled",
 				"reason", "no API key configured; running rules-only")
-			return extraction.NewHybridExtractor(rules, nil, cfg.ExtractionThreshold), nil
+			return extraction.NewHybridExtractor(rules, nil, cfg.Extraction.Threshold), nil
 		}
 		llm, err := newLLM()
 		if err != nil {
 			return nil, err
 		}
 		slog.Info("extraction mode selected", "mode", "hybrid", "provider", settings.Provider,
-			"model", settings.Model, "fallback_threshold", cfg.ExtractionThreshold)
-		return extraction.NewHybridExtractor(rules, llm, cfg.ExtractionThreshold), nil
+			"model", settings.Model, "fallback_threshold", cfg.Extraction.Threshold)
+		return extraction.NewHybridExtractor(rules, llm, cfg.Extraction.Threshold), nil
 
 	default:
 		// Unreachable from the command line — the kong enum rejects it first —
 		// but newExtractor is also called with hand-built values in tests, and
 		// a silent fallthrough here is the defect this function exists to fix.
-		return nil, fmt.Errorf("unknown extraction mode %q (want rule, llm or hybrid)", cfg.ExtractionMode)
+		return nil, fmt.Errorf("unknown extraction mode %q (want rule, llm or hybrid)", cfg.Extraction.Mode)
 	}
 }

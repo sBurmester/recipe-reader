@@ -120,7 +120,7 @@ func TestParse_FlagsWithoutACommandReachServe(t *testing.T) {
 	if got := kctx.Command(); got != "serve" {
 		t.Errorf("Command() = %q, want serve", got)
 	}
-	if got := root.Serve.Config.HTTPAddr; got != "127.0.0.1:7777" {
+	if got := root.Serve.Config.HTTP.Addr; got != "127.0.0.1:7777" {
 		t.Errorf("HTTP address = %q, want 127.0.0.1:7777", got)
 	}
 }
@@ -180,7 +180,7 @@ func TestParse_ServeReadsCredentialsFromTheEnvironment(t *testing.T) {
 		}
 		cfg := root.Serve.Config
 		got := []string{
-			cfg.APIToken, cfg.InstagramPassword, cfg.LLMAPIKey, cfg.AnthropicAPIKey,
+			cfg.HTTP.APIToken, cfg.Instagram.Password, cfg.LLM.APIKey, cfg.LLM.AnthropicAPIKey,
 		}
 		if want := []string{"tok", "pw", "llm-key", "ant-key"}; !slices.Equal(got, want) {
 			t.Errorf("parse(%q) credentials = %q, want %q", args, got, want)
@@ -327,6 +327,49 @@ func TestDescription_NamesEveryCredential(t *testing.T) {
 	for _, env := range credentialEnvs {
 		if !strings.Contains(description, env) {
 			t.Errorf("--help description does not mention %s", env)
+		}
+	}
+}
+
+// serveHelp returns what `recipe-reader serve --help` prints.
+func serveHelp(t *testing.T) string {
+	t.Helper()
+	clearEnv(t)
+	var out bytes.Buffer
+	_, exited := exitOf(func() {
+		var root CLI
+		parser, err := newParser(&root, panicOnExit(), kong.Writers(&out, &out))
+		if err != nil {
+			t.Fatalf("newParser() error = %v", err)
+		}
+		_, _ = parser.Parse([]string{"serve", "--help"})
+	})
+	if !exited {
+		t.Fatal("serve --help did not exit")
+	}
+	return out.String()
+}
+
+// serve takes some twenty flags. Grouped by concern, --help reads as the six
+// things an operator configures rather than one alphabetical wall.
+func TestHelp_ServeGroupsFlagsByConcern(t *testing.T) {
+	help := serveHelp(t)
+	for _, group := range []string{"HTTP", "Database", "Instagram", "Extraction", "LLM", "Import"} {
+		if !strings.Contains(help, "\n"+group+"\n") {
+			t.Errorf("serve --help has no %q group:\n%s", group, help)
+		}
+	}
+}
+
+// serve --help is where the flags are, but kong prints the app description,
+// which names the credentials, only at the top level. With no flag entry of
+// their own, the credentials are named in the description of the group each
+// belongs to instead (E12).
+func TestHelp_ServeNamesEveryCredential(t *testing.T) {
+	help := serveHelp(t)
+	for _, env := range credentialEnvs {
+		if !strings.Contains(help, env) {
+			t.Errorf("serve --help does not mention %s:\n%s", env, help)
 		}
 	}
 }

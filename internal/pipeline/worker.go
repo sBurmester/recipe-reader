@@ -69,12 +69,12 @@ func (w *Worker) Start(ctx context.Context) {
 	w.base = ctx
 	w.mu.Unlock()
 
-	// time.NewTicker panics for a non-positive duration, on this goroutine —
-	// so a bad interval used to abort the process with a stack trace at
-	// startup. config.Config.Validate rejects one now, which is where an operator's
-	// typo belongs; this is the second line of defence for the callers that do
-	// not come through config, and it refuses loudly rather than crashing.
-	// Trigger still works, so an on-demand import is unaffected.
+	// time.NewTicker panics for a non-positive duration, on this goroutine — so
+	// a bad interval used to abort the process with a stack trace at startup.
+	// config.Import.Validate rejects one now, which is where an operator's typo
+	// belongs; this is the second line of defence for the callers that do not
+	// come through config, and it refuses loudly rather than crashing. Trigger
+	// still works, so an on-demand import is unaffected.
 	if w.interval <= 0 {
 		slog.Error("import: schedule not started, interval must be positive", "interval", w.interval)
 		return

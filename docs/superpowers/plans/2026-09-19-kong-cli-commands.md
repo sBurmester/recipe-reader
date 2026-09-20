@@ -90,9 +90,9 @@
 - [x] `run(args, opts...)` in `main.go` ist ohne Prozess-Exit testbar (kong-`Exit`/`Writers` injizierbar); den Exit-Status von `main()` prüft ein Test in einem Kindprozess (E13).
 
 **US4: Betreiber liest die Hilfe.** *Als Betreiber möchte ich schnell finden, was ich einstellen kann.*
-- [ ] `recipe-reader --help` listet die Kommandos.
-- [ ] `recipe-reader serve --help` zeigt die Flags gruppiert (HTTP, Database, Instagram, Extraction, LLM, Import), jeweils mit Env-Namen.
-- [ ] Die Hilfe nennt weiterhin die vier env-only Credentials: `recipe-reader --help` in der Beschreibung, `recipe-reader serve --help` in der Beschreibung der Gruppe, zu der sie gehören (Entscheidung E12).
+- [x] `recipe-reader --help` listet die Kommandos.
+- [x] `recipe-reader serve --help` zeigt die Flags gruppiert (HTTP, Database, Instagram, Extraction, LLM, Import), jeweils mit Env-Namen.
+- [x] Die Hilfe nennt weiterhin die vier env-only Credentials: `recipe-reader --help` in der Beschreibung, `recipe-reader serve --help` in der Beschreibung der Gruppe, zu der sie gehören (Entscheidung E12).
 
 **US5: Betreiber migriert separat.** *Als Betreiber möchte ich Migrationen ausführen können, ohne den Server zu starten, z. B. vor einem Rollout oder nach einem Restore.*
 - [ ] `recipe-reader migrate` migriert, seedet die Lookup-Tabellen und beendet sich. Ein zweiter Aufruf ist ein No-op.
@@ -245,10 +245,10 @@ Deckt ab: Z1 (Kern), Z2, Z3, Z4, Z5 sowie die Entscheidungen E1 bis E8, E10, E11
 **Ergebnis:** Die Settings sind nach Belang geschnitten und werden zwischen Kommandos geteilt, statt doppelt deklariert zu werden. Die Hilfe ist nach Themen gegliedert.
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US4 sind abgehakt.
-- [ ] Die Flag-Liste von `serve --help` entspricht der Baseline ohne `--health-check`.
-- [ ] `healthcheck` bettet `config.Listen` ein; `--http-addr` ist nur noch an einer Stelle deklariert.
-- [ ] Keine Env-Variable wurde umbenannt: `git diff main -- .env.example` ist leer.
+- [x] Die Akzeptanzkriterien von US4 sind abgehakt.
+- [x] Die Flag-Liste von `serve --help` entspricht der Baseline ohne `--health-check`.
+- [x] `healthcheck` bettet `config.Listen` ein; `--http-addr` ist nur noch an einer Stelle deklariert.
+- [x] Keine Env-Variable wurde umbenannt: `git diff main -- .env.example` ist leer.
 
 Deckt ab: Z1 (Optionsgruppen), US4 und E12.
 
@@ -292,9 +292,9 @@ Entschieden am 2026-09-19: **ein PR pro Milestone**, wie zuletzt im Repo üblich
 - [x] **M2: kong-Kommandobaum**
   - [x] **Task 3:** kong-Kommandobaum in `internal/cli` (nach E13: Baum in `main.go`, Kommandos in `internal/cli`); `healthcheck` ersetzt `--health-check` (L)
   - [x] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
-- [ ] **M3: Konfiguration gruppiert**
-  - [ ] **Task 4:** Settings in Optionsgruppen pro Belang (M)
-  - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
+- [x] **M3: Konfiguration gruppiert**
+  - [x] **Task 4:** Settings in Optionsgruppen pro Belang (M)
+  - [x] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
 - [ ] **M4: `migrate` und Abschluss**
   - [ ] **Task 5:** Kommando `migrate` (S)
   - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
@@ -1616,7 +1616,7 @@ Die Code-Blöcke von Step 1, 5, 6 und 7 oben zeigen den ursprünglichen Stand. T
   - `type config.Import struct { Interval time.Duration; MaxItems, MaxPages int }`
   - `HealthCheckCmd{ config.Listen \`embed:""\` }` (Feldzugriff `c.Addr` bleibt)
 
-- [ ] **Step 1: Failing Tests für die gruppierte Hilfe** (an `cmd/recipe-reader/main_test.go` anhängen; E13)
+- [x] **Step 1: Failing Tests für die gruppierte Hilfe** (an `cmd/recipe-reader/main_test.go` anhängen; E13)
 
 ```go
 // serveHelp returns what `recipe-reader serve --help` prints.
@@ -1663,7 +1663,7 @@ func TestHelp_ServeNamesEveryCredential(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Aufrufer (`internal/server`) und Tests auf die neuen Feldnamen umschreiben**
+- [x] **Step 2: Aufrufer (`internal/server`) und Tests auf die neuen Feldnamen umschreiben**
 
 Das `sed`-Skript **genau einmal** ausführen. Ein zweiter Lauf würde z. B. `.HTTP.APIToken` zu `.HTTP.HTTP.APIToken` machen. Der Guard bricht ab, wenn schon umgeschriebene Zugriffe existieren.
 
@@ -1697,6 +1697,8 @@ s/\.LLMSettings()/.LLM.Settings()/g
 EOF
 sed -i -f "$fields" internal/server/*.go internal/config/*_test.go cmd/recipe-reader/*_test.go
 ```
+
+*Abweichung, festgestellt bei der Umsetzung am 2026-09-20:* Die Regel `s/\.LLMProvider\b/.LLM.Provider/g` trifft auch `extraction.LLMProvider(settings.Provider)` in `internal/server/extractor.go:30` — einen Typ-Cast im Paket `extraction`, kein Config-Feld. Aus `extraction.LLMProvider(…)` wird `extraction.LLM.Provider(…)`, was in Step 3 als `undefined: extraction.LLM` auffällt. Die eine Zeile wurde wortgleich wiederhergestellt; das Milestone-Review hat per Rückabbildung der ganzen Tabelle gegen den Baseline-Baum nachgewiesen, dass es die einzige Kollateralstelle war. Wer das Skript erneut laufen lässt, prüft diese Zeile.
 
 Struct-Literale erfasst `sed` nicht. Diese drei Stellen von Hand ersetzen (die zweite zieht dabei um):
 
@@ -1753,12 +1755,12 @@ func baseConfig(mode string) config.Config {
 	}
 ```
 
-- [ ] **Step 3: Tests laufen lassen, sie müssen fehlschlagen**
+- [x] **Step 3: Tests laufen lassen, sie müssen fehlschlagen**
 
 Run: `go test ./internal/config/ ./internal/server/ ./cmd/recipe-reader/`
 Expected: FAIL beim Kompilieren (`cfg.HTTP undefined`, `undefined: LLM`, `undefined: config.Listen` …)
 
-- [ ] **Step 4: `internal/config/config.go` durch die gruppierte Fassung ersetzen**
+- [x] **Step 4: `internal/config/config.go` durch die gruppierte Fassung ersetzen**
 
 ```go
 // Package config declares recipe-reader's settings as kong flag groups and
@@ -2047,7 +2049,7 @@ func isLoopbackAddr(addr string) bool {
 }
 ```
 
-- [ ] **Step 5: `internal/cli` auf die Gruppen umstellen**
+- [x] **Step 5: `internal/cli` auf die Gruppen umstellen**
 
 a) `HealthCheckCmd` auf `config.Listen` umstellen (`internal/cli/healthcheck.go`):
 
@@ -2101,7 +2103,7 @@ grep -rn 'config\.Config\.Validate\|Config\.Validate for' internal   # Expected:
 
 Danach die beiden Absätze mit `config.Import.Validate rejects one now` (`internal/pipeline/worker.go` und `internal/pipeline/worker_lifecycle_test.go`) und den Absatz mit `config.HTTP.Validate` in `internal/api/middleware.go` auf 80 Spalten umbrechen, ohne Wörter zu ändern. Das geht erst jetzt, weil die `sed`s von Task 3 und Task 4 jeweils auf eine ganze Zeile zielen (*nachgetragen im Milestone-Review von M1, F5*).
 
-- [ ] **Step 6: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 6: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go build ./... && go test ./internal/config/ ./internal/server/ ./cmd/recipe-reader/`
 Expected: PASS, einschließlich `TestHelp_ServeGroupsFlagsByConcern` und `TestHelp_ServeNamesEveryCredential`.
@@ -2114,13 +2116,13 @@ go run ./cmd/recipe-reader serve --help | grep -o -- '--[a-z][a-z-]*' | sort -u 
 
 Expected: exakt die Baseline **ohne** `--health-check`, also dieselben 19 übrigen Flags mit denselben Namen.
 
-- [ ] **Step 7: README**
+- [x] **Step 7: README**
 
 In `## Configuration`:
 - `Run \`recipe-reader serve --help\` for the full list.` → `Run \`recipe-reader serve --help\` for the full list, grouped as HTTP, Database, Instagram, Extraction, LLM and Import.`
 - `\`recipe-reader --help\` names them in its description, since there is no flag entry to list them under.` → `\`recipe-reader --help\` names them in its description, and \`recipe-reader serve --help\` in the description of the group each belongs to, since there is no flag entry to list them under.`
 
-- [ ] **Step 8: Commit-Gate und Commit**
+- [x] **Step 8: Commit-Gate und Commit**
 
 ```bash
 git add -A cmd internal README.md

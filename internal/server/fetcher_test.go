@@ -22,8 +22,8 @@ func TestNewFetcher_NoAccountConfigured(t *testing.T) {
 // blip at boot was indistinguishable from having no account configured.
 func TestNewFetcher_FailedLoginStillReturnsAFetcher(t *testing.T) {
 	cfg := baseConfig("rule")
-	cfg.InstagramUsername = "someone" // and no password: instago refuses before any request
-	cfg.InstagramSessionPath = filepath.Join(t.TempDir(), "session.json")
+	cfg.Instagram.Username = "someone" // and no password: instago refuses before any request
+	cfg.Instagram.SessionPath = filepath.Join(t.TempDir(), "session.json")
 
 	fetcher, err := newFetcher(context.Background(), cfg, instagram.NewClient(), nil)
 	if err == nil {
@@ -38,9 +38,9 @@ func TestNewFetcher_FailedLoginStillReturnsAFetcher(t *testing.T) {
 // rather than stopping at the package defaults.
 func TestNewFetcher_PassesTheConfiguredRunBounds(t *testing.T) {
 	cfg := baseConfig("rule")
-	cfg.InstagramUsername = "someone"
-	cfg.InstagramSessionPath = filepath.Join(t.TempDir(), "session.json")
-	cfg.ImportMaxItems, cfg.ImportMaxPages = 500, 400
+	cfg.Instagram.Username = "someone"
+	cfg.Instagram.SessionPath = filepath.Join(t.TempDir(), "session.json")
+	cfg.Import.MaxItems, cfg.Import.MaxPages = 500, 400
 
 	fetcher, _ := newFetcher(context.Background(), cfg, instagram.NewClient(), nil)
 	pf, ok := fetcher.(*instagram.PipelineFetcher)

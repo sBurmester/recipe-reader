@@ -23,19 +23,19 @@ import (
 // request, under the 15-minute floor that rations every login, so a later run
 // recovers on its own.
 func newFetcher(ctx context.Context, cfg config.Config, client *instagram.Client, recipes repository.RecipeRepository) (fetcher pipeline.PostFetcher, loginErr error) {
-	if cfg.InstagramUsername == "" {
+	if cfg.Instagram.Username == "" {
 		return nil, nil
 	}
-	loginErr = client.LoginOrRestore(ctx, cfg.InstagramUsername, cfg.InstagramPassword, cfg.InstagramSessionPath)
+	loginErr = client.LoginOrRestore(ctx, cfg.Instagram.Username, cfg.Instagram.Password, cfg.Instagram.SessionPath)
 	if loginErr != nil {
 		slog.Warn("instagram login failed at startup; the next import retries it", "error", loginErr)
 	}
 	return &instagram.PipelineFetcher{
 		Client:         client,
-		CollectionName: cfg.InstagramCollection,
+		CollectionName: cfg.Instagram.Collection,
 		Options: instagram.FetchOptions{
-			MaxItems: cfg.ImportMaxItems,
-			MaxPages: cfg.ImportMaxPages,
+			MaxItems: cfg.Import.MaxItems,
+			MaxPages: cfg.Import.MaxPages,
 			Known:    alreadyImported(recipes),
 		},
 	}, loginErr
