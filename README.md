@@ -57,13 +57,15 @@ updating.
 
 Configuration is handled by [kong](https://github.com/alecthomas/kong): settings can be supplied as
 a command-line flag or an environment variable, with flags taking precedence over the environment
-and the environment over the built-in defaults. Run `recipe-reader serve --help` for the full list.
+and the environment over the built-in defaults. Run `recipe-reader serve --help` for the full list,
+grouped as HTTP, Database, Instagram, Extraction, LLM and Import.
 See `.env.example` for the environment-variable names and their defaults.
 
 **Credentials are environment-only.** `API_TOKEN`, `INSTAGRAM_PASSWORD`, `LLM_API_KEY` and
 `ANTHROPIC_API_KEY` have no flag form: a value passed on the command line is visible to every user
 on the host through `ps`, and lands in shell history. `recipe-reader --help` names them in its
-description, since there is no flag entry to list them under.
+description, and `recipe-reader serve --help` in the description of the group each belongs to,
+since there is no flag entry to list them under.
 
 **Values that parse but cannot be meant are refused at startup**, with one line rather than a stack
 trace or a silent substitution:

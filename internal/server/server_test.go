@@ -14,10 +14,9 @@ import (
 // unless a test adds one.
 func baseConfig(mode string) config.Config {
 	return config.Config{
-		HTTPAddr:            "127.0.0.1:8080",
-		ExtractionMode:      mode,
-		ExtractionThreshold: 0.6,
-		LLMProvider:         "anthropic",
+		HTTP:       config.HTTP{Listen: config.Listen{Addr: "127.0.0.1:8080"}},
+		Extraction: config.Extraction{Mode: mode, Threshold: 0.6},
+		LLM:        config.LLM{Provider: "anthropic"},
 	}
 }
 
@@ -26,7 +25,7 @@ func baseConfig(mode string) config.Config {
 // by asking for the strongest, on every post of every run.
 func TestNewExtractor_LLMModeReturnsTheLLM(t *testing.T) {
 	cfg := baseConfig("llm")
-	cfg.AnthropicAPIKey = "sk-test"
+	cfg.LLM.AnthropicAPIKey = "sk-test"
 
 	got, err := newExtractor(cfg)
 	if err != nil {
@@ -49,7 +48,7 @@ func TestNewExtractor_LLMModeWithoutKeyFails(t *testing.T) {
 func TestNewExtractor_RuleModeReturnsRulesOnly(t *testing.T) {
 	cfg := baseConfig("rule")
 	// Even with a key configured, "rule" means rule.
-	cfg.AnthropicAPIKey = "sk-test"
+	cfg.LLM.AnthropicAPIKey = "sk-test"
 
 	got, err := newExtractor(cfg)
 	if err != nil {
@@ -62,7 +61,7 @@ func TestNewExtractor_RuleModeReturnsRulesOnly(t *testing.T) {
 
 func TestNewExtractor_HybridModeWiresTheLLMWhenAKeyIsPresent(t *testing.T) {
 	cfg := baseConfig("hybrid")
-	cfg.AnthropicAPIKey = "sk-test"
+	cfg.LLM.AnthropicAPIKey = "sk-test"
 
 	got, err := newExtractor(cfg)
 	if err != nil {
@@ -103,31 +102,16 @@ func TestNewExtractor_UnknownModeFails(t *testing.T) {
 // authoritative for the provider they were named after.
 func TestNewExtractor_OpenAIProviderNeedsAModel(t *testing.T) {
 	cfg := baseConfig("llm")
-	cfg.LLMProvider = "openai"
-	cfg.LLMAPIKey = "sk-test"
+	cfg.LLM.Provider = "openai"
+	cfg.LLM.APIKey = "sk-test"
 
 	if _, err := newExtractor(cfg); err == nil {
 		t.Error("newExtractor() error = nil, want a refusal for the openai provider with no model")
 	}
 
-	cfg.LLMModel = "llama-3.3-70b"
+	cfg.LLM.Model = "llama-3.3-70b"
 	if _, err := newExtractor(cfg); err != nil {
 		t.Errorf("newExtractor() error = %v once a model is set", err)
-	}
-}
-
-// The anthropic provider does not fall back to an OpenAI key, and the openai
-// provider does not borrow ANTHROPIC_API_KEY.
-func TestLLMSettings_FallbacksAreProviderScoped(t *testing.T) {
-	anthropic := config.Config{LLMProvider: "anthropic", AnthropicAPIKey: "sk-ant", AnthropicModel: "claude-x"}
-	settings, ok := anthropic.LLMSettings()
-	if !ok || settings.APIKey != "sk-ant" || settings.Model != "claude-x" {
-		t.Errorf("anthropic settings = %+v, ok = %v", settings, ok)
-	}
-
-	openAI := config.Config{LLMProvider: "openai", AnthropicAPIKey: "sk-ant"}
-	if settings, ok := openAI.LLMSettings(); ok {
-		t.Errorf("openai settings = %+v, ok = %v — ANTHROPIC_API_KEY must not carry over", settings, ok)
 	}
 }
 
@@ -136,14 +120,14 @@ func TestLLMSettings_FallbacksAreProviderScoped(t *testing.T) {
 // surface only when somebody opened the page.
 func TestNewHTTPServer_RoutesAPIAndFrontendSeparately(t *testing.T) {
 	cfg := baseConfig("rule")
-	cfg.CORSOrigins = []string{"http://localhost:5173"}
+	cfg.HTTP.CORSOrigins = []string{"http://localhost:5173"}
 
 	server, err := newHTTPServer(cfg, api.Deps{})
 	if err != nil {
 		t.Fatalf("newHTTPServer() error = %v", err)
 	}
-	if server.Addr != cfg.HTTPAddr {
-		t.Errorf("Addr = %q, want %q", server.Addr, cfg.HTTPAddr)
+	if server.Addr != cfg.HTTP.Addr {
+		t.Errorf("Addr = %q, want %q", server.Addr, cfg.HTTP.Addr)
 	}
 
 	// The API router answers its own health route...
@@ -165,7 +149,7 @@ func TestNewHTTPServer_RoutesAPIAndFrontendSeparately(t *testing.T) {
 // only through NewRouter in the api package's own tests.
 func TestNewHTTPServer_AppliesTheConfiguredToken(t *testing.T) {
 	cfg := baseConfig("rule")
-	cfg.APIToken = "s3cret-token"
+	cfg.HTTP.APIToken = "s3cret-token"
 
 	server, err := newHTTPServer(cfg, api.Deps{})
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 	"github.com/alecthomas/kong"
 
 	"github.com/sBurmester/recipe-reader/internal/cli"
+	"github.com/sBurmester/recipe-reader/internal/config"
 )
 
 // version identifies this build. It is stamped at link time — the Makefile and
@@ -100,6 +101,7 @@ func newParser(root *CLI, opts ...kong.Option) (*kong.Kong, error) {
 		kong.Name("recipe-reader"),
 		kong.Description(description),
 		kong.Vars{"version": version},
+		kong.ExplicitGroups(config.Groups()),
 	}, opts...)...)
 }
 

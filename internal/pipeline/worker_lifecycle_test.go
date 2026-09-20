@@ -62,10 +62,10 @@ func TestWorker_WaitWithNothingRunningReturnsAtOnce(t *testing.T) {
 }
 
 // time.NewTicker panics for a non-positive duration, and it runs on the
-// goroutine that calls Start — server.Run's. config.Config.Validate rejects one now, which
-// is where an operator's typo belongs, but NewWorker is exported and takes any
-// duration, so Start refuses rather than taking the process down with it.
-// Trigger still works: an on-demand import does not depend on the schedule.
+// goroutine that calls Start — server.Run's. config.Import.Validate rejects one
+// now, which is where an operator's typo belongs, but NewWorker is exported and
+// takes any duration, so Start refuses rather than taking the process down with
+// it. Trigger still works: an on-demand import does not depend on the schedule.
 func TestWorker_StartRefusesANonPositiveInterval(t *testing.T) {
 	for _, interval := range []time.Duration{0, -time.Second} {
 		w := NewWorker(&Pipeline{Fetcher: &fakeFetcher{}, Extractor: &fakeExtractor{}}, interval)

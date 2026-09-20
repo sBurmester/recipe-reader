@@ -168,9 +168,9 @@ func withCORS(allowed []string, next http.Handler) http.Handler {
 // happens to visit issuing writes — enumerating ids and deleting the lot —
 // using the user's own network position as the credential.
 //
-// An empty token disables the check entirely. That combination is confined to
-// a loopback bind by config.Config.Validate, so it cannot be the accidental state of
-// a network-reachable deployment.
+// An empty token disables the check entirely. That combination is confined to a
+// loopback bind by config.HTTP.Validate, so it cannot be the accidental state
+// of a network-reachable deployment.
 func withAuth(token string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if token == "" || !isMutating(r.Method) {
