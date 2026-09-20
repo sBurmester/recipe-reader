@@ -47,25 +47,25 @@ func TestLoad_Defaults(t *testing.T) {
 	// Loopback, not ":8080": the default deployment must not be reachable
 	// from the network while its writes are unauthenticated.
 	if cfg.HTTP.Addr != "127.0.0.1:8080" {
-		t.Errorf("HTTPAddr = %q, want 127.0.0.1:8080", cfg.HTTP.Addr)
+		t.Errorf("HTTP.Addr = %q, want 127.0.0.1:8080", cfg.HTTP.Addr)
 	}
 	if len(cfg.HTTP.CORSOrigins) != 1 || cfg.HTTP.CORSOrigins[0] != "http://localhost:5173" {
-		t.Errorf("CORSOrigins = %v, want the Vite dev server only", cfg.HTTP.CORSOrigins)
+		t.Errorf("HTTP.CORSOrigins = %v, want the Vite dev server only", cfg.HTTP.CORSOrigins)
 	}
 	if cfg.Database.DSN == "" {
-		t.Error("expected a default DBDSN")
+		t.Error("expected a default Database.DSN")
 	}
 	if cfg.Import.Interval != 6*time.Hour {
-		t.Errorf("ImportInterval = %v, want 6h", cfg.Import.Interval)
+		t.Errorf("Import.Interval = %v, want 6h", cfg.Import.Interval)
 	}
 	if cfg.Extraction.Threshold != 0.6 {
-		t.Errorf("ExtractionThreshold = %v, want 0.6", cfg.Extraction.Threshold)
+		t.Errorf("Extraction.Threshold = %v, want 0.6", cfg.Extraction.Threshold)
 	}
 	if cfg.Extraction.Mode != "hybrid" {
-		t.Errorf("ExtractionMode = %q, want hybrid", cfg.Extraction.Mode)
+		t.Errorf("Extraction.Mode = %q, want hybrid", cfg.Extraction.Mode)
 	}
 	if cfg.LLM.AnthropicModel != "claude-opus-5" {
-		t.Errorf("AnthropicModel = %q, want claude-opus-5", cfg.LLM.AnthropicModel)
+		t.Errorf("LLM.AnthropicModel = %q, want claude-opus-5", cfg.LLM.AnthropicModel)
 	}
 }
 
@@ -93,13 +93,13 @@ func TestLoad_EnvOverridesDefault(t *testing.T) {
 		t.Fatalf("loadArgs() error = %v", err)
 	}
 	if cfg.HTTP.Addr != "127.0.0.1:9999" {
-		t.Errorf("HTTPAddr = %q, want 127.0.0.1:9999", cfg.HTTP.Addr)
+		t.Errorf("HTTP.Addr = %q, want 127.0.0.1:9999", cfg.HTTP.Addr)
 	}
 	if cfg.Import.Interval != 12*time.Hour {
-		t.Errorf("ImportInterval = %v, want 12h", cfg.Import.Interval)
+		t.Errorf("Import.Interval = %v, want 12h", cfg.Import.Interval)
 	}
 	if cfg.LLM.AnthropicAPIKey != "sk-test" {
-		t.Errorf("AnthropicAPIKey = %q, want sk-test", cfg.LLM.AnthropicAPIKey)
+		t.Errorf("LLM.AnthropicAPIKey = %q, want sk-test", cfg.LLM.AnthropicAPIKey)
 	}
 }
 
@@ -115,13 +115,13 @@ func TestLoad_FlagsOverrideEnv(t *testing.T) {
 		t.Fatalf("loadArgs() error = %v", err)
 	}
 	if cfg.HTTP.Addr != "127.0.0.1:7777" {
-		t.Errorf("HTTPAddr = %q, want 127.0.0.1:7777 (flag should beat env)", cfg.HTTP.Addr)
+		t.Errorf("HTTP.Addr = %q, want 127.0.0.1:7777 (flag should beat env)", cfg.HTTP.Addr)
 	}
 	if cfg.Extraction.Mode != "rule" {
-		t.Errorf("ExtractionMode = %q, want rule", cfg.Extraction.Mode)
+		t.Errorf("Extraction.Mode = %q, want rule", cfg.Extraction.Mode)
 	}
 	if cfg.Import.Interval != 30*time.Minute {
-		t.Errorf("ImportInterval = %v, want 30m", cfg.Import.Interval)
+		t.Errorf("Import.Interval = %v, want 30m", cfg.Import.Interval)
 	}
 }
 
@@ -152,7 +152,7 @@ func TestLoad_AllowsNonLoopbackBindWithToken(t *testing.T) {
 		t.Fatalf("loadArgs() error = %v, want success once a token is configured", err)
 	}
 	if cfg.HTTP.APIToken != "s3cret-token" {
-		t.Errorf("APIToken = %q", cfg.HTTP.APIToken)
+		t.Errorf("HTTP.APIToken = %q", cfg.HTTP.APIToken)
 	}
 }
 
@@ -177,7 +177,7 @@ func TestLoad_CORSOriginsSplitOnComma(t *testing.T) {
 		t.Fatalf("loadArgs() error = %v", err)
 	}
 	if len(cfg.HTTP.CORSOrigins) != 2 || cfg.HTTP.CORSOrigins[1] != "https://recipes.example" {
-		t.Errorf("CORSOrigins = %v, want both origins", cfg.HTTP.CORSOrigins)
+		t.Errorf("HTTP.CORSOrigins = %v, want both origins", cfg.HTTP.CORSOrigins)
 	}
 }
 

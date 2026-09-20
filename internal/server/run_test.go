@@ -28,7 +28,7 @@ func TestRun_ServesUntilCancelledThenReturnsNil(t *testing.T) {
 	cfg.Database.DSN = testdb.NewDatabase(t, "server_run")
 	// An account with no password: instago refuses the startup login before
 	// any request, so the worker exists without the test touching the network.
-	// ImportInterval is set because a zero one leaves the schedule unstarted.
+	// Import.Interval is set because a zero one leaves the schedule unstarted.
 	cfg.Instagram.Username = "someone"
 	cfg.Instagram.SessionPath = filepath.Join(t.TempDir(), "session.json")
 	cfg.Import.Interval = time.Hour

@@ -30,7 +30,7 @@ func TestLoad_AcceptsPositiveImportInterval(t *testing.T) {
 		t.Fatalf("loadArgs() error = %v", err)
 	}
 	if cfg.Import.Interval.Minutes() != 30 {
-		t.Errorf("ImportInterval = %v, want 30m", cfg.Import.Interval)
+		t.Errorf("Import.Interval = %v, want 30m", cfg.Import.Interval)
 	}
 }
 
