@@ -138,6 +138,8 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
   - `db: migrate up: context canceled` sagt nicht, was angewandt wurde. Schlimmer: ein Abbruch, der erst nach der letzten Migration eintrifft, meldet einen vollständig durchgelaufenen Lauf als Fehler (siehe den Doc-Kommentar von `migrateUp`). Die Meldung müsste sagen, dass ein erneuter Lauf gefahrlos ist und nachholt, was fehlt.
   - kong stellt der Meldung den Kommandopfad voran (`serve: config: API_TOKEN …`, R4 des Plans vom 2026-09-19). Dass der Inhalt gleich bleibt, ist geprüft; ob das Präfix einem Betreiber hilft oder im Weg steht, nie.
   - `main` loggt jeden Fehler als eine Zeile `slog.Error("fatal", "error", err)`. Die Ursache steckt damit im Attribut, während die Nachricht für alle Fehler dieselbe ist — auch für die, bei denen der Betreiber sofort wüsste, was zu tun ist.
+- **`.env.example` und `docker-compose.yml` laufen auseinander** (aus dem Milestone-Review zu M2). Der `app`-Service reicht genau die Variablen durch, die unter `environment:` stehen; ein `env_file:` gibt es nirgends. Dreizehn Einträge aus `.env.example` erreichen den Container daher nicht — `EXTRACTION_*`, `IMPORT_*`, `LLM_*`, `ANTHROPIC_MODEL`, `INSTAGRAM_SESSION_PATH` und seit M2 auch `LOG_LEVEL`/`LOG_FORMAT` —, obwohl die README-Anleitung mit `cp .env.example .env` beginnt. Das ist keine Lücke von M2, sondern die allgemeine: entweder ein `env_file:`, oder eine bewusst dokumentierte Auswahl. Wer sie schließt, beachtet, dass `${VAR:-}` die Variable **leer** setzt und kong einen leeren Wert bei einem `enum`-Flag ablehnt (`--log-level must be one of … but got ""`, am 2026-09-21 geprüft); in die Substitution gehört also der Default, nicht der leere String — und damit steht der Default an einer zweiten Stelle, die driften kann.
+- **Redigierhinweis in `.env.example:1`**: `HTTP_ADDR=127.0.0.1:8080   # change the existing :8080 line`. Der Kommentar ist eine Anweisung an den, der die Datei einmal bearbeitet hat, und wird von `cp .env.example .env` in die Konfiguration jedes Betreibers kopiert. Vorbestehend, von M2 nicht berührt. `.env.example` ist für die Agenten hier schreibgeschützt, die Zeile muss also von Hand entfernt werden.
 
 ---
 
@@ -688,6 +690,9 @@ import (
 	"github.com/sBurmester/recipe-reader/internal/logging"
 )
 
+// A collector reads the json format as newline-delimited JSON: one record per
+// line, each line an object of its own. Two records, so that a handler which
+// ran them together into one stream fails here and not in the collector.
 func TestNewHandler_JSONWritesOneObjectPerRecord(t *testing.T) {
 	var buf bytes.Buffer
 	h, err := logging.NewHandler(&buf, "info", "json")
@@ -695,17 +700,25 @@ func TestNewHandler_JSONWritesOneObjectPerRecord(t *testing.T) {
 		t.Fatalf("NewHandler() error = %v", err)
 	}
 
-	slog.New(h).Info("hello", "count", 3)
+	logger := slog.New(h)
+	logger.Info("hello", "count", 3)
+	logger.Warn("world")
 
-	var record map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
-		t.Fatalf("output is not one JSON object: %v (%q)", err, buf.String())
+	lines := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("output is %d lines, want one per record:\n%s", len(lines), buf.String())
 	}
-	if record["msg"] != "hello" {
-		t.Errorf("msg = %v, want hello", record["msg"])
+	records := make([]map[string]any, len(lines))
+	for i, line := range lines {
+		if err := json.Unmarshal([]byte(line), &records[i]); err != nil {
+			t.Fatalf("line %d is not a JSON object: %v (%q)", i+1, err, line)
+		}
 	}
-	if record["level"] != "INFO" {
-		t.Errorf("level = %v, want INFO", record["level"])
+	if records[0]["msg"] != "hello" || records[0]["level"] != "INFO" {
+		t.Errorf("first record = %v, want msg hello at level INFO", records[0])
+	}
+	if records[1]["msg"] != "world" || records[1]["level"] != "WARN" {
+		t.Errorf("second record = %v, want msg world at level WARN", records[1])
 	}
 }
 

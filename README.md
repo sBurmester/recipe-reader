@@ -39,8 +39,8 @@ default: it runs when no command is named and takes its flags without one, so `r
 | Command | What it does |
 | --- | --- |
 | `serve` (default) | Runs the HTTP API, the embedded frontend and the background import worker. Takes every setting under [Configuration](#configuration). |
-| `healthcheck` | Probes the server already listening on `HTTP_ADDR` and exits 0 if `/api/healthz` answers ok, 1 otherwise. Reads `HTTP_ADDR` and nothing else. |
-| `migrate` | Applies pending migrations and seeds the lookup tables, then exits: ahead of a rollout, or after a restore. `serve` does the same at every start. Reads `DB_DSN` and nothing else. With compose: `docker compose run --rm app migrate`. Ctrl-C or `SIGTERM` stops it between two migrations — the one in flight always finishes — and it then exits 1 reporting the cancellation rather than success. Re-running is safe and picks up where it left off. |
+| `healthcheck` | Probes the server already listening on `HTTP_ADDR` and exits 0 if `/api/healthz` answers ok, 1 otherwise. Reads `HTTP_ADDR` and, like every command, `LOG_LEVEL` and `LOG_FORMAT` — nothing else. |
+| `migrate` | Applies pending migrations and seeds the lookup tables, then exits: ahead of a rollout, or after a restore. `serve` does the same at every start. Reads `DB_DSN` and, like every command, `LOG_LEVEL` and `LOG_FORMAT` — nothing else. With compose: `docker compose run --rm app migrate`. Ctrl-C or `SIGTERM` stops it between two migrations — the one in flight always finishes — and it then exits 1 reporting the cancellation rather than success. Re-running is safe and picks up where it left off. |
 
 `recipe-reader --help` lists the commands; `recipe-reader <command> --help` lists a command's flags
 and the environment variable behind each. `--version` works with or without a command. Flags go
@@ -59,7 +59,7 @@ updating.
 Configuration is handled by [kong](https://github.com/alecthomas/kong): settings can be supplied as
 a command-line flag or an environment variable, with flags taking precedence over the environment
 and the environment over the built-in defaults. Run `recipe-reader serve --help` for the full list,
-grouped as HTTP, Database, Instagram, Extraction, LLM, Import and Logging.
+grouped as Logging, HTTP, Database, Instagram, Extraction, LLM and Import, in that order.
 See `.env.example` for the environment-variable names and their defaults.
 
 **Credentials are environment-only.** `API_TOKEN`, `INSTAGRAM_PASSWORD`, `LLM_API_KEY` and
@@ -597,7 +597,9 @@ belong to; `main` turns any failure into one log line and exit status 1. The com
 live in `internal/cli`, one type per command whose fields are its flags, and each command's `Run`
 delegates at once: `serve` to `internal/server`, the composition root that wires database,
 extraction, Instagram, import worker and HTTP API; `healthcheck` to `internal/healthcheck`;
-`migrate` to `internal/db`. The settings are declared and validated in `internal/config`.
+`migrate` to `internal/db`. The settings are declared and validated in `internal/config`, and
+`internal/logging` builds the process logger that `main` installs from them before the selected
+command runs.
 
 See
 [the implementation plan](docs/superpowers/plans/2026-09-05-recipe-reader-implementation.md)

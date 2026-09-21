@@ -11,6 +11,9 @@ import (
 	"github.com/sBurmester/recipe-reader/internal/logging"
 )
 
+// A collector reads the json format as newline-delimited JSON: one record per
+// line, each line an object of its own. Two records, so that a handler which
+// ran them together into one stream fails here and not in the collector.
 func TestNewHandler_JSONWritesOneObjectPerRecord(t *testing.T) {
 	var buf bytes.Buffer
 	h, err := logging.NewHandler(&buf, "info", "json")
@@ -18,17 +21,25 @@ func TestNewHandler_JSONWritesOneObjectPerRecord(t *testing.T) {
 		t.Fatalf("NewHandler() error = %v", err)
 	}
 
-	slog.New(h).Info("hello", "count", 3)
+	logger := slog.New(h)
+	logger.Info("hello", "count", 3)
+	logger.Warn("world")
 
-	var record map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
-		t.Fatalf("output is not one JSON object: %v (%q)", err, buf.String())
+	lines := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("output is %d lines, want one per record:\n%s", len(lines), buf.String())
 	}
-	if record["msg"] != "hello" {
-		t.Errorf("msg = %v, want hello", record["msg"])
+	records := make([]map[string]any, len(lines))
+	for i, line := range lines {
+		if err := json.Unmarshal([]byte(line), &records[i]); err != nil {
+			t.Fatalf("line %d is not a JSON object: %v (%q)", i+1, err, line)
+		}
 	}
-	if record["level"] != "INFO" {
-		t.Errorf("level = %v, want INFO", record["level"])
+	if records[0]["msg"] != "hello" || records[0]["level"] != "INFO" {
+		t.Errorf("first record = %v, want msg hello at level INFO", records[0])
+	}
+	if records[1]["msg"] != "world" || records[1]["level"] != "WARN" {
+		t.Errorf("second record = %v, want msg world at level WARN", records[1])
 	}
 }
 
