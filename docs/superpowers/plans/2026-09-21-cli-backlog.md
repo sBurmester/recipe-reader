@@ -12,7 +12,7 @@
 
 - **Branch:** Nie auf `main` arbeiten. Jeder Milestone hat einen eigenen Branch und einen eigenen PR; die Namen stehen unter „Branches und PRs“.
 - **Kompatibilität:** Bestehende Env-Variablen-Namen, Flag-Namen und Defaults bleiben **unverändert**. Neue Flags folgen demselben Muster (`name:`, `env:`, `default:`, `help:`) und sind additiv: jedes bestehende Kommando muss ohne sie genau so laufen wie vorher.
-- **Konfigurationsdateien werden mitgepflegt:** Wer eine Env-Variable hinzufügt, trägt sie in `.env.example` nach — auskommentiert, mit dem Default als Wert und ohne echte Geheimnisse. `docker-compose.yml` wird angefasst, wo eine Änderung es verlangt.
+- **Konfigurationsdateien werden mitgepflegt:** Wer eine Env-Variable hinzufügt, trägt sie in `.env.example` nach, im Stil der Datei: unkommentiert, mit dem Default als Wert, thematisch gruppiert; Credentials stehen dort mit leerem Wert (`API_TOKEN=`). `docker-compose.yml` wird angefasst, wo eine Änderung es verlangt.
 - **Credentials:** `API_TOKEN`, `INSTAGRAM_PASSWORD`, `LLM_API_KEY` und `ANTHROPIC_API_KEY` bleiben **nur über die Umgebung** setzbar, ohne Flag-Form (`kong:"-"`).
 - **Exit-Codes:** `0` bei Erfolg, `1` bei **jedem** Fehler, auch bei Parse-Fehlern. Der Docker-`HEALTHCHECK` erwartet 0/1.
 - **Kommentarstil:** Kommentare erklären das *Warum*, nicht das *Was*; verschobener Code behält seine Kommentare wortgleich. Zeilen bis ~100 Spalten, wie im Rest des Repos.
@@ -883,7 +883,7 @@ func TestParse_RejectsAnUnknownLogLevel(t *testing.T) {
 - [ ] **Step 7: Tests laufen lassen, sie müssen fehlschlagen**
 
 Run: `go test -count=1 -run 'TestParse_LogFlags|TestParse_RejectsAnUnknownLogLevel' ./cmd/recipe-reader/`
-Expected: FAIL, `unknown flag --log-level`
+Expected: FAIL. Der erste Test liest `root.Logging`, das es noch nicht gibt, also scheitert schon die Übersetzung (`root.Logging undefined`) und nicht erst kong mit `unknown flag --log-level`. Rot ist rot; wer die Meldung erwartet und die andere bekommt, hat trotzdem den Beweis, dass der Test ohne Step 8 nicht durchläuft.
 
 - [ ] **Step 8: `main.go` umstellen**
 
@@ -923,22 +923,23 @@ Zusätzlich von Hand prüfen:
 ```bash
 go run ./cmd/recipe-reader serve --help | grep -A3 'Logging'
 go run ./cmd/recipe-reader healthcheck --help | grep -c 'log-level'   # 1
-LOG_FORMAT=json go run ./cmd/recipe-reader --db-dsn 'postgres://nobody@127.0.0.1:1/nope' migrate 2>&1 | tail -1
+LOG_FORMAT=json go run ./cmd/recipe-reader migrate --db-dsn 'postgres://nobody@127.0.0.1:1/nope' 2>&1 | tail -2
 ```
 
-Die letzte Zeile muss ein JSON-Record sein — der Beleg, dass `Configure` vor dem Kommando greift.
+Die Fehlerzeile muss ein JSON-Record sein — der Beleg, dass `Configure` vor dem Kommando greift. `tail -2`, weil `go run` bei einem Exit-Status ungleich null noch eine eigene Zeile anhängt; gegen eine gebaute Binary reicht `tail -1`.
+
+Das `--db-dsn` steht **hinter** dem Kommandonamen, und das ist keine Stilfrage: davor wäre es genau die Fehlstellung, die `rejectMisplacedFlags` nach E11 des Vorgängerplans ablehnt. Der Lauf stürbe dann schon im Parsen und läge damit vor `logging.Configure` — die Ausgabe wäre Text, und die Prüfung würde das Gegenteil dessen belegen, wofür sie da ist. Wer sie scheitern sieht, korrigiert den Aufruf und nicht den Guard.
 
 - [ ] **Step 10: README und `.env.example`**
 
 In `## Configuration` die neue Gruppe dokumentieren, im Stil der bestehenden Tabellen: `LOG_LEVEL` (`--log-level`, Default `info`, Werte `debug,info,warn,error`) und `LOG_FORMAT` (`--log-format`, Default `text`, Werte `text,json`), mit dem Hinweis, dass beide für jedes Kommando gelten und vor oder hinter dem Kommandonamen stehen dürfen.
 
-In `.env.example` die beiden Variablen nachtragen, im Stil der Datei (auskommentiert, Default als Wert):
+In `.env.example` die beiden Variablen nachtragen. Die Datei führt jede Variable **unkommentiert** mit ihrem Default und gruppiert sie thematisch durch Leerzeilen; ein Kommentar steht nur dort, wo ein Wert eine Erklärung braucht (siehe `DB_DSN`). Als eigener Block ans Ende, weil Logging keine der bestehenden Gruppen ist:
 
 ```dotenv
-# Lowest level that is logged: debug, info, warn, error.
-#LOG_LEVEL=info
-# Log output format: text for a human, json for a log collector.
-#LOG_FORMAT=text
+# Applies to every command. Levels: debug, info, warn, error. Formats: text, json.
+LOG_LEVEL=info
+LOG_FORMAT=text
 ```
 
 Vor dem Bearbeiten den aktuellen Stand ansehen, damit Reihenfolge und Kommentarstil passen: `cat .env.example`.
