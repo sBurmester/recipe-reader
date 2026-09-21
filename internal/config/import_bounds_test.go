@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // integration I6: the per-run bounds existed only as package defaults. They
 // are reachable from configuration now, with the same defaults.
@@ -36,5 +39,39 @@ func TestLoad_RejectsImportBoundsBelowOne(t *testing.T) {
 		if _, err := loadArgs(args); err == nil {
 			t.Errorf("loadArgs(%v) error = nil, want a refusal", args)
 		}
+	}
+}
+
+// import reads the limits but not the interval, so the two validate
+// separately — the same split that lets healthcheck share Listen without
+// inheriting the rest of HTTP.
+func TestImportLimits_ValidateRejectsABoundBelowOne(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		limits ImportLimits
+		want   string
+	}{
+		{"max items", ImportLimits{MaxItems: 0, MaxPages: 100}, "IMPORT_MAX_ITEMS"},
+		{"max pages", ImportLimits{MaxItems: 50, MaxPages: 0}, "IMPORT_MAX_PAGES"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.limits.Validate()
+			if err == nil {
+				t.Fatalf("Validate(%+v) = nil, want an error naming %s", tc.limits, tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("Validate() error = %v, want it to name %s", err, tc.want)
+			}
+		})
+	}
+}
+
+// The interval stays with Import, and a valid pair of limits must not make it
+// pass on its own.
+func TestImport_ValidateStillRejectsANonPositiveInterval(t *testing.T) {
+	cfg := Import{MaxItems: 50, MaxPages: 100}
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() = nil for a zero interval, want an error")
 	}
 }

@@ -1315,7 +1315,7 @@ func TestImportLimits_ValidateRejectsABoundBelowOne(t *testing.T) {
 // The interval stays with Import, and a valid pair of limits must not make it
 // pass on its own.
 func TestImport_ValidateStillRejectsANonPositiveInterval(t *testing.T) {
-	cfg := Import{ImportLimits: ImportLimits{MaxItems: 50, MaxPages: 100}}
+	cfg := Import{MaxItems: 50, MaxPages: 100}
 
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("Validate() = nil for a zero interval, want an error")

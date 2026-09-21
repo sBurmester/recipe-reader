@@ -232,36 +232,45 @@ func (l LLM) Settings() (LLMSettings, bool) {
 	return s, s.APIKey != ""
 }
 
-// Import schedules and bounds the background import.
-type Import struct {
-	Interval time.Duration `name:"import-interval" env:"IMPORT_INTERVAL" default:"6h" help:"How often the background worker imports new saved posts."`
-
-	// MaxItems and MaxPages bound one import run. They existed only as package
-	// defaults in internal/instagram, reachable by recompiling; a backfill of a
-	// large saved-posts history is exactly when an operator wants to raise
-	// them, and a flagged account is when they want to lower them. The defaults
-	// here match the package's own.
+// ImportLimits bounds one import run. It is a group of its own because both
+// readers want it and only one of them wants the schedule: the worker in serve
+// runs on an interval, the import command runs once. Same reason Listen is
+// separate from HTTP.
+//
+// The two existed only as package defaults in internal/instagram, reachable by
+// recompiling; a backfill of a large saved-posts history is exactly when an
+// operator wants to raise them, and a flagged account is when they want to
+// lower them. The defaults here match the package's own.
+type ImportLimits struct {
 	MaxItems int `name:"import-max-items" env:"IMPORT_MAX_ITEMS" default:"50" help:"Most new posts one import run collects. Posts already imported do not count against it."`
 	MaxPages int `name:"import-max-pages" env:"IMPORT_MAX_PAGES" default:"100" help:"Most feed pages one import run walks, whether or not they held anything new."`
 }
 
-// Validate rejects two kinds of value that parse but cannot be meant.
-//
-// A run bound below one: the fetcher would quietly replace it with its own
-// default, so IMPORT_MAX_ITEMS=0 — plausibly meant as "pause imports" — would
-// import fifty posts instead, which is the opposite.
-//
-// An interval at or below zero: time.NewTicker panics for one, on the calling
-// goroutine, inside Worker.Start — so IMPORT_INTERVAL=0 used to abort the
-// process with a stack trace instead of the clean slog.Error("fatal") path main
-// was built around.
-func (i Import) Validate() error {
+// Validate rejects a run bound below one: the fetcher would quietly replace it
+// with its own default, so IMPORT_MAX_ITEMS=0 — plausibly meant as "pause
+// imports" — would import fifty posts instead, which is the opposite.
+func (i ImportLimits) Validate() error {
 	if i.MaxItems < 1 {
 		return fmt.Errorf("config: IMPORT_MAX_ITEMS must be at least 1, got %d", i.MaxItems)
 	}
 	if i.MaxPages < 1 {
 		return fmt.Errorf("config: IMPORT_MAX_PAGES must be at least 1, got %d", i.MaxPages)
 	}
+	return nil
+}
+
+// Import schedules and bounds the background import.
+type Import struct {
+	Interval time.Duration `name:"import-interval" env:"IMPORT_INTERVAL" default:"6h" help:"How often the background worker imports new saved posts."`
+
+	ImportLimits `embed:""`
+}
+
+// Validate rejects an interval at or below zero: time.NewTicker panics for one,
+// on the calling goroutine, inside Worker.Start — so IMPORT_INTERVAL=0 used to
+// abort the process with a stack trace instead of the clean slog.Error("fatal")
+// path main was built around. The limits validate themselves.
+func (i Import) Validate() error {
 	if i.Interval <= 0 {
 		return fmt.Errorf("config: IMPORT_INTERVAL must be positive, got %s", i.Interval)
 	}
