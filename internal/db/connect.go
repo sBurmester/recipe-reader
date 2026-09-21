@@ -77,7 +77,7 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 // and migrate both start with it, so the order is written down once. The
 // caller closes the pool.
 func Open(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
-	if err := Migrate(dsn); err != nil {
+	if err := MigrateContext(ctx, dsn); err != nil {
 		return nil, err
 	}
 	pool, err := Connect(ctx, dsn)
@@ -134,12 +134,68 @@ func dsnParams(dsn string) map[string]struct{} {
 // Migrate applies all pending embedded migrations against dsn (a
 // postgres:// URL — the same one passed to Connect).
 func Migrate(dsn string) error {
-	m, err := newMigrate(dsn)
+	return MigrateContext(context.Background(), dsn)
+}
+
+// MigrateContext is Migrate, bounded by ctx. Cancelling it stops the migrator
+// between two migrations; the one in flight is always finished, because a
+// half-applied migration is worse than a slow Ctrl-C.
+//
+// golang-migrate has no context parameter, only the GracefulStop channel, so
+// the cancellation path is this file's own — see migrateUp, which holds it.
+func MigrateContext(ctx context.Context, dsn string) error {
+	return migrateUp(ctx, func() (migrator, error) {
+		m, err := newMigrate(dsn)
+		if err != nil {
+			return nil, err
+		}
+		return gracefulMigrator{m}, nil
+	})
+}
+
+// migrator is the part of *migrate.Migrate that the cancellation path drives.
+// It exists so that path — the only thing this file adds to golang-migrate —
+// can be tested without a migration slow enough to interrupt.
+type migrator interface {
+	Up() error
+	// Stop asks the migrator to stop before it starts the next migration.
+	Stop()
+	Close() (source error, database error)
+}
+
+// gracefulMigrator adapts *migrate.Migrate to migrator. GracefulStop is
+// buffered with room for one (migrate.go:185) and read between migrations, so
+// the send never blocks and at most one ever happens.
+type gracefulMigrator struct{ *migrate.Migrate }
+
+func (g gracefulMigrator) Stop() { g.GracefulStop <- true }
+
+// migrateUp runs the migrator open returns, bounded by ctx. The three guards
+// are the whole point: the first refuses to open anything under a context that
+// is already done, the AfterFunc turns a later cancellation into a stop between
+// two migrations, and the last one reports it — a stopped Up returns nil rather
+// than an error, so without it a cancelled, partly applied run would look like
+// a successful one.
+//
+// open is a parameter rather than a package-level variable so a test can hand
+// in a fake migrator without the package growing mutable state to swap.
+func migrateUp(ctx context.Context, open func() (migrator, error)) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("db: migrate up: %w", err)
+	}
+	m, err := open()
 	if err != nil {
 		return err
 	}
 	defer func() { _, _ = m.Close() }()
+
+	stop := context.AfterFunc(ctx, m.Stop)
+	defer stop()
+
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("db: migrate up: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("db: migrate up: %w", err)
 	}
 	return nil

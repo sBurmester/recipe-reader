@@ -454,6 +454,68 @@ func TestMigrateContext_CancelledContextAppliesNothing(t *testing.T) {
 		t.Error("MigrateContext() applied a migration although its context was already cancelled")
 	}
 }
+
+// The rest of this block is internal/db/migrate_test.go (package db): migrateUp
+// is unexported, so the test that drives it cannot live in package db_test.
+
+// stopWait bounds the fake's Up. A migrateUp that never stops its migrator
+// would otherwise block here for as long as the suite is willing to wait; this
+// turns that into a failed assertion with a name on it.
+const stopWait = 5 * time.Second
+
+// errNeverStopped is what the fake reports when the cancellation never reached
+// it, which is the failure the AfterFunc in migrateUp exists to prevent.
+var errNeverStopped = errors.New("Stop was never called")
+
+// stoppingMigrator is golang-migrate's graceful stop with the migration taken
+// out: Up blocks until Stop is called and then returns nil, exactly as a
+// stopped *migrate.Migrate does. The embedded migrations run far too fast to
+// interrupt on purpose, so the window a real Ctrl-C would land in is made here
+// instead — Up cancels the context itself, which is why the cancellation always
+// arrives while Up is in flight and never before or after it.
+type stoppingMigrator struct {
+	cancel  context.CancelFunc
+	stopped chan struct{}
+}
+
+func (m *stoppingMigrator) Up() error {
+	m.cancel()
+	select {
+	case <-m.stopped:
+		return nil
+	case <-time.After(stopWait):
+		return errNeverStopped
+	}
+}
+
+// Stop closes rather than signals: context.AfterFunc runs its function at most
+// once, so a second close would be a bug worth the panic.
+func (m *stoppingMigrator) Stop() { close(m.stopped) }
+
+func (m *stoppingMigrator) Close() (source error, database error) { return nil, nil }
+
+// The promise MigrateContext adds to golang-migrate is that a cancelled run is
+// reported as one. A gracefully stopped Up returns nil, so a run that was cut
+// short after applying part of the schema would otherwise be indistinguishable
+// from a clean one — and the caller would carry on against a half-migrated
+// database. Deleting either the AfterFunc or the ctx.Err() check after Up
+// fails this test.
+func TestMigrateUp_GracefulStopIsReportedAsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	m := &stoppingMigrator{cancel: cancel, stopped: make(chan struct{})}
+
+	err := migrateUp(ctx, func() (migrator, error) { return m, nil })
+	if err == nil {
+		t.Fatal("migrateUp() = nil, want the cancellation reported although Up returned nil")
+	}
+	if errors.Is(err, errNeverStopped) {
+		t.Fatalf("migrateUp() error = %v: the cancellation never reached the migrator", err)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("migrateUp() error = %v, want it to wrap context.Canceled", err)
+	}
+}
 ```
 
 Die Imports `errors`, `context` und `github.com/jackc/pgx/v5/pgxpool` in `db_test.go` ergänzen, falls sie fehlen.
@@ -478,22 +540,55 @@ func Migrate(dsn string) error {
 // between two migrations; the one in flight is always finished, because a
 // half-applied migration is worse than a slow Ctrl-C.
 //
-// golang-migrate has no context parameter, only the GracefulStop channel. It is
-// buffered with room for one (migrate.go:185), so the send below never blocks,
-// and the migrator reads it before each migration. A stopped Up returns nil
-// rather than an error, so without the ctx.Err() check at the end a cancelled,
-// partly applied run would report success.
+// golang-migrate has no context parameter, only the GracefulStop channel, so
+// the cancellation path is this file's own — see migrateUp, which holds it.
 func MigrateContext(ctx context.Context, dsn string) error {
+	return migrateUp(ctx, func() (migrator, error) {
+		m, err := newMigrate(dsn)
+		if err != nil {
+			return nil, err
+		}
+		return gracefulMigrator{m}, nil
+	})
+}
+
+// migrator is the part of *migrate.Migrate that the cancellation path drives.
+// It exists so that path — the only thing this file adds to golang-migrate —
+// can be tested without a migration slow enough to interrupt.
+type migrator interface {
+	Up() error
+	// Stop asks the migrator to stop before it starts the next migration.
+	Stop()
+	Close() (source error, database error)
+}
+
+// gracefulMigrator adapts *migrate.Migrate to migrator. GracefulStop is
+// buffered with room for one (migrate.go:185) and read between migrations, so
+// the send never blocks and at most one ever happens.
+type gracefulMigrator struct{ *migrate.Migrate }
+
+func (g gracefulMigrator) Stop() { g.GracefulStop <- true }
+
+// migrateUp runs the migrator open returns, bounded by ctx. The three guards
+// are the whole point: the first refuses to open anything under a context that
+// is already done, the AfterFunc turns a later cancellation into a stop between
+// two migrations, and the last one reports it — a stopped Up returns nil rather
+// than an error, so without it a cancelled, partly applied run would look like
+// a successful one.
+//
+// open is a parameter rather than a package-level variable so a test can hand
+// in a fake migrator without the package growing mutable state to swap.
+func migrateUp(ctx context.Context, open func() (migrator, error)) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("db: migrate up: %w", err)
 	}
-	m, err := newMigrate(dsn)
+	m, err := open()
 	if err != nil {
 		return err
 	}
 	defer func() { _, _ = m.Close() }()
 
-	stop := context.AfterFunc(ctx, func() { m.GracefulStop <- true })
+	stop := context.AfterFunc(ctx, m.Stop)
 	defer stop()
 
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {

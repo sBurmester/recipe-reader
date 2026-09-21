@@ -2,7 +2,10 @@ package db_test
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/sBurmester/recipe-reader/internal/db"
 	"github.com/sBurmester/recipe-reader/internal/db/testdb"
@@ -90,5 +93,36 @@ func TestOpen_MigratesAndSeedsAnEmptyDatabase(t *testing.T) {
 	}
 	if counts[1] != counts[0] {
 		t.Errorf("second Open() changed the seeded units: %d -> %d", counts[0], counts[1])
+	}
+}
+
+// Up has no context parameter, so a cancelled migrate used to be noticed only
+// by the Connect that followed it — after the schema had already changed. A
+// context that is already done must leave the database exactly as it was.
+func TestMigrateContext_CancelledContextAppliesNothing(t *testing.T) {
+	dsn := testdb.NewDatabase(t, "migrate_cancelled")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := db.MigrateContext(ctx, dsn)
+	if err == nil {
+		t.Fatal("MigrateContext() = nil, want the cancellation reported")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("MigrateContext() error = %v, want it to wrap context.Canceled", err)
+	}
+
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		t.Fatalf("pgxpool.New() error = %v", err)
+	}
+	defer pool.Close()
+	var exists bool
+	if err := pool.QueryRow(context.Background(),
+		"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'units')").Scan(&exists); err != nil {
+		t.Fatalf("look for the units table: %v", err)
+	}
+	if exists {
+		t.Error("MigrateContext() applied a migration although its context was already cancelled")
 	}
 }
