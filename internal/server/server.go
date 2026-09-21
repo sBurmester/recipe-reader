@@ -39,17 +39,11 @@ func Run(ctx context.Context, cfg config.Config, version string) error {
 		return err
 	}
 
-	if err := db.Migrate(cfg.Database.DSN); err != nil {
-		return err
-	}
-	pool, err := db.Connect(ctx, cfg.Database.DSN)
+	pool, err := db.Open(ctx, cfg.Database.DSN)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-	if err := db.Seed(ctx, pool); err != nil {
-		return err
-	}
 
 	recipes := repository.NewRecipeRepository(pool)
 	lookups := repository.NewLookupRepository(pool)

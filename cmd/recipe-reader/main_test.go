@@ -206,6 +206,7 @@ func TestParse_FlagBeforeAnotherCommandIsRefused(t *testing.T) {
 	clearEnv(t)
 	for _, args := range [][]string{
 		{"--http-addr", "127.0.0.1:1", "healthcheck"},
+		{"--db-dsn", unreachableDSN, "migrate"},
 	} {
 		_, _, err := parse(t, args...)
 		if err == nil || !strings.Contains(err.Error(), "after the command name") {

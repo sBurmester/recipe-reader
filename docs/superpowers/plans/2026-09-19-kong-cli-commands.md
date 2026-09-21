@@ -95,9 +95,9 @@
 - [x] Die Hilfe nennt weiterhin die vier env-only Credentials: `recipe-reader --help` in der Beschreibung, `recipe-reader serve --help` in der Beschreibung der Gruppe, zu der sie gehören (Entscheidung E12).
 
 **US5: Betreiber migriert separat.** *Als Betreiber möchte ich Migrationen ausführen können, ohne den Server zu starten, z. B. vor einem Rollout oder nach einem Restore.*
-- [ ] `recipe-reader migrate` migriert, seedet die Lookup-Tabellen und beendet sich. Ein zweiter Aufruf ist ein No-op.
-- [ ] `migrate` liest nur `DB_DSN`/`--db-dsn`.
-- [ ] `recipe-reader --db-dsn <dsn> migrate` wird abgelehnt, statt stillschweigend die Default-Datenbank zu migrieren (Entscheidung E11).
+- [x] `recipe-reader migrate` migriert, seedet die Lookup-Tabellen und beendet sich. Ein zweiter Aufruf ist ein No-op.
+- [x] `migrate` liest nur `DB_DSN`/`--db-dsn`.
+- [x] `recipe-reader --db-dsn <dsn> migrate` wird abgelehnt, statt stillschweigend die Default-Datenbank zu migrieren (Entscheidung E11).
 
 ### Entscheidungen
 
@@ -130,11 +130,11 @@
 
 ### Definition of Done
 
-- [ ] Alle Tasks in dieser Datei abgehakt.
-- [ ] Commit-Gate und Docker-Gate grün.
-- [ ] `cmd/recipe-reader/` enthält nur `main.go` und dessen Tests; `main.go` enthält Baum, Parsen und Dispatch; `internal/cli` enthält nur die Kommandos (E13).
-- [ ] Die Flag-Liste von `serve --help` ist identisch mit der Baseline von `--help`, abgesehen vom entfernten `--health-check`.
-- [ ] README (Commands, Configuration, Health check, Architecture) aktualisiert.
+- [x] Alle Tasks in dieser Datei abgehakt.
+- [x] Commit-Gate und Docker-Gate grün.
+- [x] `cmd/recipe-reader/` enthält nur `main.go` und dessen Tests; `main.go` enthält Baum, Parsen und Dispatch; `internal/cli` enthält nur die Kommandos (E13).
+- [x] Die Flag-Liste von `serve --help` ist identisch mit der Baseline von `--help`, abgesehen vom entfernten `--health-check`.
+- [x] README (Commands, Configuration, Health check, Architecture) aktualisiert.
 
 ### Backlog (bewusst nicht in diesem Plan)
 
@@ -257,9 +257,9 @@ Deckt ab: Z1 (Optionsgruppen), US4 und E12.
 **Ergebnis:** Das dritte Kommando ist da, und der gesamte Umbau ist end-to-end verifiziert.
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US5 sind abgehakt.
-- [ ] Die Abschluss-Verifikation ist vollständig abgehakt, einschließlich des Compose-End-to-End-Laufs mit `docker compose run --rm app migrate` im eigenen Projekt `recipe-reader-e2e`.
-- [ ] Die Definition of Done in Teil A ist abgehakt.
+- [x] Die Akzeptanzkriterien von US5 sind abgehakt.
+- [x] Die Abschluss-Verifikation ist vollständig abgehakt, einschließlich des Compose-End-to-End-Laufs mit `docker compose run --rm app migrate` im eigenen Projekt `recipe-reader-e2e`.
+- [x] Die Definition of Done in Teil A ist abgehakt.
 
 Deckt ab: US5, E9 und die Definition of Done.
 
@@ -295,10 +295,10 @@ Entschieden am 2026-09-19: **ein PR pro Milestone**, wie zuletzt im Repo üblich
 - [x] **M3: Konfiguration gruppiert**
   - [x] **Task 4:** Settings in Optionsgruppen pro Belang (M)
   - [x] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
-- [ ] **M4: `migrate` und Abschluss**
-  - [ ] **Task 5:** Kommando `migrate` (S)
-  - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
-  - [ ] **Abschluss-Verifikation**
+- [x] **M4: `migrate` und Abschluss**
+  - [x] **Task 5:** Kommando `migrate` (S)
+  - [x] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
+  - [x] **Abschluss-Verifikation**
 
 Jeder Task endet grün (Tests, Lint, Build) und ist einzeln reviewbar. Die Reihenfolge ist zwingend, weil jeder Task auf den Paketen des vorigen aufbaut.
 
@@ -2148,7 +2148,7 @@ Führt Migration und Seed aus und beendet sich. `serve` und `migrate` teilen sic
 - Consumes: `config.Database` (Task 4), `run` (`main.go`), `parse`, `clearEnv`, `unreachableDSN` (`main_test.go`; Task 3 nach E13), `testdb.NewDatabase(t, name) string`, `testdb.Main(m)`
 - Produces: `func db.Open(ctx context.Context, dsn string) (*pgxpool.Pool, error)` (der Aufrufer schließt den Pool), `type cli.MigrateCmd struct { config.Database }`, `func (c *MigrateCmd) Run(ctx context.Context) error`
 
-- [ ] **Step 1: Failing Test für `db.Open`** (an `internal/db/db_test.go` anhängen)
+- [x] **Step 1: Failing Test für `db.Open`** (an `internal/db/db_test.go` anhängen)
 
 ```go
 // Open is what serve and migrate both start with. Against an empty database it
@@ -2179,7 +2179,7 @@ func TestOpen_MigratesAndSeedsAnEmptyDatabase(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Failing Tests für `migrate`**
+- [x] **Step 2: Failing Tests für `migrate`**
 
 `cmd/recipe-reader/testmain_test.go`:
 
@@ -2246,6 +2246,9 @@ func TestParse_MigrateIgnoresServeValidation(t *testing.T) {
 	clearEnv(t)
 	t.Setenv("API_TOKEN", "")
 	t.Setenv("HTTP_ADDR", ":8080")
+	t.Setenv("IMPORT_MAX_ITEMS", "0")
+	t.Setenv("EXTRACTION_MODE", "banana")
+	t.Setenv("IMPORT_INTERVAL", "banana")
 
 	_, kctx, err := parse(t, "migrate")
 	if err != nil {
@@ -2263,12 +2266,12 @@ In `cmd/recipe-reader/main_test.go` die Tabelle von `TestParse_FlagBeforeAnother
 		{"--db-dsn", unreachableDSN, "migrate"},
 ```
 
-- [ ] **Step 3: Tests laufen lassen, sie müssen fehlschlagen**
+- [x] **Step 3: Tests laufen lassen, sie müssen fehlschlagen**
 
 Run: `go test ./internal/db/ ./cmd/recipe-reader/`
 Expected: FAIL, `undefined: db.Open`. In `cmd/recipe-reader` scheitert `parse(migrate)` mit `unexpected argument migrate`, und der neue Fall in `TestParse_FlagBeforeAnotherCommandIsRefused` scheitert mit derselben Meldung statt mit dem Hinweis „after the command name“.
 
-- [ ] **Step 4: `db.Open` implementieren** (`internal/db/connect.go`, nach `Connect`)
+- [x] **Step 4: `db.Open` implementieren** (`internal/db/connect.go`, nach `Connect`)
 
 ```go
 // Open migrates the database at dsn, connects to it and seeds the lookup
@@ -2291,7 +2294,7 @@ func Open(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 }
 ```
 
-- [ ] **Step 5: `server.Run` auf `db.Open` umstellen** (`internal/server/server.go`)
+- [x] **Step 5: `server.Run` auf `db.Open` umstellen** (`internal/server/server.go`)
 
 Ersetzen:
 
@@ -2319,7 +2322,7 @@ durch
 	defer pool.Close()
 ```
 
-- [ ] **Step 6: `MigrateCmd` anlegen und einhängen**
+- [x] **Step 6: `MigrateCmd` anlegen und einhängen**
 
 `internal/cli/migrate.go`:
 
@@ -2360,12 +2363,12 @@ In `cmd/recipe-reader/main.go` im `CLI`-Struct nach `HealthCheck` ergänzen (E13
 	Migrate     cli.MigrateCmd `cmd:"" help:"Apply pending database migrations and seed the lookup tables, then exit. serve does the same at every start."`
 ```
 
-- [ ] **Step 7: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 7: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go build ./... && go test ./internal/db/ ./cmd/recipe-reader/ ./internal/server/`
 Expected: PASS
 
-- [ ] **Step 8: README**
+- [x] **Step 8: README**
 
 In `## Commands` der Tabelle eine Zeile anfügen:
 
@@ -2375,7 +2378,7 @@ In `## Commands` der Tabelle eine Zeile anfügen:
 
 In `## Architecture` im Absatz aus Task 3: `\`healthcheck\` to \`internal/healthcheck\`.` → `\`healthcheck\` to \`internal/healthcheck\`; \`migrate\` to \`internal/db\`.`
 
-- [ ] **Step 9: Commit-Gate und Commit**
+- [x] **Step 9: Commit-Gate und Commit**
 
 ```bash
 git add -A cmd internal README.md
@@ -2386,7 +2389,7 @@ git commit -m "feat(cli): add a migrate command" -m "Runs Migrate, Connect and S
 
 ### Abschluss-Verifikation
 
-- [ ] **Step 1: Paket `main` prüfen**
+- [x] **Step 1: Paket `main` prüfen**
 
 ```bash
 ls cmd/recipe-reader/
@@ -2396,11 +2399,11 @@ go list -f '{{join .Imports " "}}' ./cmd/recipe-reader
 
 Expected (E13): `main.go` und dessen Tests (`main_test.go`, `migrate_test.go`, `testmain_test.go`); `main()` ruft nur `run()`; aus `internal/*` importiert `main.go` nur `internal/cli` und `internal/config` (für `config.Groups`).
 
-- [ ] **Step 2: Commit-Gate komplett** (siehe Global Constraints). Alles grün.
+- [x] **Step 2: Commit-Gate komplett** (siehe Global Constraints). Alles grün.
 
-- [ ] **Step 3: Docker-Gate** (siehe Global Constraints). `smoke test passed`.
+- [x] **Step 3: Docker-Gate** (siehe Global Constraints). `smoke test passed`.
 
-- [ ] **Step 4: Compose End-to-End** (im eigenen Projekt `recipe-reader-e2e`, nie im Default-Projekt)
+- [x] **Step 4: Compose End-to-End** (im eigenen Projekt `recipe-reader-e2e`, nie im Default-Projekt)
 
 Das Default-Projekt `recipe-reader` hat das Volume `db-data`, in dem echte Daten liegen können. Postgres setzt `POSTGRES_PASSWORD` nur bei der ersten Initialisierung. Mit einem frischen Zufallspasswort gegen ein bestehendes Volume scheitert die Anmeldung; der Lauf wäre rot, obwohl der Code stimmt, und liefe außerdem gegen echte Daten. Voraussetzung: Die Ports `8080` und `127.0.0.1:5432` sind frei, ein laufender eigener Stack ist also vorher gestoppt (`docker compose ls` zeigt, was läuft).
 
@@ -2416,16 +2419,16 @@ docker compose -p recipe-reader-e2e down -v
 
 `down -v` entfernt die Wegwerf-Volumes des E2E-Projekts wieder. Es auch dann ausführen, wenn ein Schritt davor scheitert.
 
-- [ ] **Step 5: Akzeptanzkriterien in Teil A abhaken** (US1–US5, Definition of Done)
+- [x] **Step 5: Akzeptanzkriterien in Teil A abhaken** (US1–US5, Definition of Done)
 
-- [ ] **Step 6: M4 und die Aufgabenliste in Teil C abhaken und diese Datei committen**
+- [x] **Step 6: M4 und die Aufgabenliste in Teil C abhaken und diese Datei committen**
 
 ```bash
 git add docs/superpowers/plans/2026-09-19-kong-cli-commands.md
 git commit -m "docs: mark M4 done in the kong CLI plan"
 ```
 
-- [ ] **Step 7: PR 4/4** (`feat(cli): add a migrate command (4/4)` auf `feat/kong-cli-migrate`) erst nach Freigabe durch den Nutzer öffnen. Die Beschreibung verweist zusätzlich auf die erfüllte Definition of Done.
+- [x] **Step 7: PR 4/4** (`feat(cli): add a migrate command (4/4)` auf `feat/kong-cli-migrate`) erst nach Freigabe durch den Nutzer öffnen. Die Beschreibung verweist zusätzlich auf die erfüllte Definition of Done.
 
 ---
 
