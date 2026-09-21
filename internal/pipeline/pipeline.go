@@ -35,6 +35,26 @@ type CategoryLister interface {
 	ListCategories(ctx context.Context) ([]domain.Category, error)
 }
 
+// ImportLock serializes import runs across processes. The scheduled worker in a
+// running server and a one-off `recipe-reader import` are two processes sharing
+// one Instagram account, and the 15-minute floor between logins lives in the
+// client — that is, in each process separately. Two runs at once would ration
+// nothing, and repeated logins are what gets an account flagged.
+//
+// It is an interface here and a Postgres advisory lock in internal/db: the
+// pipeline has no business knowing there is a database behind it.
+type ImportLock interface {
+	// TryAcquire takes the lock without waiting. ok reports whether it got it;
+	// release is valid only when ok is true and must be called when the run
+	// ends. An error means the lock could not be consulted at all.
+	TryAcquire(ctx context.Context) (release func(), ok bool, err error)
+}
+
+// ErrImportInProgress reports that another import holds the lock. For the
+// import command it is the whole outcome — exit 1, nothing done — so it is a
+// sentinel rather than a string.
+var ErrImportInProgress = errors.New("import: another import is already running")
+
 // ImportResult is the per-run tally. Seen counts every post the fetcher
 // returned; the other four partition it — Imported (stored), Skipped (already
 // present, matched by source), NoRecipe (the caption carried no recipe, so
@@ -88,6 +108,11 @@ type Pipeline struct {
 	// Threshold rather than to zero, so a partially-configured Pipeline
 	// degrades to the old behaviour instead of publishing everything.
 	PublishThreshold float64
+
+	// Lock, when set, serializes this run against every other process using the
+	// same database. Nil means unlocked, which is what the pipeline's own tests
+	// and any single-process use want.
+	Lock ImportLock
 }
 
 // Run fetches posts and imports the new ones. A failure on any single post
@@ -99,6 +124,17 @@ type Pipeline struct {
 // and discarding them would mean re-fetching them after the cooldown — more
 // requests against the endpoint that just asked for fewer.
 func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
+	if p.Lock != nil {
+		release, ok, err := p.Lock.TryAcquire(ctx)
+		if err != nil {
+			return ImportResult{}, fmt.Errorf("import: taking the import lock: %w", err)
+		}
+		if !ok {
+			return ImportResult{}, ErrImportInProgress
+		}
+		defer release()
+	}
+
 	posts, fetchErr := p.Fetcher.FetchNewPosts(ctx)
 	if fetchErr != nil && len(posts) == 0 {
 		return ImportResult{}, fmt.Errorf("%w: %w", ErrFetch, fetchErr)

@@ -72,6 +72,9 @@ func Run(ctx context.Context, cfg config.Config, version string) error {
 			Categories:       lookups,
 			Threshold:        cfg.Extraction.Threshold,
 			PublishThreshold: cfg.Extraction.PublishThreshold,
+			// The same lock the import command takes, so the two cannot run at
+			// once against one Instagram account.
+			Lock: db.ImportLock{Pool: pool},
 		}
 		worker = pipeline.NewWorker(p, cfg.Import.Interval)
 		if loginErr != nil {
