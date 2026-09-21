@@ -42,6 +42,7 @@ func Groups() []kong.Group {
 		{Key: "Extraction", Title: "Extraction"},
 		{Key: "LLM", Title: "LLM", Description: "LLM_API_KEY, and ANTHROPIC_API_KEY as its fallback for the anthropic provider, are read from the environment only."},
 		{Key: "Import", Title: "Import"},
+		{Key: "Logging", Title: "Logging", Description: "Applies to every command, and may be given before or after the command name."},
 	}
 }
 
@@ -56,6 +57,15 @@ type Listen struct {
 	// about API_TOKEN, which a probe never needs; the HTTP group's description
 	// in Groups carries that rule.
 	Addr string `name:"http-addr" env:"HTTP_ADDR" default:"127.0.0.1:8080" help:"Address the HTTP server listens on; healthcheck probes an unspecified host (\":8080\") on loopback."`
+}
+
+// Logging is how the process writes its own logs. It is a group of its own,
+// declared on the root of the command tree rather than in Config, because every
+// command logs — healthcheck and migrate included — while Config is what serve
+// takes.
+type Logging struct {
+	Level  string `name:"log-level" env:"LOG_LEVEL" default:"info" enum:"debug,info,warn,error" help:"Lowest level that is logged: debug, info, warn, error."`
+	Format string `name:"log-format" env:"LOG_FORMAT" default:"text" enum:"text,json" help:"Log output format: text for a human, json for a log collector."`
 }
 
 // HTTP is the server's listener and the access rules in front of it.

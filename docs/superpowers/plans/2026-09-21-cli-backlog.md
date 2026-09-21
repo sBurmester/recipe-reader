@@ -12,7 +12,7 @@
 
 - **Branch:** Nie auf `main` arbeiten. Jeder Milestone hat einen eigenen Branch und einen eigenen PR; die Namen stehen unter „Branches und PRs“.
 - **Kompatibilität:** Bestehende Env-Variablen-Namen, Flag-Namen und Defaults bleiben **unverändert**. Neue Flags folgen demselben Muster (`name:`, `env:`, `default:`, `help:`) und sind additiv: jedes bestehende Kommando muss ohne sie genau so laufen wie vorher.
-- **Konfigurationsdateien werden mitgepflegt:** Wer eine Env-Variable hinzufügt, trägt sie in `.env.example` nach — auskommentiert, mit dem Default als Wert und ohne echte Geheimnisse. `docker-compose.yml` wird angefasst, wo eine Änderung es verlangt.
+- **Konfigurationsdateien werden mitgepflegt:** Wer eine Env-Variable hinzufügt, trägt sie in `.env.example` nach, im Stil der Datei: unkommentiert, mit dem Default als Wert, thematisch gruppiert; Credentials stehen dort mit leerem Wert (`API_TOKEN=`). `docker-compose.yml` wird angefasst, wo eine Änderung es verlangt.
 - **Credentials:** `API_TOKEN`, `INSTAGRAM_PASSWORD`, `LLM_API_KEY` und `ANTHROPIC_API_KEY` bleiben **nur über die Umgebung** setzbar, ohne Flag-Form (`kong:"-"`).
 - **Exit-Codes:** `0` bei Erfolg, `1` bei **jedem** Fehler, auch bei Parse-Fehlern. Der Docker-`HEALTHCHECK` erwartet 0/1.
 - **Kommentarstil:** Kommentare erklären das *Warum*, nicht das *Was*; verschobener Code behält seine Kommentare wortgleich. Zeilen bis ~100 Spalten, wie im Rest des Repos.
@@ -38,6 +38,7 @@
   Assisted-by: <Modellname> (<Effort>) via Claude Code
   Co-Authored-By: <Modellname> <noreply@anthropic.com>
   ```
+  Die `git commit`-Befehle in den Task-Steps lassen diesen Footer aus Platzgründen weg; er ist trotzdem für jeden Commit Pflicht.
 - **Fortschritt:** Erledigte Steps und Tasks werden **in dieser Datei** abgehakt (`[x]`).
 
 ---
@@ -85,10 +86,10 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 - [x] `db.Open` nutzt `MigrateContext`, sodass `migrate` und `serve` beide davon profitieren; `db.Migrate(dsn)` bleibt als Kurzform bestehen (Aufrufer in `testdb` und den Tests unverändert).
 
 **US3: Betreiber will mehr oder weniger Log.** *Als Betreiber möchte ich im Fehlerfall Debug sehen und im Betrieb JSON an meinen Collector schicken.*
-- [ ] `recipe-reader --log-level debug serve` und `recipe-reader serve --log-level debug` tun dasselbe; `LOG_LEVEL` wirkt genauso.
-- [ ] `--log-format json` schreibt JSON-Records auf stderr, `text` das heutige Format.
-- [ ] Ein unbekannter Wert wird beim Parsen abgelehnt (Exit 1), nicht still auf den Default gesetzt.
-- [ ] Die Flags gelten für **jedes** Kommando, auch für `healthcheck` und `migrate`.
+- [x] `recipe-reader --log-level debug serve` und `recipe-reader serve --log-level debug` tun dasselbe; `LOG_LEVEL` wirkt genauso.
+- [x] `--log-format json` schreibt JSON-Records auf stderr, `text` das heutige Format.
+- [x] Ein unbekannter Wert wird beim Parsen abgelehnt (Exit 1), nicht still auf den Default gesetzt.
+- [x] Die Flags gelten für **jedes** Kommando, auch für `healthcheck` und `migrate`.
 
 **US4: Betreiber importiert einmalig.** *Als Betreiber möchte ich vor einem Rollout oder nach einem Restore einmal importieren, ohne den Server zu starten.*
 - [ ] `recipe-reader import` führt genau einen Importlauf aus, loggt eine Zusammenzeile mit den Zählern und endet mit 0.
@@ -133,10 +134,19 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 
 ### Backlog (bewusst nicht in diesem Plan)
 
+- **Automatisches GitHub-Release je Versions-Tag** (vom Nutzer am 2026-09-21 notiert). Ein Tag nach Semantic Versioning löst ein Release aus, das zwei Artefakte trägt: die Single-Binary und ein Image, das sich per `docker-compose` einsetzen lässt. Noch nicht geschnitten; der Plan dafür muss vier Fragen beantworten, bevor Code entsteht:
+  - **Woher kommt die Versionsnummer?** Entweder vergibt ein Werkzeug sie aus den Conventional-Commits-Präfixen, die dieses Repo ohnehin schreibt (`feat:`, `fix:`, `refactor!:`), oder ein von Hand geschobenes Tag löst das Release aus und die Automatik baut nur. Das erste nimmt Arbeit ab und bindet die Versionierung an die Commit-Disziplin; das zweite behält die Entscheidung beim Menschen. Beides ist vertretbar, aber es muss eines sein.
+  - **Wo fängt die Zählung an?** Das Repository hat **kein einziges Tag**. `git describe --tags --always --dirty` — die Quelle, aus der `Makefile` und `Dockerfile` heute `-X main.version` speisen — liefert deshalb einen nackten SHA. Das erste Tag entscheidet zugleich, ob der Stand als `v0.x` geführt wird (Breaking Changes jederzeit erlaubt) oder als `v1.0.0` (dann verpflichtet SemVer).
+  - **Welche Plattformen?** Die Binary ist mit `CGO_ENABLED=0` bereits statisch und trägt das Frontend per `go:embed` in sich, ist also von Haus aus einzeln lauffähig. Offen ist nur, für welche `GOOS`/`GOARCH`-Paare gebaut wird und ob Prüfsummen beiliegen. `-trimpath` fehlt in beiden Build-Aufrufen und gehört dazu, sobald die Binary das Haus verlässt.
+  - **Was heißt „package" für Compose?** Naheliegend ist ein Image in der GitHub Container Registry. Das ändert `docker-compose.yml`: der `app`-Service baut heute lokal (`build:` mit `VERSION`-Build-Arg), ein Release-Image würde per `image:` gezogen. Ob beides nebeneinander bestehen soll — lokal bauen für die Entwicklung, gezogenes Image für den Betrieb — ist Teil der Frage und berührt den Compose-Workflow, den die README beschreibt.
+
+  Was bereits steht und nicht neu erfunden werden muss: das Stempeln der Version über `-ldflags "-X main.version=…"` in `Makefile` und `Dockerfile`, die Ausgabe über `recipe-reader --version` und das `version`-Feld von `GET /api/healthz`, sowie `scripts/smoke-test-image.sh`, das ein gebautes Image gegen eine Wegwerf-Datenbank prüft und die exakte Versionsstempelung mit verifiziert — ein Release-Workflow kann es unverändert als Gate benutzen.
+
 - **Fehlermeldungen eindeutiger machen** (vom Nutzer am 2026-09-21 notiert). Noch nicht geschnitten: Der erste Schritt ist eine Bestandsaufnahme dessen, was ein Betreiber im Fehlerfall tatsächlich zu sehen bekommt, erst danach lässt sich sagen, ob daraus ein Task oder ein eigener Plan wird. Drei Stellen sind beim Schreiben dieses Plans aufgefallen und taugen als Einstieg:
   - `db: migrate up: context canceled` sagt nicht, was angewandt wurde. Schlimmer: ein Abbruch, der erst nach der letzten Migration eintrifft, meldet einen vollständig durchgelaufenen Lauf als Fehler (siehe den Doc-Kommentar von `migrateUp`). Die Meldung müsste sagen, dass ein erneuter Lauf gefahrlos ist und nachholt, was fehlt.
   - kong stellt der Meldung den Kommandopfad voran (`serve: config: API_TOKEN …`, R4 des Plans vom 2026-09-19). Dass der Inhalt gleich bleibt, ist geprüft; ob das Präfix einem Betreiber hilft oder im Weg steht, nie.
   - `main` loggt jeden Fehler als eine Zeile `slog.Error("fatal", "error", err)`. Die Ursache steckt damit im Attribut, während die Nachricht für alle Fehler dieselbe ist — auch für die, bei denen der Betreiber sofort wüsste, was zu tun ist.
+- **`.env.example` und `docker-compose.yml` laufen auseinander** (aus dem Milestone-Review zu M2). Der `app`-Service reicht genau die Variablen durch, die unter `environment:` stehen; ein `env_file:` gibt es nirgends. Dreizehn Einträge aus `.env.example` erreichen den Container daher nicht — `EXTRACTION_*`, `IMPORT_*`, `LLM_*`, `ANTHROPIC_MODEL`, `INSTAGRAM_SESSION_PATH` und seit M2 auch `LOG_LEVEL`/`LOG_FORMAT` —, obwohl die README-Anleitung mit `cp .env.example .env` beginnt. Das ist keine Lücke von M2, sondern die allgemeine: entweder ein `env_file:`, oder eine bewusst dokumentierte Auswahl. Wer sie schließt, beachtet, dass `${VAR:-}` die Variable **leer** setzt und kong einen leeren Wert bei einem `enum`-Flag ablehnt (`--log-level must be one of … but got ""`, am 2026-09-21 geprüft); in die Substitution gehört also der Default, nicht der leere String — und damit steht der Default an einer zweiten Stelle, die driften kann.
 
 ---
 
@@ -203,10 +213,10 @@ Abnahmekriterien:
 #### M2: Log-Flags
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US3 sind abgehakt.
-- [ ] `serve --help` zeigt die Gruppe „Logging“ mit beiden Flags und ihren Env-Namen; `healthcheck --help` und `migrate --help` ebenso.
-- [ ] `.env.example` nennt `LOG_LEVEL` und `LOG_FORMAT` mit ihren Defaults und den erlaubten Werten.
-- [ ] Keine bestehende Env-Variable wurde umbenannt.
+- [x] Die Akzeptanzkriterien von US3 sind abgehakt.
+- [x] `serve --help` zeigt die Gruppe „Logging“ mit beiden Flags und ihren Env-Namen; `healthcheck --help` und `migrate --help` ebenso.
+- [x] `.env.example` nennt `LOG_LEVEL` und `LOG_FORMAT` mit ihren Defaults und den erlaubten Werten.
+- [x] Keine bestehende Env-Variable wurde umbenannt.
 
 #### M3: Einmaliger Import
 
@@ -234,9 +244,9 @@ Abnahmekriterien:
   - [x] **Task 1:** `server.Run` drainiert auch im Fehlerfall (S)
   - [x] **Task 2:** Migrationen beachten den Kontext (S)
   - [x] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
-- [ ] **M2: Log-Flags**
-  - [ ] **Task 3:** `--log-level` und `--log-format` (M)
-  - [ ] **Milestone-Review**
+- [x] **M2: Log-Flags**
+  - [x] **Task 3:** `--log-level` und `--log-format` (M)
+  - [x] **Milestone-Review**
 - [ ] **M3: Einmaliger Import**
   - [ ] **Task 4:** Prozessübergreifende Import-Sperre (M)
   - [ ] **Task 5:** `config.ImportLimits` aus `config.Import` lösen (S)
@@ -671,7 +681,7 @@ git commit -m "feat(db): let a migration be cancelled" -m "MigrateContext wires 
 - Consumes: `config.Groups()` (Task-fremd, unverändert), `run`/`parse` aus `main.go`
 - Produces: `type config.Logging struct{ Level, Format string }`; `func logging.NewHandler(w io.Writer, level, format string) (slog.Handler, error)`; `func logging.Configure(level, format string) error`
 
-- [ ] **Step 1: Failing Test für den Handler** (`internal/logging/logging_test.go`)
+- [x] **Step 1: Failing Test für den Handler** (`internal/logging/logging_test.go`)
 
 ```go
 package logging_test
@@ -687,6 +697,9 @@ import (
 	"github.com/sBurmester/recipe-reader/internal/logging"
 )
 
+// A collector reads the json format as newline-delimited JSON: one record per
+// line, each line an object of its own. Two records, so that a handler which
+// ran them together into one stream fails here and not in the collector.
 func TestNewHandler_JSONWritesOneObjectPerRecord(t *testing.T) {
 	var buf bytes.Buffer
 	h, err := logging.NewHandler(&buf, "info", "json")
@@ -694,17 +707,25 @@ func TestNewHandler_JSONWritesOneObjectPerRecord(t *testing.T) {
 		t.Fatalf("NewHandler() error = %v", err)
 	}
 
-	slog.New(h).Info("hello", "count", 3)
+	logger := slog.New(h)
+	logger.Info("hello", "count", 3)
+	logger.Warn("world")
 
-	var record map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
-		t.Fatalf("output is not one JSON object: %v (%q)", err, buf.String())
+	lines := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("output is %d lines, want one per record:\n%s", len(lines), buf.String())
 	}
-	if record["msg"] != "hello" {
-		t.Errorf("msg = %v, want hello", record["msg"])
+	records := make([]map[string]any, len(lines))
+	for i, line := range lines {
+		if err := json.Unmarshal([]byte(line), &records[i]); err != nil {
+			t.Fatalf("line %d is not a JSON object: %v (%q)", i+1, err, line)
+		}
 	}
-	if record["level"] != "INFO" {
-		t.Errorf("level = %v, want INFO", record["level"])
+	if records[0]["msg"] != "hello" || records[0]["level"] != "INFO" {
+		t.Errorf("first record = %v, want msg hello at level INFO", records[0])
+	}
+	if records[1]["msg"] != "world" || records[1]["level"] != "WARN" {
+		t.Errorf("second record = %v, want msg world at level WARN", records[1])
 	}
 }
 
@@ -737,6 +758,17 @@ func TestNewHandler_LevelSilencesWhatIsBelowIt(t *testing.T) {
 	if !h.Enabled(context.Background(), slog.LevelError) {
 		t.Error("Enabled(Error) = false at level warn, want true")
 	}
+
+	logger := slog.New(h)
+	logger.Info("hello")
+	if got := buf.String(); got != "" {
+		t.Errorf("output after Info at level warn = %q, want empty", got)
+	}
+
+	logger.Error("world")
+	if got := buf.String(); got == "" {
+		t.Error("output after Error at level warn = \"\", want a record")
+	}
 }
 
 func TestNewHandler_RejectsWhatItCannotBuild(t *testing.T) {
@@ -755,12 +787,12 @@ func TestNewHandler_RejectsWhatItCannotBuild(t *testing.T) {
 
 (`encoding/json/v2` ist ab Go 1.27 in der Standardbibliothek und in diesem Paket neu, also ohne Mischung mit v1.)
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test ./internal/logging/`
 Expected: FAIL, das Paket existiert noch nicht.
 
-- [ ] **Step 3: `internal/logging/logging.go` anlegen**
+- [x] **Step 3: `internal/logging/logging.go` anlegen**
 
 ```go
 // Package logging builds the process-wide slog handler from the --log-level
@@ -823,12 +855,12 @@ func Configure(level, format string) error {
 }
 ```
 
-- [ ] **Step 4: Test laufen lassen, er muss grün sein**
+- [x] **Step 4: Test laufen lassen, er muss grün sein**
 
 Run: `go test ./internal/logging/`
 Expected: PASS
 
-- [ ] **Step 5: Die Gruppe in `internal/config/config.go` deklarieren**
+- [x] **Step 5: Die Gruppe in `internal/config/config.go` deklarieren**
 
 Nach der `Listen`-Gruppe einfügen:
 
@@ -849,7 +881,7 @@ In `Groups()` als letzten Eintrag ergänzen:
 		{Key: "Logging", Title: "Logging", Description: "Applies to every command, and may be given before or after the command name."},
 ```
 
-- [ ] **Step 6: Failing Parse-Tests** (an `cmd/recipe-reader/main_test.go` anhängen)
+- [x] **Step 6: Failing Parse-Tests** (an `cmd/recipe-reader/main_test.go` anhängen)
 
 ```go
 // The log flags sit on the root of the tree, so they are the one kind of flag
@@ -880,12 +912,12 @@ func TestParse_RejectsAnUnknownLogLevel(t *testing.T) {
 }
 ```
 
-- [ ] **Step 7: Tests laufen lassen, sie müssen fehlschlagen**
+- [x] **Step 7: Tests laufen lassen, sie müssen fehlschlagen**
 
 Run: `go test -count=1 -run 'TestParse_LogFlags|TestParse_RejectsAnUnknownLogLevel' ./cmd/recipe-reader/`
-Expected: FAIL, `unknown flag --log-level`
+Expected: FAIL. Der erste Test liest `root.Logging`, das es noch nicht gibt, also scheitert schon die Übersetzung (`root.Logging undefined`) und nicht erst kong mit `unknown flag --log-level`. Rot ist rot; wer die Meldung erwartet und die andere bekommt, hat trotzdem den Beweis, dass der Test ohne Step 8 nicht durchläuft.
 
-- [ ] **Step 8: `main.go` umstellen**
+- [x] **Step 8: `main.go` umstellen**
 
 Im `CLI`-Struct vor `Version` einfügen:
 
@@ -913,7 +945,7 @@ In `run`, zwischen `parser.Parse` und `kctx.Run()`:
 
 Den Import `"github.com/sBurmester/recipe-reader/internal/logging"` ergänzen (alphabetisch nach `.../internal/config`).
 
-- [ ] **Step 9: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 9: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go build ./... && go test -count=1 -race ./cmd/recipe-reader/ ./internal/config/ ./internal/logging/`
 Expected: PASS
@@ -923,27 +955,28 @@ Zusätzlich von Hand prüfen:
 ```bash
 go run ./cmd/recipe-reader serve --help | grep -A3 'Logging'
 go run ./cmd/recipe-reader healthcheck --help | grep -c 'log-level'   # 1
-LOG_FORMAT=json go run ./cmd/recipe-reader --db-dsn 'postgres://nobody@127.0.0.1:1/nope' migrate 2>&1 | tail -1
+LOG_FORMAT=json go run ./cmd/recipe-reader migrate --db-dsn 'postgres://nobody@127.0.0.1:1/nope' 2>&1 | tail -2
 ```
 
-Die letzte Zeile muss ein JSON-Record sein — der Beleg, dass `Configure` vor dem Kommando greift.
+Die Fehlerzeile muss ein JSON-Record sein — der Beleg, dass `Configure` vor dem Kommando greift. `tail -2`, weil `go run` bei einem Exit-Status ungleich null noch eine eigene Zeile anhängt; gegen eine gebaute Binary reicht `tail -1`.
 
-- [ ] **Step 10: README und `.env.example`**
+Das `--db-dsn` steht **hinter** dem Kommandonamen, und das ist keine Stilfrage: davor wäre es genau die Fehlstellung, die `rejectMisplacedFlags` nach E11 des Vorgängerplans ablehnt. Der Lauf stürbe dann schon im Parsen und läge damit vor `logging.Configure` — die Ausgabe wäre Text, und die Prüfung würde das Gegenteil dessen belegen, wofür sie da ist. Wer sie scheitern sieht, korrigiert den Aufruf und nicht den Guard.
+
+- [x] **Step 10: README und `.env.example`**
 
 In `## Configuration` die neue Gruppe dokumentieren, im Stil der bestehenden Tabellen: `LOG_LEVEL` (`--log-level`, Default `info`, Werte `debug,info,warn,error`) und `LOG_FORMAT` (`--log-format`, Default `text`, Werte `text,json`), mit dem Hinweis, dass beide für jedes Kommando gelten und vor oder hinter dem Kommandonamen stehen dürfen.
 
-In `.env.example` die beiden Variablen nachtragen, im Stil der Datei (auskommentiert, Default als Wert):
+In `.env.example` die beiden Variablen nachtragen. Die Datei führt jede Variable **unkommentiert** mit ihrem Default und gruppiert sie thematisch durch Leerzeilen; ein Kommentar steht nur dort, wo ein Wert eine Erklärung braucht (siehe `DB_DSN`). Als eigener Block ans Ende, weil Logging keine der bestehenden Gruppen ist:
 
 ```dotenv
-# Lowest level that is logged: debug, info, warn, error.
-#LOG_LEVEL=info
-# Log output format: text for a human, json for a log collector.
-#LOG_FORMAT=text
+# Applies to every command. Levels: debug, info, warn, error. Formats: text, json.
+LOG_LEVEL=info
+LOG_FORMAT=text
 ```
 
 Vor dem Bearbeiten den aktuellen Stand ansehen, damit Reihenfolge und Kommentarstil passen: `cat .env.example`.
 
-- [ ] **Step 11: Commit-Gate und Commit**
+- [x] **Step 11: Commit-Gate und Commit**
 
 ```bash
 git add cmd internal README.md .env.example

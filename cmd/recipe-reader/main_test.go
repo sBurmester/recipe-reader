@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -332,8 +333,8 @@ func TestDescription_NamesEveryCredential(t *testing.T) {
 	}
 }
 
-// serveHelp returns what `recipe-reader serve --help` prints.
-func serveHelp(t *testing.T) string {
+// commandHelp returns what `recipe-reader <command> --help` prints.
+func commandHelp(t *testing.T, command string) string {
 	t.Helper()
 	clearEnv(t)
 	var out bytes.Buffer
@@ -343,19 +344,19 @@ func serveHelp(t *testing.T) string {
 		if err != nil {
 			t.Fatalf("newParser() error = %v", err)
 		}
-		_, _ = parser.Parse([]string{"serve", "--help"})
+		_, _ = parser.Parse([]string{command, "--help"})
 	})
 	if !exited {
-		t.Fatal("serve --help did not exit")
+		t.Fatalf("%s --help did not exit", command)
 	}
 	return out.String()
 }
 
-// serve takes some twenty flags. Grouped by concern, --help reads as the six
+// serve takes some twenty flags. Grouped by concern, --help reads as the seven
 // things an operator configures rather than one alphabetical wall.
 func TestHelp_ServeGroupsFlagsByConcern(t *testing.T) {
-	help := serveHelp(t)
-	for _, group := range []string{"HTTP", "Database", "Instagram", "Extraction", "LLM", "Import"} {
+	help := commandHelp(t, "serve")
+	for _, group := range []string{"Logging", "HTTP", "Database", "Instagram", "Extraction", "LLM", "Import"} {
 		if !strings.Contains(help, "\n"+group+"\n") {
 			t.Errorf("serve --help has no %q group:\n%s", group, help)
 		}
@@ -367,10 +368,88 @@ func TestHelp_ServeGroupsFlagsByConcern(t *testing.T) {
 // their own, the credentials are named in the description of the group each
 // belongs to instead (E12).
 func TestHelp_ServeNamesEveryCredential(t *testing.T) {
-	help := serveHelp(t)
+	help := commandHelp(t, "serve")
 	for _, env := range credentialEnvs {
 		if !strings.Contains(help, env) {
 			t.Errorf("serve --help does not mention %s:\n%s", env, help)
 		}
+	}
+}
+
+// The log flags sit on the root of the tree, so they are the one kind of flag
+// that may precede a command name: rejectMisplacedFlags allows the root's own
+// flags everywhere, and an operator typing `recipe-reader --log-level debug
+// migrate` is doing the obvious thing.
+func TestParse_LogFlagsAreAllowedBeforeTheCommand(t *testing.T) {
+	clearEnv(t)
+
+	root, kctx, err := parse(t, "--log-level", "debug", "--log-format", "json", "migrate")
+	if err != nil {
+		t.Fatalf("parse() error = %v, want the root flags accepted before the command", err)
+	}
+	if got := kctx.Command(); got != "migrate" {
+		t.Errorf("Command() = %q, want migrate", got)
+	}
+	if root.Logging.Level != "debug" || root.Logging.Format != "json" {
+		t.Errorf("Logging = %+v, want debug/json", root.Logging)
+	}
+}
+
+func TestParse_RejectsAnUnknownLogLevel(t *testing.T) {
+	clearEnv(t)
+
+	if _, _, err := parse(t, "--log-level", "banana", "migrate"); err == nil {
+		t.Fatal("parse(--log-level banana) = nil error, want the enum to reject it")
+	}
+}
+
+// The two flags sit on the root of the tree, so the Logging group belongs in
+// every command's help, not just serve's. healthcheck is the one that would
+// lose it unnoticed: its flag set is deliberately minimal — config.Listen
+// exists so that it sees the address and nothing else — so it has no group of
+// its own to drag the heading in.
+func TestHelp_EveryCommandShowsTheLoggingGroup(t *testing.T) {
+	for _, command := range []string{"serve", "healthcheck", "migrate"} {
+		t.Run(command, func(t *testing.T) {
+			help := commandHelp(t, command)
+			if !strings.Contains(help, "\nLogging\n") {
+				t.Errorf("%s --help has no Logging group:\n%s", command, help)
+			}
+			for _, flag := range []string{"--log-level", "--log-format", "$LOG_LEVEL", "$LOG_FORMAT"} {
+				if !strings.Contains(help, flag) {
+					t.Errorf("%s --help does not name %s:\n%s", command, flag, help)
+				}
+			}
+		})
+	}
+}
+
+// The one line the two flags exist for is logging.Configure in run: without it
+// they parse and change nothing, and the parse tests above would not notice.
+// healthcheck against a live test server is the cheapest command line that
+// runs to completion, and slog's default afterwards is what run installed.
+//
+// run replaces that default process-wide and does not restore it, which is
+// harmless for every other test in this package (none reads a log line) but
+// not for this one's successors, so it is restored here.
+func TestRun_InstallsTheLoggerFromTheParsedFlags(t *testing.T) {
+	clearEnv(t)
+	defer slog.SetDefault(slog.Default())
+
+	srv := httptest.NewServer(api.NewRouter(api.Deps{}, api.Security{}))
+	defer srv.Close()
+
+	args := []string{"--log-level", "debug", "--log-format", "json",
+		"healthcheck", "--http-addr", srv.Listener.Addr().String()}
+	if err := run(args); err != nil {
+		t.Fatalf("run(healthcheck) error = %v, want nil against a healthy server", err)
+	}
+
+	handler := slog.Default().Handler()
+	if !handler.Enabled(context.Background(), slog.LevelDebug) {
+		t.Error("the default logger drops debug records after run(--log-level debug)")
+	}
+	if _, ok := handler.(*slog.JSONHandler); !ok {
+		t.Errorf("the default handler is %T after run(--log-format json), want JSON", handler)
 	}
 }
