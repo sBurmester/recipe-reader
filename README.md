@@ -40,6 +40,7 @@ default: it runs when no command is named and takes its flags without one, so `r
 | --- | --- |
 | `serve` (default) | Runs the HTTP API, the embedded frontend and the background import worker. Takes every setting under [Configuration](#configuration). |
 | `healthcheck` | Probes the server already listening on `HTTP_ADDR` and exits 0 if `/api/healthz` answers ok, 1 otherwise. Reads `HTTP_ADDR` and nothing else. |
+| `migrate` | Applies pending migrations and seeds the lookup tables, then exits: ahead of a rollout, or after a restore. `serve` does the same at every start. Reads `DB_DSN` and nothing else. With compose: `docker compose run --rm app migrate`. |
 
 `recipe-reader --help` lists the commands; `recipe-reader <command> --help` lists a command's flags
 and the environment variable behind each. `--version` works with or without a command. Flags go
@@ -579,8 +580,8 @@ tree and parses the command line against it, refusing a flag placed before a com
 belong to; `main` turns any failure into one log line and exit status 1. The commands themselves
 live in `internal/cli`, one type per command whose fields are its flags, and each command's `Run`
 delegates at once: `serve` to `internal/server`, the composition root that wires database,
-extraction, Instagram, import worker and HTTP API; `healthcheck` to `internal/healthcheck`. The
-settings are declared and validated in `internal/config`.
+extraction, Instagram, import worker and HTTP API; `healthcheck` to `internal/healthcheck`;
+`migrate` to `internal/db`. The settings are declared and validated in `internal/config`.
 
 See
 [the implementation plan](docs/superpowers/plans/2026-09-05-recipe-reader-implementation.md)

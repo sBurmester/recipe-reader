@@ -72,6 +72,25 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
+// Open migrates the database at dsn, connects to it and seeds the lookup
+// tables — everything a process needs before it can use the database. serve
+// and migrate both start with it, so the order is written down once. The
+// caller closes the pool.
+func Open(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+	if err := Migrate(dsn); err != nil {
+		return nil, err
+	}
+	pool, err := Connect(ctx, dsn)
+	if err != nil {
+		return nil, err
+	}
+	if err := Seed(ctx, pool); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return pool, nil
+}
+
 // applyPoolDefaults fills in the pool settings dsn did not name. ParseConfig
 // has already substituted pgxpool's defaults for those, and the two are
 // indistinguishable afterwards — hence the second look at the DSN rather than a

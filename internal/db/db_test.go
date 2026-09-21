@@ -65,3 +65,30 @@ func TestTestDBNew_ResetsRowsAndSequences(t *testing.T) {
 		t.Errorf("first id after reset = %d, want 1 (sequence not restarted)", id)
 	}
 }
+
+// Open is what serve and migrate both start with. Against an empty database it
+// has to leave the schema migrated and the lookup tables seeded, and a second
+// call — the next boot — has to change nothing.
+func TestOpen_MigratesAndSeedsAnEmptyDatabase(t *testing.T) {
+	ctx := context.Background()
+	dsn := testdb.NewDatabase(t, "open_test")
+
+	counts := make([]int, 2)
+	for i := range counts {
+		pool, err := db.Open(ctx, dsn)
+		if err != nil {
+			t.Fatalf("Open() #%d error = %v", i+1, err)
+		}
+		err = pool.QueryRow(ctx, "SELECT COUNT(*) FROM units").Scan(&counts[i])
+		pool.Close()
+		if err != nil {
+			t.Fatalf("count units after Open() #%d: %v", i+1, err)
+		}
+	}
+	if counts[0] == 0 {
+		t.Error("Open() left the units table empty")
+	}
+	if counts[1] != counts[0] {
+		t.Errorf("second Open() changed the seeded units: %d -> %d", counts[0], counts[1])
+	}
+}
