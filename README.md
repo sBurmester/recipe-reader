@@ -443,7 +443,9 @@ them.
 
 Restore before the app starts. On first start the app runs migrations and seeds the lookup
 tables, and the restore would then collide with the tables and rows it created. The restored `schema_migrations`
-table leaves the app nothing to migrate, and the ID sequences carry on from where they were.
+table leaves the app nothing to migrate, and the ID sequences carry on from where they were. If the
+dump predates a migration, `docker compose run --rm app migrate` applies the missing ones before the
+app starts; against an up-to-date dump it changes nothing.
 
 ### Health check
 
