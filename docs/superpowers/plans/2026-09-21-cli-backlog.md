@@ -131,6 +131,13 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 - [ ] README aktualisiert: Commands (`import`), Configuration (Logging-Gruppe), Architecture.
 - [ ] Der Backlog-Abschnitt im Plan vom 2026-09-19 verweist auf diesen Plan.
 
+### Backlog (bewusst nicht in diesem Plan)
+
+- **Fehlermeldungen eindeutiger machen** (vom Nutzer am 2026-09-21 notiert). Noch nicht geschnitten: Der erste Schritt ist eine Bestandsaufnahme dessen, was ein Betreiber im Fehlerfall tatsächlich zu sehen bekommt, erst danach lässt sich sagen, ob daraus ein Task oder ein eigener Plan wird. Drei Stellen sind beim Schreiben dieses Plans aufgefallen und taugen als Einstieg:
+  - `db: migrate up: context canceled` sagt nicht, was angewandt wurde. Schlimmer: ein Abbruch, der erst nach der letzten Migration eintrifft, meldet einen vollständig durchgelaufenen Lauf als Fehler (siehe den Doc-Kommentar von `migrateUp`). Die Meldung müsste sagen, dass ein erneuter Lauf gefahrlos ist und nachholt, was fehlt.
+  - kong stellt der Meldung den Kommandopfad voran (`serve: config: API_TOKEN …`, R4 des Plans vom 2026-09-19). Dass der Inhalt gleich bleibt, ist geprüft; ob das Präfix einem Betreiber hilft oder im Weg steht, nie.
+  - `main` loggt jeden Fehler als eine Zeile `slog.Error("fatal", "error", err)`. Die Ursache steckt damit im Attribut, während die Nachricht für alle Fehler dieselbe ist — auch für die, bei denen der Betreiber sofort wüsste, was zu tun ist.
+
 ---
 
 ## Teil B: Zielbild
