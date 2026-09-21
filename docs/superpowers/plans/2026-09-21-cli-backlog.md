@@ -75,14 +75,14 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 ### User Stories & Akzeptanzkriterien
 
 **US1: Betreiber startet auf einem belegten Port.** *Als Betreiber möchte ich, dass ein Fehlstart nichts im Hintergrund weiterlaufen lässt.*
-- [ ] `server.Run` gibt den Fehler von `ListenAndServe` zurück, nachdem es seine eigene Kontextkopie abgebrochen und auf die Shutdown-Goroutine gewartet hat.
-- [ ] Der Import-Zeitplan startet erst, wenn der HTTP-Server gebaut ist; scheitert `newHTTPServer`, wurde nie ein Worker gestartet.
-- [ ] Der Absatz im Doc-Kommentar von `Run`, der das alte Verhalten beschreibt, ist entfernt.
+- [x] `server.Run` gibt den Fehler von `ListenAndServe` zurück, nachdem es seine eigene Kontextkopie abgebrochen und auf die Shutdown-Goroutine gewartet hat.
+- [x] Der Import-Zeitplan startet erst, wenn der HTTP-Server gebaut ist; scheitert `newHTTPServer`, wurde nie ein Worker gestartet.
+- [x] Der Absatz im Doc-Kommentar von `Run`, der das alte Verhalten beschreibt, ist entfernt.
 
 **US2: Betreiber bricht eine Migration ab.** *Als Betreiber möchte ich `recipe-reader migrate` mit Ctrl-C abbrechen können, ohne dass mir „fertig“ gemeldet wird.*
-- [ ] `db.MigrateContext(ctx, dsn)` bricht zwischen zwei Migrationen ab, wenn `ctx` abgebrochen wird, und meldet den Abbruch als Fehler.
-- [ ] Ein bereits abgebrochener Kontext wendet **keine** Migration an.
-- [ ] `db.Open` nutzt `MigrateContext`, sodass `migrate` und `serve` beide davon profitieren; `db.Migrate(dsn)` bleibt als Kurzform bestehen (Aufrufer in `testdb` und den Tests unverändert).
+- [x] `db.MigrateContext(ctx, dsn)` bricht zwischen zwei Migrationen ab, wenn `ctx` abgebrochen wird, und meldet den Abbruch als Fehler.
+- [x] Ein bereits abgebrochener Kontext wendet **keine** Migration an.
+- [x] `db.Open` nutzt `MigrateContext`, sodass `migrate` und `serve` beide davon profitieren; `db.Migrate(dsn)` bleibt als Kurzform bestehen (Aufrufer in `testdb` und den Tests unverändert).
 
 **US3: Betreiber will mehr oder weniger Log.** *Als Betreiber möchte ich im Fehlerfall Debug sehen und im Betrieb JSON an meinen Collector schicken.*
 - [ ] `recipe-reader --log-level debug serve` und `recipe-reader serve --log-level debug` tun dasselbe; `LOG_LEVEL` wirkt genauso.
@@ -189,9 +189,9 @@ Jeder Milestone endet in einem releasefähigen Stand und bekommt einen eigenen P
 #### M1: Laufzeit-Härtung
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US1 und US2 sind abgehakt.
-- [ ] `go test -count=1 -race ./internal/server/ ./internal/db/` ist grün.
-- [ ] Das Docker-Gate ist grün (das Image wird unverändert gebaut und smoke-getestet).
+- [x] Die Akzeptanzkriterien von US1 und US2 sind abgehakt.
+- [x] `go test -count=1 -race ./internal/server/ ./internal/db/` ist grün.
+- [x] Das Docker-Gate ist grün (das Image wird unverändert gebaut und smoke-getestet).
 
 #### M2: Log-Flags
 
@@ -223,10 +223,10 @@ Abnahmekriterien:
 
 ### Aufgabenliste
 
-- [ ] **M1: Laufzeit-Härtung**
-  - [ ] **Task 1:** `server.Run` drainiert auch im Fehlerfall (S)
-  - [ ] **Task 2:** Migrationen beachten den Kontext (S)
-  - [ ] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
+- [x] **M1: Laufzeit-Härtung**
+  - [x] **Task 1:** `server.Run` drainiert auch im Fehlerfall (S)
+  - [x] **Task 2:** Migrationen beachten den Kontext (S)
+  - [x] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
 - [ ] **M2: Log-Flags**
   - [ ] **Task 3:** `--log-level` und `--log-format` (M)
   - [ ] **Milestone-Review**
@@ -255,7 +255,7 @@ Heute kehrt `Run` bei einem Listen-Fehler sofort zurück und lässt die Shutdown
 - Consumes: `db.Open` (unverändert), `pipeline.Worker` (unverändert)
 - Produces: `func server.Run(ctx context.Context, cfg config.Config, version string) error` — Signatur unverändert, Zusage stärker: Bei jedem Rückgabeweg sind die Goroutinen, die `Run` gestartet hat, zurückgekehrt.
 
-- [ ] **Step 1: Failing Test schreiben** (an `internal/server/run_test.go` anhängen)
+- [x] **Step 1: Failing Test schreiben** (an `internal/server/run_test.go` anhängen)
 
 Der Kontext ist `t.Context()` und nicht `context.WithCancel(context.Background())`: `go fix ./...` — laut Global Constraints Pflicht vor jedem Commit — schreibt die zweite Form in Tests automatisch in die erste um. Wer sie „zurückkorrigiert", bekommt sie beim nächsten Gate-Lauf wieder. `t.Context()` wird erst abgebrochen, wenn die Testfunktion zurückkehrt, also nach der Zählung; für diesen Test ist das dasselbe wie ein nie abgebrochener Kontext.
 
@@ -310,12 +310,12 @@ func TestRun_ListenFailureLeavesNoWorkBehind(t *testing.T) {
 
 Die Imports `net`, `runtime` und `time` in `run_test.go` ergänzen, falls sie fehlen.
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test -count=1 -run TestRun_ListenFailureLeavesNoWorkBehind ./internal/server/`
 Expected: FAIL mit „Run() returned with 1 goroutines still running above the N it started with“ — die Shutdown-Goroutine hängt an `<-ctx.Done()`.
 
-- [ ] **Step 3: `Run` umbauen** (`internal/server/server.go`)
+- [x] **Step 3: `Run` umbauen** (`internal/server/server.go`)
 
 Den Doc-Kommentar ersetzen. Alt:
 
@@ -396,12 +396,12 @@ Neu:
 	return nil
 ```
 
-- [ ] **Step 4: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 4: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go test -count=1 -race ./internal/server/`
 Expected: PASS, `TestRun_ServesUntilCancelledThenReturnsNil` eingeschlossen.
 
-- [ ] **Step 5: Commit-Gate und Commit**
+- [x] **Step 5: Commit-Gate und Commit**
 
 ```bash
 git add internal/server
@@ -425,7 +425,7 @@ git commit -m "fix(server): drain before returning a failed start" -m "Run works
 - Consumes: `newMigrate` (unverändert, paketintern)
 - Produces: `func db.MigrateContext(ctx context.Context, dsn string) error`; `func db.Migrate(dsn string) error` bleibt bestehen und ruft `MigrateContext(context.Background(), dsn)`.
 
-- [ ] **Step 1: Failing Test schreiben** (an `internal/db/db_test.go` anhängen)
+- [x] **Step 1: Failing Test schreiben** (an `internal/db/db_test.go` anhängen)
 
 ```go
 // Up has no context parameter, so a cancelled migrate used to be noticed only
@@ -524,12 +524,12 @@ func TestMigrateUp_GracefulStopIsReportedAsCancellation(t *testing.T) {
 
 Die Imports `errors`, `context` und `github.com/jackc/pgx/v5/pgxpool` in `db_test.go` ergänzen, falls sie fehlen.
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test -count=1 -run TestMigrateContext ./internal/db/`
 Expected: FAIL, `undefined: db.MigrateContext`
 
-- [ ] **Step 3: `MigrateContext` implementieren** (`internal/db/connect.go`)
+- [x] **Step 3: `MigrateContext` implementieren** (`internal/db/connect.go`)
 
 `Migrate` ersetzen durch:
 
@@ -622,7 +622,7 @@ func migrateUp(ctx context.Context, open func() (migrator, error)) error {
 }
 ```
 
-- [ ] **Step 4: `Open` auf `MigrateContext` umstellen** (`internal/db/connect.go`)
+- [x] **Step 4: `Open` auf `MigrateContext` umstellen** (`internal/db/connect.go`)
 
 In `Open` ersetzen:
 
@@ -636,12 +636,12 @@ durch
 	if err := MigrateContext(ctx, dsn); err != nil {
 ```
 
-- [ ] **Step 5: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 5: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go test -count=1 -race ./internal/db/ ./internal/server/ ./cmd/recipe-reader/`
 Expected: PASS. `TestOpen_MigratesAndSeedsAnEmptyDatabase` und `TestRun_MigrateMigratesAndSeedsAnEmptyDatabase` decken den nicht abgebrochenen Weg ab.
 
-- [ ] **Step 6: Commit-Gate und Commit**
+- [x] **Step 6: Commit-Gate und Commit**
 
 ```bash
 git add internal/db
