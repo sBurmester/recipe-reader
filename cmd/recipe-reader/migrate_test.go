@@ -43,6 +43,9 @@ func TestParse_MigrateIgnoresServeValidation(t *testing.T) {
 	clearEnv(t)
 	t.Setenv("API_TOKEN", "")
 	t.Setenv("HTTP_ADDR", ":8080")
+	t.Setenv("IMPORT_MAX_ITEMS", "0")
+	t.Setenv("EXTRACTION_MODE", "banana")
+	t.Setenv("IMPORT_INTERVAL", "banana")
 
 	_, kctx, err := parse(t, "migrate")
 	if err != nil {
