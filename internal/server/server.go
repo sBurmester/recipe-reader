@@ -24,13 +24,16 @@ import (
 // running import before it returns. version is logged at startup and reported
 // by GET /api/healthz.
 //
-// An error return skips that drain. If the HTTP server cannot be built or
-// cannot listen, Run returns at once with the pool closed, while the import
-// schedule it may already have started keeps running under ctx, and so does
-// the goroutine waiting to shut the server down. Both stop when ctx is
-// cancelled, so a caller that carries on after an error rather than exiting
-// cancels ctx first.
+// An error returns the same way: Run works on its own cancellable copy of ctx,
+// so whatever it started is stopped and waited for before it returns. A caller
+// that carries on after an error rather than exiting is left with nothing of
+// Run's still running.
 func Run(ctx context.Context, cfg config.Config, version string) error {
+	// Run's own handle on cancellation: the caller's ctx still stops it, and a
+	// failure below can stop it too, without reaching back into the caller's.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Before anything external: a misconfigured extraction mode is a startup
 	// error, and reporting it after a database migration has already run buries
 	// it under whatever that says instead.
@@ -77,12 +80,17 @@ func Run(ctx context.Context, cfg config.Config, version string) error {
 			// failure — it is the one error that reaches Status without a run.
 			worker.RecordFailure(fmt.Errorf("%w at startup; the next import retries it: %w", pipeline.ErrLogin, loginErr))
 		}
-		worker.Start(ctx)
 	}
 
 	srv, err := newHTTPServer(cfg, api.Deps{Recipes: recipes, Lookups: lookups, Worker: worker, Version: version})
 	if err != nil {
 		return err
+	}
+
+	// Started only now: a server that cannot be built is a startup failure, and
+	// a schedule started before it would be work nobody is going to serve.
+	if worker != nil {
+		worker.Start(ctx)
 	}
 
 	// Shutdown runs on cancellation; Run waits for it to finish draining before
@@ -111,6 +119,11 @@ func Run(ctx context.Context, cfg config.Config, version string) error {
 
 	slog.Info("recipe-reader listening", "addr", cfg.HTTP.Addr, "version", version)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		// The shutdown goroutine is waiting on ctx, and the schedule is running
+		// under it. Cancelling is what releases both; waiting is what makes this
+		// return mean "nothing of mine is still running".
+		cancel()
+		<-shutdownDone
 		return err
 	}
 	<-shutdownDone

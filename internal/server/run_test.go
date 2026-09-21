@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -92,4 +93,51 @@ func freeLoopbackAddr(t *testing.T) string {
 		t.Fatalf("close: %v", err)
 	}
 	return addr
+}
+
+// A failed start used to leave work behind: Run returned the listen error while
+// the shutdown goroutine sat on <-ctx.Done() and the import schedule kept
+// ticking, both under a context only the caller could cancel. Both callers
+// exited the process straight after, which is why it never showed. Nothing in
+// this test cancels the context — t.Context() ends only once the test returns —
+// so anything Run leaves running is still running while the count is taken, and
+// the goroutine count says so.
+func TestRun_ListenFailureLeavesNoWorkBehind(t *testing.T) {
+	cfg := baseConfig("rule")
+	cfg.Database.DSN = testdb.NewDatabase(t, "server_listen_fail")
+	// An account with no password: instago refuses the startup login before
+	// any request, so the worker exists without the test touching the
+	// network. Import.Interval is set because a zero one leaves the
+	// schedule unstarted, and an unstarted schedule can't leave anything
+	// behind for this test to catch.
+	cfg.Instagram.Username = "someone"
+	cfg.Instagram.SessionPath = filepath.Join(t.TempDir(), "session.json")
+	cfg.Import.Interval = time.Hour
+
+	// Hold the port so ListenAndServe cannot have it.
+	held, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = held.Close() }()
+	cfg.HTTP.Addr = held.Addr().String()
+
+	ctx := t.Context()
+
+	// Let the package's container and pool settle before counting.
+	time.Sleep(100 * time.Millisecond)
+	before := runtime.NumGoroutine()
+
+	if err := Run(ctx, cfg, "v0.0.0-test"); err == nil {
+		t.Fatal("Run() = nil, want the error from a port that is already bound")
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+	for runtime.NumGoroutine() > before {
+		if time.Now().After(deadline) {
+			t.Fatalf("Run() returned with %d goroutines still running above the %d it started with",
+				runtime.NumGoroutine()-before, before)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
