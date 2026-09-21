@@ -2428,7 +2428,7 @@ git add docs/superpowers/plans/2026-09-19-kong-cli-commands.md
 git commit -m "docs: mark M4 done in the kong CLI plan"
 ```
 
-- [ ] **Step 7: PR 4/4** (`feat(cli): add a migrate command (4/4)` auf `feat/kong-cli-migrate`) erst nach Freigabe durch den Nutzer öffnen. Die Beschreibung verweist zusätzlich auf die erfüllte Definition of Done.
+- [x] **Step 7: PR 4/4** (`feat(cli): add a migrate command (4/4)` auf `feat/kong-cli-migrate`) erst nach Freigabe durch den Nutzer öffnen. Die Beschreibung verweist zusätzlich auf die erfüllte Definition of Done.
 
 ---
 
