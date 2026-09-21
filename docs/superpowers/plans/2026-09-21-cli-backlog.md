@@ -86,10 +86,10 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 - [x] `db.Open` nutzt `MigrateContext`, sodass `migrate` und `serve` beide davon profitieren; `db.Migrate(dsn)` bleibt als Kurzform bestehen (Aufrufer in `testdb` und den Tests unverändert).
 
 **US3: Betreiber will mehr oder weniger Log.** *Als Betreiber möchte ich im Fehlerfall Debug sehen und im Betrieb JSON an meinen Collector schicken.*
-- [ ] `recipe-reader --log-level debug serve` und `recipe-reader serve --log-level debug` tun dasselbe; `LOG_LEVEL` wirkt genauso.
-- [ ] `--log-format json` schreibt JSON-Records auf stderr, `text` das heutige Format.
-- [ ] Ein unbekannter Wert wird beim Parsen abgelehnt (Exit 1), nicht still auf den Default gesetzt.
-- [ ] Die Flags gelten für **jedes** Kommando, auch für `healthcheck` und `migrate`.
+- [x] `recipe-reader --log-level debug serve` und `recipe-reader serve --log-level debug` tun dasselbe; `LOG_LEVEL` wirkt genauso.
+- [x] `--log-format json` schreibt JSON-Records auf stderr, `text` das heutige Format.
+- [x] Ein unbekannter Wert wird beim Parsen abgelehnt (Exit 1), nicht still auf den Default gesetzt.
+- [x] Die Flags gelten für **jedes** Kommando, auch für `healthcheck` und `migrate`.
 
 **US4: Betreiber importiert einmalig.** *Als Betreiber möchte ich vor einem Rollout oder nach einem Restore einmal importieren, ohne den Server zu starten.*
 - [ ] `recipe-reader import` führt genau einen Importlauf aus, loggt eine Zusammenzeile mit den Zählern und endet mit 0.
@@ -213,10 +213,10 @@ Abnahmekriterien:
 #### M2: Log-Flags
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US3 sind abgehakt.
-- [ ] `serve --help` zeigt die Gruppe „Logging“ mit beiden Flags und ihren Env-Namen; `healthcheck --help` und `migrate --help` ebenso.
-- [ ] `.env.example` nennt `LOG_LEVEL` und `LOG_FORMAT` mit ihren Defaults und den erlaubten Werten.
-- [ ] Keine bestehende Env-Variable wurde umbenannt.
+- [x] Die Akzeptanzkriterien von US3 sind abgehakt.
+- [x] `serve --help` zeigt die Gruppe „Logging“ mit beiden Flags und ihren Env-Namen; `healthcheck --help` und `migrate --help` ebenso.
+- [x] `.env.example` nennt `LOG_LEVEL` und `LOG_FORMAT` mit ihren Defaults und den erlaubten Werten.
+- [x] Keine bestehende Env-Variable wurde umbenannt.
 
 #### M3: Einmaliger Import
 
@@ -244,9 +244,9 @@ Abnahmekriterien:
   - [x] **Task 1:** `server.Run` drainiert auch im Fehlerfall (S)
   - [x] **Task 2:** Migrationen beachten den Kontext (S)
   - [x] **Milestone-Review:** Review durch einen neuen Subagent; Befunde von einem weiteren Subagent bewertet und abgearbeitet
-- [ ] **M2: Log-Flags**
-  - [ ] **Task 3:** `--log-level` und `--log-format` (M)
-  - [ ] **Milestone-Review**
+- [x] **M2: Log-Flags**
+  - [x] **Task 3:** `--log-level` und `--log-format` (M)
+  - [x] **Milestone-Review**
 - [ ] **M3: Einmaliger Import**
   - [ ] **Task 4:** Prozessübergreifende Import-Sperre (M)
   - [ ] **Task 5:** `config.ImportLimits` aus `config.Import` lösen (S)
@@ -681,7 +681,7 @@ git commit -m "feat(db): let a migration be cancelled" -m "MigrateContext wires 
 - Consumes: `config.Groups()` (Task-fremd, unverändert), `run`/`parse` aus `main.go`
 - Produces: `type config.Logging struct{ Level, Format string }`; `func logging.NewHandler(w io.Writer, level, format string) (slog.Handler, error)`; `func logging.Configure(level, format string) error`
 
-- [ ] **Step 1: Failing Test für den Handler** (`internal/logging/logging_test.go`)
+- [x] **Step 1: Failing Test für den Handler** (`internal/logging/logging_test.go`)
 
 ```go
 package logging_test
@@ -787,12 +787,12 @@ func TestNewHandler_RejectsWhatItCannotBuild(t *testing.T) {
 
 (`encoding/json/v2` ist ab Go 1.27 in der Standardbibliothek und in diesem Paket neu, also ohne Mischung mit v1.)
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test ./internal/logging/`
 Expected: FAIL, das Paket existiert noch nicht.
 
-- [ ] **Step 3: `internal/logging/logging.go` anlegen**
+- [x] **Step 3: `internal/logging/logging.go` anlegen**
 
 ```go
 // Package logging builds the process-wide slog handler from the --log-level
@@ -855,12 +855,12 @@ func Configure(level, format string) error {
 }
 ```
 
-- [ ] **Step 4: Test laufen lassen, er muss grün sein**
+- [x] **Step 4: Test laufen lassen, er muss grün sein**
 
 Run: `go test ./internal/logging/`
 Expected: PASS
 
-- [ ] **Step 5: Die Gruppe in `internal/config/config.go` deklarieren**
+- [x] **Step 5: Die Gruppe in `internal/config/config.go` deklarieren**
 
 Nach der `Listen`-Gruppe einfügen:
 
@@ -881,7 +881,7 @@ In `Groups()` als letzten Eintrag ergänzen:
 		{Key: "Logging", Title: "Logging", Description: "Applies to every command, and may be given before or after the command name."},
 ```
 
-- [ ] **Step 6: Failing Parse-Tests** (an `cmd/recipe-reader/main_test.go` anhängen)
+- [x] **Step 6: Failing Parse-Tests** (an `cmd/recipe-reader/main_test.go` anhängen)
 
 ```go
 // The log flags sit on the root of the tree, so they are the one kind of flag
@@ -912,12 +912,12 @@ func TestParse_RejectsAnUnknownLogLevel(t *testing.T) {
 }
 ```
 
-- [ ] **Step 7: Tests laufen lassen, sie müssen fehlschlagen**
+- [x] **Step 7: Tests laufen lassen, sie müssen fehlschlagen**
 
 Run: `go test -count=1 -run 'TestParse_LogFlags|TestParse_RejectsAnUnknownLogLevel' ./cmd/recipe-reader/`
 Expected: FAIL. Der erste Test liest `root.Logging`, das es noch nicht gibt, also scheitert schon die Übersetzung (`root.Logging undefined`) und nicht erst kong mit `unknown flag --log-level`. Rot ist rot; wer die Meldung erwartet und die andere bekommt, hat trotzdem den Beweis, dass der Test ohne Step 8 nicht durchläuft.
 
-- [ ] **Step 8: `main.go` umstellen**
+- [x] **Step 8: `main.go` umstellen**
 
 Im `CLI`-Struct vor `Version` einfügen:
 
@@ -945,7 +945,7 @@ In `run`, zwischen `parser.Parse` und `kctx.Run()`:
 
 Den Import `"github.com/sBurmester/recipe-reader/internal/logging"` ergänzen (alphabetisch nach `.../internal/config`).
 
-- [ ] **Step 9: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 9: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go build ./... && go test -count=1 -race ./cmd/recipe-reader/ ./internal/config/ ./internal/logging/`
 Expected: PASS
@@ -962,7 +962,7 @@ Die Fehlerzeile muss ein JSON-Record sein — der Beleg, dass `Configure` vor de
 
 Das `--db-dsn` steht **hinter** dem Kommandonamen, und das ist keine Stilfrage: davor wäre es genau die Fehlstellung, die `rejectMisplacedFlags` nach E11 des Vorgängerplans ablehnt. Der Lauf stürbe dann schon im Parsen und läge damit vor `logging.Configure` — die Ausgabe wäre Text, und die Prüfung würde das Gegenteil dessen belegen, wofür sie da ist. Wer sie scheitern sieht, korrigiert den Aufruf und nicht den Guard.
 
-- [ ] **Step 10: README und `.env.example`**
+- [x] **Step 10: README und `.env.example`**
 
 In `## Configuration` die neue Gruppe dokumentieren, im Stil der bestehenden Tabellen: `LOG_LEVEL` (`--log-level`, Default `info`, Werte `debug,info,warn,error`) und `LOG_FORMAT` (`--log-format`, Default `text`, Werte `text,json`), mit dem Hinweis, dass beide für jedes Kommando gelten und vor oder hinter dem Kommandonamen stehen dürfen.
 
@@ -976,7 +976,7 @@ LOG_FORMAT=text
 
 Vor dem Bearbeiten den aktuellen Stand ansehen, damit Reihenfolge und Kommentarstil passen: `cat .env.example`.
 
-- [ ] **Step 11: Commit-Gate und Commit**
+- [x] **Step 11: Commit-Gate und Commit**
 
 ```bash
 git add cmd internal README.md .env.example
