@@ -38,6 +38,7 @@
   Assisted-by: <Modellname> (<Effort>) via Claude Code
   Co-Authored-By: <Modellname> <noreply@anthropic.com>
   ```
+  Die `git commit`-Befehle in den Task-Steps lassen diesen Footer aus Platzgründen weg; er ist trotzdem für jeden Commit Pflicht.
 - **Fortschritt:** Erledigte Steps und Tasks werden **in dieser Datei** abgehakt (`[x]`).
 
 ---
@@ -736,6 +737,17 @@ func TestNewHandler_LevelSilencesWhatIsBelowIt(t *testing.T) {
 	}
 	if !h.Enabled(context.Background(), slog.LevelError) {
 		t.Error("Enabled(Error) = false at level warn, want true")
+	}
+
+	logger := slog.New(h)
+	logger.Info("hello")
+	if got := buf.String(); got != "" {
+		t.Errorf("output after Info at level warn = %q, want empty", got)
+	}
+
+	logger.Error("world")
+	if got := buf.String(); got == "" {
+		t.Error("output after Error at level warn = \"\", want a record")
 	}
 }
 

@@ -351,11 +351,11 @@ func serveHelp(t *testing.T) string {
 	return out.String()
 }
 
-// serve takes some twenty flags. Grouped by concern, --help reads as the six
+// serve takes some twenty flags. Grouped by concern, --help reads as the seven
 // things an operator configures rather than one alphabetical wall.
 func TestHelp_ServeGroupsFlagsByConcern(t *testing.T) {
 	help := serveHelp(t)
-	for _, group := range []string{"HTTP", "Database", "Instagram", "Extraction", "LLM", "Import"} {
+	for _, group := range []string{"Logging", "HTTP", "Database", "Instagram", "Extraction", "LLM", "Import"} {
 		if !strings.Contains(help, "\n"+group+"\n") {
 			t.Errorf("serve --help has no %q group:\n%s", group, help)
 		}
@@ -372,5 +372,32 @@ func TestHelp_ServeNamesEveryCredential(t *testing.T) {
 		if !strings.Contains(help, env) {
 			t.Errorf("serve --help does not mention %s:\n%s", env, help)
 		}
+	}
+}
+
+// The log flags sit on the root of the tree, so they are the one kind of flag
+// that may precede a command name: rejectMisplacedFlags allows the root's own
+// flags everywhere, and an operator typing `recipe-reader --log-level debug
+// migrate` is doing the obvious thing.
+func TestParse_LogFlagsAreAllowedBeforeTheCommand(t *testing.T) {
+	clearEnv(t)
+
+	root, kctx, err := parse(t, "--log-level", "debug", "--log-format", "json", "migrate")
+	if err != nil {
+		t.Fatalf("parse() error = %v, want the root flags accepted before the command", err)
+	}
+	if got := kctx.Command(); got != "migrate" {
+		t.Errorf("Command() = %q, want migrate", got)
+	}
+	if root.Logging.Level != "debug" || root.Logging.Format != "json" {
+		t.Errorf("Logging = %+v, want debug/json", root.Logging)
+	}
+}
+
+func TestParse_RejectsAnUnknownLogLevel(t *testing.T) {
+	clearEnv(t)
+
+	if _, _, err := parse(t, "--log-level", "banana", "migrate"); err == nil {
+		t.Fatal("parse(--log-level banana) = nil error, want the enum to reject it")
 	}
 }

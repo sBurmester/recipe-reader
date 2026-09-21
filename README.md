@@ -59,7 +59,7 @@ updating.
 Configuration is handled by [kong](https://github.com/alecthomas/kong): settings can be supplied as
 a command-line flag or an environment variable, with flags taking precedence over the environment
 and the environment over the built-in defaults. Run `recipe-reader serve --help` for the full list,
-grouped as HTTP, Database, Instagram, Extraction, LLM and Import.
+grouped as HTTP, Database, Instagram, Extraction, LLM, Import and Logging.
 See `.env.example` for the environment-variable names and their defaults.
 
 **Credentials are environment-only.** `API_TOKEN`, `INSTAGRAM_PASSWORD`, `LLM_API_KEY` and
@@ -67,6 +67,20 @@ See `.env.example` for the environment-variable names and their defaults.
 on the host through `ps`, and lands in shell history. `recipe-reader --help` names them in its
 description, and `recipe-reader serve --help` in the description of the group each belongs to,
 since there is no flag entry to list them under.
+
+**Logging is configured for every command.** The two settings sit on the root of the command tree
+rather than on `serve`, so they apply to `healthcheck` and `migrate` too, and they are the one kind
+of flag that may be given *before* the command name: `recipe-reader --log-level debug migrate` and
+`recipe-reader migrate --log-level debug` are the same command. Logs go to stderr.
+
+| Setting | Flag | Default | Values |
+| --- | --- | --- | --- |
+| `LOG_LEVEL` | `--log-level` | `info` | `debug`, `info`, `warn`, `error` |
+| `LOG_FORMAT` | `--log-format` | `text` | `text` for a human, `json` for a log collector |
+
+The handler is installed once the command line has been parsed, since that is when the two values
+are known. A command line that is itself rejected is therefore reported in the default text format —
+one line, and then the process is over.
 
 **Values that parse but cannot be meant are refused at startup**, with one line rather than a stack
 trace or a silent substitution:

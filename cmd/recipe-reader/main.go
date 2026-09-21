@@ -16,6 +16,7 @@ import (
 
 	"github.com/sBurmester/recipe-reader/internal/cli"
 	"github.com/sBurmester/recipe-reader/internal/config"
+	"github.com/sBurmester/recipe-reader/internal/logging"
 )
 
 // version identifies this build. It is stamped at link time — the Makefile and
@@ -35,6 +36,10 @@ var version = "dev"
 // ("withargs"), so `recipe-reader` and `recipe-reader --http-addr ...` start
 // the server exactly as they did before there were commands.
 type CLI struct {
+	// Logging applies to every command, so it sits on the root rather than in
+	// any one command's flags.
+	Logging config.Logging `embed:"" group:"Logging"`
+
 	// Version is kong's --version flag: it prints the version stamped at link
 	// time and exits before any command runs. It has no env tag, so a VERSION
 	// variable in a .env file cannot trigger it.
@@ -90,6 +95,12 @@ func run(args []string, opts ...kong.Option) error {
 	}
 	kctx, err := parser.Parse(args)
 	if err != nil {
+		return err
+	}
+	// After Parse, because the flags that say how to log are only known once
+	// they are parsed. A command line kong rejects is therefore still reported
+	// in the default format — one line, and then the process is over.
+	if err := logging.Configure(root.Logging.Level, root.Logging.Format); err != nil {
 		return err
 	}
 	return kctx.Run()
