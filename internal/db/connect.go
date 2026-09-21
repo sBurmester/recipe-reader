@@ -166,6 +166,16 @@ type migrator interface {
 // gracefulMigrator adapts *migrate.Migrate to migrator. GracefulStop is
 // buffered with room for one (migrate.go:185) and read between migrations, so
 // the send never blocks and at most one ever happens.
+//
+// This one statement is deliberately the uncovered line of the cancellation
+// path. Reaching it from a test needs a migration slow enough to interrupt,
+// and golang-migrate reads and writes its isGracefulStop flag from two
+// goroutines without synchronization (migrate.go:71, :549, :726, :816), so a
+// test that drove the real migrator to a graceful stop would be liable to
+// report a race inside the dependency rather than a bug here. In production
+// that race is harmless — the buffered channel is the authoritative signal,
+// and a stale read costs at most one further migration before the stop takes.
+// migrate_test.go's fake stands in for this instead.
 type gracefulMigrator struct{ *migrate.Migrate }
 
 func (g gracefulMigrator) Stop() { g.GracefulStop <- true }
@@ -176,6 +186,13 @@ func (g gracefulMigrator) Stop() { g.GracefulStop <- true }
 // two migrations, and the last one reports it — a stopped Up returns nil rather
 // than an error, so without it a cancelled, partly applied run would look like
 // a successful one.
+//
+// That last guard is deliberately blunt: a cancellation arriving while the
+// final migration runs, or after Up has already returned, reports a run that
+// in fact applied everything as a failure. golang-migrate keeps its
+// isGracefulStop flag unexported and offers no way to ask whether the stop
+// actually took, so the two cases cannot be told apart from here. Re-running
+// is the remedy — ErrNoChange makes the retry a success.
 //
 // open is a parameter rather than a package-level variable so a test can hand
 // in a fake migrator without the package growing mutable state to swap.

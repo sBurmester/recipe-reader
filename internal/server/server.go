@@ -27,7 +27,9 @@ import (
 // An error returns the same way: Run works on its own cancellable copy of ctx,
 // so whatever it started is stopped and waited for before it returns. A caller
 // that carries on after an error rather than exiting is left with nothing of
-// Run's still running.
+// Run's still running — with one logged exception: if the ten-second shutdown
+// budget runs out, the import is abandoned rather than waited for, and Run
+// returns while it is still going.
 func Run(ctx context.Context, cfg config.Config, version string) error {
 	// Run's own handle on cancellation: the caller's ctx still stops it, and a
 	// failure below can stop it too, without reaching back into the caller's.
@@ -100,8 +102,11 @@ func Run(ctx context.Context, cfg config.Config, version string) error {
 	go func() {
 		defer close(shutdownDone)
 		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+		// Named apart from Run's own cancel above, which the listen-error path
+		// depends on: an edit in here that means "stop the run" must not reach
+		// for this one by accident.
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancelShutdown()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			slog.Error("graceful shutdown failed", "error", err)
 		}

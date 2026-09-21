@@ -119,7 +119,7 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 | --- | --- | --- |
 | R1 | `pg_advisory_unlock` scheitert und die Verbindung geht mit gehaltenem Lock zurück in den Pool | Der Adapter nimmt die Verbindung in dem Fall per `Hijack` aus dem Pool und schließt sie; Postgres gibt den Lock mit der Session frei. Der Fall wird geloggt. |
 | R2 | `golang-migrate` verhält sich anders als angenommen | Am 2026-09-21 gegen v4.19.1 geprüft: `GracefulStop` ist gepuffert (`make(chan bool, 1)`, `migrate.go:185`), `stop()` liest ihn zwischen den Migrationen (`migrate.go:815-828`), und ein gestopptes `Up()` gibt **`nil`** zurück. Deshalb prüft `MigrateContext` nach `Up()` zusätzlich `ctx.Err()` — sonst sähe ein abgebrochener Lauf wie ein erfolgreicher aus. |
-| R3 | Der Goroutine-Test in Task 1 wird flaky | Er vergleicht nur mit seiner eigenen Grundlinie, pollt mit großzügiger Frist und läuft in einem Paket, dessen Container `TestMain` schon gestartet hat. Wird er trotzdem unruhig, hier anhalten und melden, statt die Frist immer weiter hochzudrehen. |
+| R3 | Der Goroutine-Test in Task 1 wird flaky | Er vergleicht nur mit seiner eigenen Grundlinie und pollt mit großzügiger Frist (15 s). Nicht Teil der Gegenmaßnahme: `testdb.Main` startet den Container **nicht** — der kommt beim ersten `New` über `shared.once.Do(start)` hoch, also innerhalb des Tests. Deshalb liegt der 100-ms-Settle zwischen diesem `NewDatabase` und der Grundlinie. Wird der Test trotzdem unruhig, hier anhalten und melden, statt die Frist immer weiter hochzudrehen. |
 | R4 | Der Lock serialisiert mehr als gewollt (z. B. zwei Deployments gegen dieselbe Datenbank) | Genau das ist die Absicht: Der Lock hängt an der Datenbank, und zwei Prozesse an derselben Datenbank sind genau der Fall, den D1 verhindern soll. |
 
 ### Definition of Done
@@ -165,6 +165,7 @@ internal/pipeline/
   lock_test.go             # neu
 internal/db/
   connect.go               # + MigrateContext; Migrate delegiert; Open nutzt es
+  migrate_test.go          # neu: treibt das paketinterne migrateUp mit einem Fake
   lock.go                  # neu: ImportLock (Adapter)
   lock_test.go             # neu
 internal/config/
@@ -341,7 +342,9 @@ Neu:
 // An error returns the same way: Run works on its own cancellable copy of ctx,
 // so whatever it started is stopped and waited for before it returns. A caller
 // that carries on after an error rather than exiting is left with nothing of
-// Run's still running.
+// Run's still running — with one logged exception: if the ten-second shutdown
+// budget runs out, the import is abandoned rather than waited for, and Run
+// returns while it is still going.
 ```
 
 Am Anfang des Rumpfes, direkt vor `newExtractor`, die eigene Kontextkopie einziehen:
@@ -416,6 +419,7 @@ git commit -m "fix(server): drain before returning a failed start" -m "Run works
 **Files:**
 - Modify: `internal/db/connect.go` (+ `MigrateContext`, `Migrate` delegiert, `Open` nutzt es)
 - Modify: `internal/db/db_test.go` (+ `TestMigrateContext_CancelledContextAppliesNothing`)
+- Create: `internal/db/migrate_test.go` (Paket `db`: der Fake und `TestMigrateUp_GracefulStopIsReportedAsCancellation` — `migrateUp` ist paketintern und aus `db_test` nicht erreichbar)
 
 **Interfaces:**
 - Consumes: `newMigrate` (unverändert, paketintern)
@@ -565,6 +569,16 @@ type migrator interface {
 // gracefulMigrator adapts *migrate.Migrate to migrator. GracefulStop is
 // buffered with room for one (migrate.go:185) and read between migrations, so
 // the send never blocks and at most one ever happens.
+//
+// This one statement is deliberately the uncovered line of the cancellation
+// path. Reaching it from a test needs a migration slow enough to interrupt,
+// and golang-migrate reads and writes its isGracefulStop flag from two
+// goroutines without synchronization (migrate.go:71, :549, :726, :816), so a
+// test that drove the real migrator to a graceful stop would be liable to
+// report a race inside the dependency rather than a bug here. In production
+// that race is harmless — the buffered channel is the authoritative signal,
+// and a stale read costs at most one further migration before the stop takes.
+// migrate_test.go's fake stands in for this instead.
 type gracefulMigrator struct{ *migrate.Migrate }
 
 func (g gracefulMigrator) Stop() { g.GracefulStop <- true }
@@ -575,6 +589,13 @@ func (g gracefulMigrator) Stop() { g.GracefulStop <- true }
 // two migrations, and the last one reports it — a stopped Up returns nil rather
 // than an error, so without it a cancelled, partly applied run would look like
 // a successful one.
+//
+// That last guard is deliberately blunt: a cancellation arriving while the
+// final migration runs, or after Up has already returned, reports a run that
+// in fact applied everything as a failure. golang-migrate keeps its
+// isGracefulStop flag unexported and offers no way to ask whether the stop
+// actually took, so the two cases cannot be told apart from here. Re-running
+// is the remedy — ErrNoChange makes the retry a success.
 //
 // open is a parameter rather than a package-level variable so a test can hand
 // in a fake migrator without the package growing mutable state to swap.
