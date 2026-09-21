@@ -1,9 +1,34 @@
 name: CI
 
+# Changes that cannot affect what the jobs below assert do not start them. The
+# backend job alone boots several Postgres containers, so a plan or a README
+# edit used to cost real minutes and a queue slot to prove nothing.
+#
+# paths-ignore skips a run only when *every* changed file matches, so a commit
+# that touches code and its README still runs in full. The repository has no
+# required status checks (branch protection is unavailable on this plan), so a
+# skipped run leaves nothing pending and blocks no merge.
+#
+# The workflow file ignores itself: a change to it is therefore merged without
+# ever having run. workflow_dispatch below is the way back in — run it by hand
+# from the Actions tab after a non-trivial edit, or put the edit on a branch
+# that also touches code.
+#
+# The two lists are duplicated because GitHub Actions does not expand YAML
+# anchors; keep them in step.
 on:
+  workflow_dispatch:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".github/workflows/**"
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".github/workflows/**"
 
 # Least privilege: no job here writes to the repository.
 permissions:
