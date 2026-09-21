@@ -1,7 +1,8 @@
-// Package server is the composition root of the long-running process: it
-// migrates and seeds the database, wires the extraction engine, the Instagram
-// client, the import worker and the HTTP API together, and serves until its
-// context is cancelled.
+// Package server is the composition root of the import and of the process that
+// serves it: it migrates and seeds the database, wires the extraction engine,
+// the Instagram client, the import worker and the HTTP API together, and serves
+// until its context is cancelled. ImportOnce composes the same import without
+// the server, for the one-off command.
 package server
 
 import (

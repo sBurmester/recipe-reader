@@ -48,6 +48,7 @@ type CLI struct {
 	Serve       cli.ServeCmd       `cmd:"" default:"withargs" help:"Run the HTTP server and the background import worker. The default command."`
 	HealthCheck cli.HealthCheckCmd `cmd:"" name:"healthcheck" help:"Probe the server already listening on HTTP_ADDR; exit 0 if /api/healthz answers ok, 1 otherwise. For container health checks."`
 	Migrate     cli.MigrateCmd     `cmd:"" help:"Apply pending database migrations and seed the lookup tables, then exit. serve does the same at every start."`
+	Import      cli.ImportCmd      `cmd:"" help:"Run one import of new saved posts and exit. serve does the same every IMPORT_INTERVAL; this does it now, without starting the server."`
 }
 
 // Validate is a kong hook on the root of the tree, so every parser newParser
