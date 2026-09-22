@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Die vier Einträge im Backlog von `docs/superpowers/plans/2026-09-21-cli-backlog.md` abarbeiten: der Shutdown von `serve` bekommt seine obere Schranke zurück, `.env.example` erreicht den Container, zwei irreführende Fehlermeldungen werden eindeutig, und ein Tag nach Semantic Versioning erzeugt automatisch ein GitHub-Release mit Single-Binary und Container-Image.
+**Goal:** Die vier Einträge im Backlog von `docs/superpowers/plans/2026-09-21-cli-backlog.md` abarbeiten — der Shutdown von `serve` bekommt seine obere Schranke zurück, `.env.example` erreicht den Container, zwei irreführende Fehlermeldungen werden eindeutig, und ein Tag nach Semantic Versioning erzeugt automatisch ein GitHub-Release mit Single-Binary und Container-Image — und danach die Abhängigkeiten unter Aufsicht stellen: Renovate aktualisiert Go-Module, GitHub Actions und Docker-Images, letztere beide auf Digest gepinnt.
 
-**Architecture:** Drei kleine Korrekturen am bestehenden Code gehen voraus, die Release-Automatik kommt zuletzt — so trägt das erste Release `v0.1.0` einen Stand, den man veröffentlichen will, und sein Changelog die drei Korrekturen. Der Advisory-Lock wandert von einer geliehenen Pool-Verbindung auf eine eigene `pgx.Connect`-Verbindung, damit `pool.Close()` nicht mehr auf ihn wartet. Die Release-Automatik besteht aus zwei getrennten Workflows: `release-please` schlägt Version und Changelog vor und legt beim Merge Tag und Release an, ein zweiter Workflow hängt beim `published`-Ereignis die Artefakte an.
+**Architecture:** Drei kleine Korrekturen am bestehenden Code gehen voraus, die Release-Automatik folgt — so trägt das erste Release `v0.1.0` einen Stand, den man veröffentlichen will, und sein Changelog die drei Korrekturen. Der Advisory-Lock wandert von einer geliehenen Pool-Verbindung auf eine eigene `pgx.Connect`-Verbindung, damit `pool.Close()` nicht mehr auf ihn wartet. Die Release-Automatik besteht aus zwei getrennten Workflows: `release-please` schlägt Version und Changelog vor und legt beim Merge Tag und Release an, ein zweiter Workflow hängt beim `published`-Ereignis die Artefakte an. Renovate kommt zuletzt, weil es die Workflows pinnen soll, die die Release-Automatik erst anlegt; es läuft selbst als Workflow in diesem Repository, nicht als fremd gehostete App.
 
-**Tech Stack:** Go 1.27.1, pgx/v5, `github.com/alecthomas/kong` v1.16.1, Docker Compose 5.5.1, GitHub Actions (`googleapis/release-please-action@v5`, `docker/login-action@v4`, `docker/build-push-action@v7`), GitHub Container Registry. **Keine neue Go-Abhängigkeit.**
+**Tech Stack:** Go 1.27.1, pgx/v5, `github.com/alecthomas/kong` v1.16.1, Docker Compose 5.5.1, GitHub Actions (`googleapis/release-please-action@v5`, `docker/login-action@v4`, `docker/build-push-action@v7`, `renovatebot/github-action@v46`), GitHub Container Registry. **Keine neue Go-Abhängigkeit.**
 
 ## Global Constraints
 
@@ -34,6 +34,7 @@
   ```
   Erwartet: `smoke test passed: recipe-reader:ci (smoke)`
 - **CI-Ausnahme:** Seit PR #29 überspringt die CI Läufe, bei denen **jede** geänderte Datei auf `**.md`, `docs/**` oder `.github/workflows/**` passt. Ein Task, der nur einen Workflow ändert, wird von der CI also nicht geprüft — er wird von Hand über `workflow_dispatch` oder auf einem Branch mit Codeänderung geprüft.
+- **Gepinnte Fremdabhängigkeiten (ab M5):** Jede GitHub Action und jedes Docker-Basisimage steht mit seinem Digest da, mit dem lesbaren Tag als Kommentar dahinter (`uses: actions/checkout@<sha> # v7`). Wer eine Action oder ein Image hinzufügt, pinnt es sofort mit; Renovate hebt die Digests danach.
 - **Commit-Footer:** Jede Commit-Message endet mit
   ```
   Assisted-by: <Modellname> (<Effort>) via Claude Code
@@ -97,6 +98,12 @@ Der Plan vom 2026-09-21 ist abgeschlossen (PRs #30, #32, #33). Sein Backlog nenn
 - [ ] `docker compose pull && docker compose up -d` startet ohne lokalen Build.
 - [ ] `docker compose up --build` baut weiterhin lokal, für die Entwicklung.
 
+**US6: Entwickler hält die Abhängigkeiten aktuell, ohne sie zu suchen.**
+- [ ] Renovate läuft nach Zeitplan in diesem Repository und lässt sich von Hand anstoßen.
+- [ ] Es öffnet PRs für Go-Module, GitHub Actions und Docker-Images.
+- [ ] Jede Action und jedes Basisimage steht mit Digest im Repository, mit dem Tag als Kommentar.
+- [ ] Ein Go-Update-PR durchläuft die CI wie jeder andere Code-PR.
+
 ### Entscheidungen
 
 | # | Entscheidung | Begründung |
@@ -109,6 +116,9 @@ Der Plan vom 2026-09-21 ist abgeschlossen (PRs #30, #32, #33). Sein Backlog nenn
 | E6 | `docker-compose.yml` bekommt **`image:` und behält `build:`** | Betreiber ziehen das veröffentlichte Image (`docker compose pull`), Entwickler bauen lokal (`docker compose up --build`). Compose nimmt bei beiden Schlüsseln das lokal vorhandene Image und baut sonst — beide Arbeitsweisen bestehen nebeneinander, ohne dass eine die andere ausschließt. |
 | E7 | Zwei Workflows statt einem: `release-please.yml` und `release-artifacts.yml` | `release-please` läuft bei jedem Push auf `main` und hält einen PR offen; das Bauen der Artefakte soll genau einmal laufen, wenn das Release existiert. Ein Workflow müsste beides in einem Lauf unterscheiden. |
 | E8 | Das Changelog beginnt bei einem **`bootstrap-sha`**, nicht bei der ersten Zeile der Historie | Ohne Grenze schreibt `release-please` die gesamte Projekthistorie in das erste Changelog. Siehe R1. |
+| E9 | Renovate läuft **selbst gehostet als Workflow**, nicht als Mend-App (Nutzer, 2026-09-22) | Das Repository ist privat; eine fremd gehostete App bräuchte Lesezugriff darauf. Als Workflow bleibt alles versioniert und im Repo, und der Zeitplan liegt beim Betreiber. Preis: ein Personal Access Token als Secret, siehe R7. |
+| E10 | Das Pinnen macht **Renovate selbst**, nicht ein Task von Hand (Nutzer, 2026-09-22) | Genau dafür stehen `helpers:pinGitHubActionDigests` und `pinDigests` in `renovate.json`. Digests von Hand aufzulösen würde denselben Mechanismus ein zweites Mal bauen — und die Handarbeit wäre schon beim nächsten Update überholt. Task 10 stößt Renovate an, liest seine PRs und merged sie; überprüfbar ist das Ergebnis, nicht der Weg dorthin. |
+| E11 | M5 kommt **nach** M4 | Gepinnt werden soll auch, was M4 anlegt: `release-please.yml` und `release-artifacts.yml` bringen fünf weitere Actions mit. Andersherum müsste M4 an das Pinning denken, und M5 müsste nachbessern. |
 
 ### Risiken
 
@@ -120,6 +130,9 @@ Der Plan vom 2026-09-21 ist abgeschlossen (PRs #30, #32, #33). Sein Backlog nenn
 | R4 | `env_file` schleust unerwartete Variablen in den Container | `.env` ist die Datei des Betreibers, und alles darin ist für genau diesen Dienst gedacht. Die zusammengesetzten `environment:`-Werte gewinnen weiterhin, was Task 2 prüft. |
 | R5 | Der Workflow-Task wird von der CI nicht geprüft (CI-Ausnahme aus #29) | Die Workflows werden über `workflow_dispatch` bzw. einen echten Release-Lauf geprüft, nicht über CI. Task 7 endet mit einem echten `v0.1.0`. |
 | R6 | `pgx.Connect` ohne die Pool-Defaults bekommt kein `connect_timeout` | Der DSN, den `ImportLock` bekommt, ist derselbe wie der des Pools; enthält er `connect_timeout`, gilt es auch hier. Der Aufruf steht ohnehin unter dem Kontext des Laufs. |
+| R7 | Renovate braucht ein Token, das der Nutzer anlegen muss | Der `GITHUB_TOKEN` eines Workflows darf keine PRs öffnen, die andere Workflows auslösen. Task 9 endet mit einer ausdrücklichen Übergabe: welcher Token-Typ, welche Rechte, welcher Secret-Name. Ohne ihn läuft der Workflow, findet aber nichts zu tun — er scheitert nicht still. |
+| R8 | Renovate-PRs, die **nur** Workflows anfassen, laufen wegen der CI-Ausnahme ohne CI | Genau die Änderungen, die man geprüft haben will, sind ungeprüft. Gegenmaßnahme: Renovate fasst Action-Updates zu einem PR zusammen (`groupName`), der von Hand über `workflow_dispatch` der CI vorgelegt wird, bevor er gemergt wird. Der Hinweis steht in der README. |
+| R9 | Ein gepinntes Basisimage friert Sicherheitsupdates ein, wenn Renovate ausfällt | Heute zieht `golang:1.27-alpine` Patches beim nächsten Build von selbst — gepinnt nicht mehr. Der Zeitplan (wöchentlich) und `workflow_dispatch` sind die Gegenmaßnahme; die Kommentare im `Dockerfile`, die das alte Verhalten beschreiben, werden in Task 10 berichtigt, damit niemand sich auf etwas verlässt, das nicht mehr gilt. |
 
 ### Definition of Done
 
@@ -127,7 +140,8 @@ Der Plan vom 2026-09-21 ist abgeschlossen (PRs #30, #32, #33). Sein Backlog nenn
 - [ ] Commit-Gate grün; Docker-Gate grün für die Tasks, die das Image betreffen.
 - [ ] Die vier Backlog-Einträge im Plan vom 2026-09-21 sind als erledigt markiert oder verweisen auf diesen Plan.
 - [ ] `v0.1.0` existiert als Tag, als GitHub-Release mit Changelog und als Image in der GHCR.
-- [ ] README aktualisiert: Installation aus einem Release, Betrieb über das veröffentlichte Image, Hinweis auf `env_file`.
+- [ ] Renovate läuft und hat mindestens einen PR geöffnet; jede Action und jedes Basisimage ist auf Digest gepinnt.
+- [ ] README aktualisiert: Installation aus einem Release, Betrieb über das veröffentlichte Image, Hinweis auf `env_file`, Abschnitt zu Renovate und den gepinnten Digests.
 
 ### Backlog (bewusst nicht in diesem Plan)
 
@@ -174,6 +188,7 @@ cmd/recipe-reader/
 | **M2:** Konfiguration erreicht den Container | Task 2 | `.env` wirkt im Container | ja |
 | **M3:** Eindeutige Fehlermeldungen | Task 3, Task 4 | Abbruch und Bedienfehler sagen, was sie sind | ja |
 | **M4:** Release-Automatik | Task 5, Task 6, Task 7 | `v0.1.0` mit Binaries und Image | ja |
+| **M5:** Abhängigkeiten unter Aufsicht | Task 8, Task 9, Task 10 | Renovate hält Go, Actions und Images aktuell; Actions und Images sind auf Digest gepinnt | nein |
 
 #### M1: Shutdown-Schranke
 
@@ -197,16 +212,25 @@ Abnahmekriterien:
 
 Abnahmekriterien:
 - [ ] Die Akzeptanzkriterien von US4 und US5 sind abgehakt.
+- [ ] `v0.1.0` existiert als Tag, Release und Image.
+
+#### M5: Abhängigkeiten unter Aufsicht
+
+Abnahmekriterien:
+- [ ] Die Akzeptanzkriterien von US6 sind abgehakt.
+- [ ] `grep -rn 'uses: .*@v[0-9]' .github/workflows/` findet nichts mehr.
+- [ ] Jedes `FROM` im `Dockerfile` und jedes `image:` in `docker-compose.yml`, das nicht aus der GHCR dieses Projekts stammt, trägt einen Digest.
 - [ ] Die Definition of Done ist abgehakt.
 
 #### Branches und PRs
 
 | Milestone | Branch | PR-Titel |
 | --- | --- | --- |
-| M1 | `fix/import-lock-own-connection` | `fix(db): hold the import lock on its own connection (1/4)` |
-| M2 | `fix/compose-env-file` | `fix(compose): pass .env into the app container (2/4)` |
-| M3 | `fix/clearer-error-messages` | `fix(cli): say what a cancelled migration and a bad command line mean (3/4)` |
-| M4 | `feat/release-automation` | `feat(ci): release automatically from a version tag (4/4)` |
+| M1 | `fix/import-lock-own-connection` | `fix(db): hold the import lock on its own connection (1/5)` |
+| M2 | `fix/compose-env-file` | `fix(compose): pass .env into the app container (2/5)` |
+| M3 | `fix/clearer-error-messages` | `fix(cli): say what a cancelled migration and a bad command line mean (3/5)` |
+| M4 | `feat/release-automation` | `feat(ci): release automatically from a version tag (4/5)` |
+| M5 | `ci/renovate` | `ci: keep dependencies updated with renovate (5/5)` |
 
 Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist. Ein PR enthält die Task-Commits seines Milestones, die Korrekturen aus dem Milestone-Review und einen letzten Commit `docs: mark M<n> done in the release plan`.
 
@@ -226,6 +250,11 @@ Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist.
   - [ ] **Task 5:** `release-please` einrichten (M)
   - [ ] **Task 6:** Binaries und Prüfsummen ans Release hängen (M)
   - [ ] **Task 7:** Image in die GHCR, Compose darauf umstellen (M)
+  - [ ] **Milestone-Review**
+- [ ] **M5: Abhängigkeiten unter Aufsicht**
+  - [ ] **Task 8:** `renovate.json` (S)
+  - [ ] **Task 9:** Renovate als Workflow (M)
+  - [ ] **Task 10:** Renovate pinnt Actions und Images (M)
   - [ ] **Milestone-Review**
   - [ ] **Abschluss-Verifikation**
 
@@ -982,6 +1011,244 @@ git commit -m "ci: publish the image to ghcr and let compose pull it" -m "compos
 
 ---
 
+### Task 8: `renovate.json`
+
+Die Konfiguration ist von der Frage unabhängig, wie Renovate läuft — sie gilt für die selbst gehostete Variante (E9) genauso wie für die App. Deshalb ein eigener Task: er lässt sich lesen und beurteilen, ohne dass ein Token existiert.
+
+**Files:**
+- Create: `renovate.json`
+
+**Interfaces:**
+- Consumes: —
+- Produces: `renovate.json` im Wurzelverzeichnis, die Datei, die Task 9 dem Lauf mitgibt.
+
+- [ ] **Step 1: `renovate.json` anlegen**
+
+```json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "timezone": "Europe/Berlin",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "go mod tidy after a module update, so go.sum matches what the PR changed instead of failing CI on the first run.",
+      "matchManagers": ["gomod"],
+      "postUpdateOptions": ["gomodTidy"]
+    },
+    {
+      "description": "Base images by digest, like the actions. The tag stays in the comment Renovate maintains, so the file still says which version it means.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "pinDigests": true
+    },
+    {
+      "description": "Action updates arrive as one pull request. CI skips a change that touches only .github/workflows (see #29), so these are read and run by hand — one pull request a week is reviewable, a dozen is not.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    },
+    {
+      "description": "This project's own image is published by its release workflow, not updated by Renovate.",
+      "matchPackageNames": ["ghcr.io/sburmester/recipe-reader"],
+      "enabled": false
+    }
+  ]
+}
+```
+
+- [ ] **Step 2: Die Datei prüfen**
+
+```bash
+python3 -c "import json;json.load(open('renovate.json'));print('json ok')"
+npx --yes --package renovate -- renovate-config-validator renovate.json
+```
+
+Erwartet: `json ok`, und der Validator meldet die Konfiguration als gültig. Der zweite Befehl lädt Renovate einmalig über `npx` — er gehört nicht ins Repository und wird nur hier ausgeführt. Meldet er einen unbekannten Schlüssel, ist das ein Befund: anhalten und melden, statt den Schlüssel zu raten.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add renovate.json
+git commit -m "ci: configure renovate" -m "Go modules, GitHub Actions and Docker images, weekly. Actions and base images are pinned to digests; action updates arrive grouped, because CI skips a pull request that touches only workflows and one grouped pull request a week can be run by hand."
+```
+
+---
+
+### Task 9: Renovate als Workflow
+
+Renovate läuft in diesem Repository statt als fremd gehostete App (E9). Der Workflow braucht ein Token, das der Nutzer anlegt — der Task endet mit dieser Übergabe, nicht mit einem grünen Lauf.
+
+**Files:**
+- Create: `.github/workflows/renovate.yml`
+- Modify: `README.md` (Abschnitt „Dependencies")
+
+**Interfaces:**
+- Consumes: `renovate.json` (Task 8)
+- Produces: einen wöchentlichen Lauf und einen von Hand auslösbaren über `workflow_dispatch`
+
+- [ ] **Step 1: `.github/workflows/renovate.yml` anlegen**
+
+```yaml
+name: Renovate
+
+# Self-hosted rather than the Mend app: this repository is private, and running
+# the bot here keeps its schedule and its configuration in the repository
+# instead of granting an outside service read access to the code.
+on:
+  schedule:
+    # Mondays, early. Renovate's own schedule in renovate.json decides what it
+    # opens; this only decides how often it looks.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: "Renovate log level"
+        required: false
+        default: "info"
+        type: choice
+        options: [info, debug]
+
+permissions:
+  contents: read
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: renovatebot/github-action@v46
+        with:
+          configurationFile: renovate.json
+          # A PAT, not the workflow's GITHUB_TOKEN: a pull request opened with
+          # GITHUB_TOKEN does not trigger other workflows, so CI would never run
+          # on a Renovate pull request — the one place its result matters.
+          token: ${{ secrets.RENOVATE_TOKEN }}
+        env:
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
+```
+
+- [ ] **Step 2: Die Workflow-Syntax prüfen**
+
+```bash
+python3 -c "import yaml;d=yaml.safe_load(open('.github/workflows/renovate.yml'));print(list(d['jobs']), list(d[True] if True in d else d['on']))"
+```
+
+Erwartet: `['renovate'] ['schedule', 'workflow_dispatch']`. Die CI prüft diesen Task nicht (CI-Ausnahme, R8), das hier ist die einzige Syntaxprüfung vor dem Merge.
+
+- [ ] **Step 3: README**
+
+Einen Abschnitt „Dependencies" ergänzen: dass Renovate wöchentlich läuft und über den Actions-Tab von Hand angestoßen werden kann, dass Actions und Basisimages auf Digest gepinnt sind und der Tag als Kommentar daneben steht, und — wegen R8 — dass ein PR, der nur Workflows anfasst, keine CI bekommt und deshalb vor dem Merge von Hand über `workflow_dispatch` gegen die CI geschickt wird.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add .github/workflows/renovate.yml README.md
+git commit -m "ci: run renovate from this repository" -m "Self-hosted rather than the Mend app: the repository is private, and this keeps the schedule and the configuration versioned here. It needs a PAT because a pull request opened with GITHUB_TOKEN triggers no other workflow, and CI on a dependency update is the whole point."
+```
+
+- [ ] **Step 5: Übergabe an den Nutzer** (nicht vom Subagent ausführbar)
+
+Der Workflow läuft erst, wenn das Secret existiert. Dem Nutzer genau das vorlegen, statt es zu umgehen:
+
+- Ein Fine-grained Personal Access Token für **dieses** Repository mit den Berechtigungen **Contents: Read and write**, **Pull requests: Read and write** und **Workflows: Read and write** (letzteres, weil Renovate die Workflow-Dateien beim Pinnen ändert).
+- Als Repository-Secret unter dem Namen `RENOVATE_TOKEN` hinterlegen.
+- Danach den Workflow einmal über den Actions-Tab (`Run workflow`) anstoßen.
+
+Ohne das Secret läuft der Workflow durch, findet aber nichts zu tun; er scheitert nicht still (R7). Diese Übergabe gehört in den Bericht **und** in die Milestone-Abnahme, damit sie nicht in der Chat-Antwort verlorengeht.
+
+---
+
+### Task 10: Renovate pinnt Actions und Images
+
+Ein Tag ist verschiebbar: `actions/checkout@v7` kann morgen auf anderen Code zeigen als heute. Ein Digest kann das nicht. Das Pinnen macht **Renovate selbst** (E10) — `helpers:pinGitHubActionDigests` und die `pinDigests`-Regel aus Task 8 sind genau dafür da. Dieser Task stößt den ersten Lauf an, liest die PRs, merged sie und prüft das Ergebnis; er löst keine Digests von Hand auf.
+
+Zwei Dinge macht Renovate **nicht**, und die bleiben Handarbeit: die Kommentare berichtigen, die das alte Verhalten beschreiben, und dafür sorgen, dass das eigene Release-Image ungepinnt bleibt.
+
+Dieser Task läuft **nach** M4, damit auch `release-please.yml` und `release-artifacts.yml` erfasst werden (E11), und er setzt voraus, dass die Übergabe aus **Task 9, Step 5** erledigt ist: ohne `RENOVATE_TOKEN` öffnet Renovate keine PRs, und dieser Task hat nichts zu tun. Ist das Secret nicht gesetzt, hier anhalten und den Nutzer erinnern, statt ersatzweise von Hand zu pinnen.
+
+**Files:**
+- Modify (durch Renovates PRs): `.github/workflows/*.yml`, `Dockerfile`, `docker-compose.yml`
+- Modify (von Hand, Step 4): `Dockerfile`, `docker-compose.yml` — nur die Kommentare
+
+**Interfaces:**
+- Consumes: `renovate.json` (Task 8), der laufende Workflow und das Secret (Task 9)
+- Produces: —
+
+- [ ] **Step 1: Renovate anstoßen**
+
+```bash
+gh workflow run renovate.yml
+sleep 30 && gh run list --workflow=renovate.yml --limit 1
+```
+
+Erwartet: ein Lauf, der grün endet. Endet er rot, die Logs lesen (`gh run view --log-failed`) und melden — ein fehlendes oder zu schwach berechtigtes Token zeigt sich hier und nicht später.
+
+- [ ] **Step 2: Die PRs lesen, bevor sie gemergt werden**
+
+```bash
+gh pr list --label dependencies --json number,title,files --jq '.[] | "\(.number)\t\(.title)"'
+```
+
+Erwartet: mindestens ein PR, der die Actions auf Digests umstellt (durch `groupName` zusammengefasst), und je einer für die Basisimages. Jeden PR ansehen und prüfen:
+
+- Die `uses:`-Zeilen tragen einen Digest **und** den Tag als Kommentar (`actions/checkout@<sha> # v7`). Fehlt der Kommentar, sagt die Datei nicht mehr, welche Version gemeint ist — dann ist die Konfiguration aus Task 8 falsch und der Task hält an.
+- Die `FROM`-Zeilen tragen `@sha256:…`.
+- Das `image:` des `app`-Service ist **nicht** angefasst: es ist das eigene Release-Image und trägt ein Versions-Tag (Task 7, die `enabled: false`-Regel aus Task 8).
+
+- [ ] **Step 3: Den Actions-PR der CI vorlegen und mergen**
+
+Ein PR, der nur `.github/workflows/**` anfasst, bekommt wegen der CI-Ausnahme aus #29 keine Prüfung (R8). Deshalb von Hand:
+
+```bash
+gh workflow run ci.yml --ref <branch-des-prs>
+gh run list --workflow=ci.yml --limit 1
+```
+
+Erst wenn dieser Lauf grün ist, den PR mergen. Die übrigen PRs (Dockerfile, Compose) fassen Code-relevante Dateien an und bekommen ihre CI von selbst.
+
+- [ ] **Step 4: Die Kommentare berichtigen**
+
+Renovate pinnt, aber es liest keine Prosa. Über den `FROM`-Zeilen im `Dockerfile` und über `postgres:` in `docker-compose.yml` steht, dass Patch-Releases von selbst ankommen — beim nächsten Build beziehungsweise mit `docker compose pull`. Das gilt nach dem Pinnen nicht mehr (R9).
+
+Die Kommentare so berichtigen, dass sie sagen, was jetzt stimmt: Der Digest friert das Image ein, Renovate hebt ihn wöchentlich, und wer schneller will, stößt `renovate.yml` von Hand an. Der Hinweis auf den Major-Wechsel von Postgres bleibt wortgleich stehen — er gilt unverändert.
+
+- [ ] **Step 5: Docker-Gate**
+
+```bash
+docker build --build-arg VERSION=smoke -t recipe-reader:ci .
+scripts/smoke-test-image.sh recipe-reader:ci smoke
+```
+
+Erwartet: `smoke test passed: recipe-reader:ci (smoke)`. Ein Digest, der nicht auf das Image zeigt, das er soll, lässt den Build sofort scheitern — deshalb ist das Gate hier die eigentliche Prüfung der gemergten PRs.
+
+- [ ] **Step 6: Prüfen, dass nichts übrig ist**
+
+```bash
+grep -rn 'uses: .*@v[0-9]' .github/workflows/ ; echo "exit=$?"
+grep -n '^FROM' Dockerfile
+grep -n 'image:' docker-compose.yml
+```
+
+Erwartet: `exit=1` aus dem `grep` (kein Treffer), jedes `FROM` mit `@sha256:`, und in Compose der gepinnte Postgres neben dem ungepinnten eigenen Image. Findet der erste Befehl etwas, hat Renovate eine Stelle nicht erfasst — die Fundstelle melden, nicht von Hand nachziehen: dann stimmt die Konfiguration nicht, und von Hand gepinnt würde derselbe Fehler beim nächsten Update wiederkehren.
+
+- [ ] **Step 7: Commit-Gate und Commit**
+
+Nur die Kommentare aus Step 4 sind noch uncommittet; das Pinnen selbst steckt in Renovates gemergten PRs.
+
+```bash
+git add Dockerfile docker-compose.yml
+git commit -m "docs: say what a pinned base image means" -m "The comments promised that patch releases arrive on their own — with the digests Renovate just pinned, they do not. Renovate raises them weekly, and renovate.yml can be run by hand when that is too slow."
+```
+
+---
+
 ### Abschluss-Verifikation
 
 - [ ] **Step 1: Commit-Gate komplett** (siehe Global Constraints). Alles grün.
@@ -1041,16 +1308,25 @@ docker compose -p recipe-reader-e2e down -v
 
 Erwartet: `pull` lädt das Image, der Stack wird `healthy`, und `--version` meldet `v0.1.0` — ohne lokalen Build. `down -v` auch dann ausführen, wenn ein Schritt davor scheitert; nie ohne `-p recipe-reader-e2e`, weil das Default-Projekt das Volume `db-data` mit echten Daten hält.
 
-- [ ] **Step 8: Akzeptanzkriterien in Teil A abhaken** (US1–US5, Definition of Done)
+- [ ] **Step 8: Renovate im Betrieb nachsehen**
 
-- [ ] **Step 9: Diese Datei abhaken und committen**
+```bash
+gh run list --workflow=renovate.yml --limit 3
+gh pr list --label dependencies --state all --limit 10 --json number,title,state --jq '.[] | "\(.number)\t\(.state)\t\(.title)"'
+```
+
+Erwartet: mindestens ein grüner Lauf und mindestens ein PR, der geöffnet und gemergt wurde — der Beleg, dass Renovate nicht nur konfiguriert ist, sondern arbeitet. Findet sich kein einziger PR, ist entweder nichts zu aktualisieren (dann sagen die Logs des Laufs das) oder das Token fehlt (R7); beides ist zu unterscheiden und zu melden, nicht als Erfolg zu verbuchen.
+
+- [ ] **Step 9: Akzeptanzkriterien in Teil A abhaken** (US1–US6, Definition of Done)
+
+- [ ] **Step 10: Diese Datei abhaken und committen**
 
 ```bash
 git add docs/superpowers/plans/
-git commit -m "docs: mark M4 done in the release plan"
+git commit -m "docs: mark M5 done in the release plan"
 ```
 
-- [ ] **Step 10: PR 4/4** erst nach Freigabe durch den Nutzer öffnen.
+- [ ] **Step 11: PR 5/5** erst nach Freigabe durch den Nutzer öffnen.
 
 ---
 
@@ -1066,3 +1342,5 @@ git commit -m "docs: mark M4 done in the release plan"
 | Offene Frage „Wo fängt die Zählung an?" | E2 — `v0.1.0` |
 | Offene Frage „Welche Plattformen?" | Task 6 — `linux/amd64`, `linux/arm64`, `darwin/arm64`, mit Prüfsummen |
 | Offene Frage „Was heißt *package* für Compose?" | E6 und Task 7 — GHCR-Image neben dem lokalen Build |
+| Renovate für Go, Actions und Docker (Nutzer, 2026-09-22) | Task 8 (Konfiguration), Task 9 (Betrieb als Workflow, E9) |
+| Actions und Docker-Abhängigkeiten auf Digest pinnen (Nutzer, 2026-09-22) | Task 8 (`helpers:pinGitHubActionDigests`, `pinDigests`), Task 10 — Renovate pinnt, der Task prüft (E10) |
