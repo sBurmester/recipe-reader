@@ -38,6 +38,17 @@ func (c *ImportCmd) Run(ctx context.Context) error {
 
 	result, err := server.ImportOnce(ctx, cfg)
 	if err != nil {
+		// A fetch that fails part-way still imports what it already collected,
+		// so a failed run can carry a real tally — and "imported nine, then
+		// throttled" is a different decision from "did nothing". Only the
+		// counts, not the error: main logs that. Seen is zero for the failures
+		// that happen before the first post — a refused lock, a failed login, a
+		// fetch that returned nothing — and those get no line.
+		if result.Seen > 0 {
+			slog.Warn("import did not finish",
+				"seen", result.Seen, "imported", result.Imported, "skipped", result.Skipped,
+				"no_recipe", result.NoRecipe, "failed", result.Failed, "degraded", result.Degraded)
+		}
 		return err
 	}
 	slog.Info("import finished",

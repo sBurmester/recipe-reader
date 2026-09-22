@@ -41,7 +41,7 @@ default: it runs when no command is named and takes its flags without one, so `r
 | `serve` (default) | Runs the HTTP API, the embedded frontend and the background import worker. Takes every setting under [Configuration](#configuration). |
 | `healthcheck` | Probes the server already listening on `HTTP_ADDR` and exits 0 if `/api/healthz` answers ok, 1 otherwise. Reads `HTTP_ADDR` and, like every command, `LOG_LEVEL` and `LOG_FORMAT` — nothing else. |
 | `migrate` | Applies pending migrations and seeds the lookup tables, then exits: ahead of a rollout, or after a restore. `serve` does the same at every start. Reads `DB_DSN` and, like every command, `LOG_LEVEL` and `LOG_FORMAT` — nothing else. With compose: `docker compose run --rm app migrate`. Ctrl-C or `SIGTERM` stops it between two migrations — the one in flight always finishes — and it then exits 1 reporting the cancellation rather than success. Re-running is safe and picks up where it left off. |
-| `import` | Runs one import of new saved posts and exits: before a rollout, after a restore, or after fixing a login. `serve` does the same every `IMPORT_INTERVAL`. Reads the database, Instagram, extraction, LLM and import-limit settings. Refuses to start while another import is running, in this process or in a server. With compose: `docker compose run --rm app import`. |
+| `import` | Runs one import of new saved posts and exits: before a rollout, after a restore, or after fixing a login. `serve` does the same every `IMPORT_INTERVAL`. Applies pending migrations and seeds the lookup tables first, exactly as `serve` and `migrate` do — so running it against the database of an older server migrates that database. Reads the database, Instagram, extraction, LLM and import-limit settings. Refuses to start while another import is running, in this process or in a server, and refuses before it logs in. With compose: `docker compose run --rm app import`. |
 
 `recipe-reader --help` lists the commands; `recipe-reader <command> --help` lists a command's flags
 and the environment variable behind each. `--version` works with or without a command. Flags go
@@ -322,9 +322,12 @@ unreachable, and each run reported `Seen: 50, Skipped: 50, Imported: 0`, which r
 Only one import runs at a time against a database. A run holds a Postgres advisory lock for its
 duration, and the background worker in a running server and `recipe-reader import` take the same
 one, so a second run is refused instead of started: the command exits 1 saying another import is
-already running. The database is the only thing the two processes reliably share — the 15-minute
-floor between logins lives in the client, so it rations nothing across processes, and repeated
-logins are what gets an account flagged. The lock is session-scoped, so Postgres frees it when the
+already running, before it logs in — the login is the cost the lock exists to avoid, so paying it
+only to then refuse would defeat the purpose. The database is the only thing the two processes
+reliably share — the 15-minute floor between logins lives in the client, so it rations nothing
+across processes, and repeated logins are what gets an account flagged. A server's worker treats a
+refusal as a run it did not make: it keeps reporting the last real tally rather than overwriting it
+with zeros. The lock is session-scoped, so Postgres frees it when the
 holder's connection ends, including when the process is killed; a lock file would be left behind.
 
 When Instagram throttles a run, the error is recognised as a rate limit rather than an ordinary 4xx:

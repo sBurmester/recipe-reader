@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/sBurmester/recipe-reader/internal/config"
 	"github.com/sBurmester/recipe-reader/internal/db"
@@ -35,6 +36,26 @@ func ImportOnce(ctx context.Context, cfg config.Config) (pipeline.ImportResult, 
 	}
 	defer pool.Close()
 
+	// Taken here, before newFetcher, and not by the Pipeline below. The lock
+	// exists to stop two processes logging into one Instagram account (D1), and
+	// the pipeline's own guard runs after the fetcher has already logged in and
+	// written the session file — so a refused run used to pay the exact cost the
+	// lock was introduced to avoid before it said no.
+	//
+	// The Pipeline built below therefore has no Lock: it would ask this pool for
+	// a second connection and Postgres would refuse this process the lock it is
+	// already holding, so the command would report itself as "another import".
+	// serve keeps the pipeline's guard — there the login happens once at
+	// startup, not per run, so the guard has nothing to get in front of.
+	release, ok, err := (db.ImportLock{Pool: pool}).TryAcquire(ctx)
+	if err != nil {
+		return pipeline.ImportResult{}, fmt.Errorf("import: taking the import lock: %w", err)
+	}
+	if !ok {
+		return pipeline.ImportResult{}, pipeline.ErrImportInProgress
+	}
+	defer release()
+
 	recipes := repository.NewRecipeRepository(pool)
 	lookups := repository.NewLookupRepository(pool)
 
@@ -54,7 +75,6 @@ func ImportOnce(ctx context.Context, cfg config.Config) (pipeline.ImportResult, 
 		Categories:       lookups,
 		Threshold:        cfg.Extraction.Threshold,
 		PublishThreshold: cfg.Extraction.PublishThreshold,
-		Lock:             db.ImportLock{Pool: pool},
 	}
 	return p.Run(ctx)
 }

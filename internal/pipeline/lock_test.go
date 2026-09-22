@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
+
+	"github.com/sBurmester/recipe-reader/internal/extraction"
+	"github.com/sBurmester/recipe-reader/internal/instagram"
 )
 
 // lockStub is an ImportLock whose answer the test chooses. The real lock is
@@ -52,5 +56,60 @@ func TestRun_LockFailureIsReported(t *testing.T) {
 
 	if _, err := p.Run(context.Background()); !errors.Is(err, wantErr) {
 		t.Fatalf("Run() error = %v, want it to wrap %v", err, wantErr)
+	}
+}
+
+// A refusal used to be recorded as a completed run: lastRun moved to now,
+// lastResult became the zero tally and lastErr the sentinel, so GET
+// /api/import/status reported a failed import with every counter at 0 and the
+// previous real tally was gone — while the import command that held the lock
+// was importing perfectly well. The worker did not run, so it must not report
+// as if it had.
+func TestWorker_RefusedLockLeavesTheLastRunUntouched(t *testing.T) {
+	post := instagram.SavedPost{Source: "src-lock", Caption: "caption-lock", ImageURL: "img-lock"}
+	extracted := &extraction.ExtractedRecipe{
+		Name:         "Pfannkuchen",
+		Instructions: "Backen.",
+		Ingredients:  []extraction.ExtractedIngredient{{Name: "Mehl", Amount: 200, Unit: "g"}},
+		Confidence:   0.9,
+	}
+	p := newTestPipeline(t,
+		&fakeFetcher{posts: []instagram.SavedPost{post}},
+		&fakeExtractor{byCaption: map[string]*extraction.ExtractedRecipe{"caption-lock": extracted}},
+	)
+	w := NewWorker(p, time.Hour)
+
+	if _, ran := w.RunOnce(context.Background()); !ran {
+		t.Fatal("RunOnce() ran = false on the first run, want a run to record")
+	}
+	before := w.Status()
+	if before.LastResult.Imported != 1 {
+		t.Fatalf("first run imported %d, want 1 — the baseline has to be a real tally",
+			before.LastResult.Imported)
+	}
+
+	p.Lock = &lockStub{ok: false}
+	result, ran := w.RunOnce(context.Background())
+
+	if ran {
+		t.Error("RunOnce() ran = true for a refused lock, want false")
+	}
+	if result != (ImportResult{}) {
+		t.Errorf("RunOnce() result = %+v for a refused lock, want the zero tally", result)
+	}
+	after := w.Status()
+	if after.LastRun != before.LastRun {
+		t.Errorf("Status().LastRun = %v after a refused lock, want the previous run's %v",
+			after.LastRun, before.LastRun)
+	}
+	if after.LastResult != before.LastResult {
+		t.Errorf("Status().LastResult = %+v after a refused lock, want the previous run's %+v",
+			after.LastResult, before.LastResult)
+	}
+	if after.LastErr != nil {
+		t.Errorf("Status().LastErr = %v after a refused lock, want nil — nothing failed", after.LastErr)
+	}
+	if after.Running {
+		t.Error("Status().Running = true after a refused lock, want false")
 	}
 }

@@ -105,7 +105,7 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 
 | # | Entscheidung | Begründung |
 | --- | --- | --- |
-| D1 | Gleichzeitige Importe werden über einen **Postgres-Advisory-Lock** verhindert, nicht über eine Lock-Datei | Die Datenbank ist der einzige Ort, den beide Prozesse sicher teilen — die Session-Datei sagt nichts über einen laufenden Lauf, und ein `flock` schützt den Login, nicht die Pipeline. Ein Session-Lock stirbt mit der Verbindung, also auch mit einem `kill -9`; eine Lock-Datei bliebe liegen. Vom Nutzer am 2026-09-21 entschieden. |
+| D1 | Gleichzeitige Importe werden über einen **Postgres-Advisory-Lock** verhindert, nicht über eine Lock-Datei | Die Datenbank ist der einzige Ort, den beide Prozesse sicher teilen — die Session-Datei sagt nichts über einen laufenden Lauf, und ein `flock` schützt den Login, nicht die Pipeline. Ein Session-Lock stirbt mit der Verbindung, also auch mit einem `kill -9`; eine Lock-Datei bliebe liegen. Vom Nutzer am 2026-09-21 entschieden. **Daraus folgt, wo der Lock genommen wird:** Wenn der Login die Kosten sind, die der Lock vermeiden soll, muss die Absage **vor** dem Login kommen. `server.ImportOnce` nimmt ihn deshalb selbst, direkt nach `db.Open` und vor `newFetcher`, und gibt der Pipeline **kein** `Lock`-Feld mit — die Pipeline-Sperre läuft erst, wenn der Fetcher sich schon eingeloggt und die Session-Datei geschrieben hat. Der Worker in `server.Run` behält die Pipeline-Sperre: dort passiert der Login einmal beim Start, nicht pro Lauf. (Korrektur aus dem M3-Review, 2026-09-22.) |
 | D2 | Der Lock ist ein **Port am Konsumenten** (`pipeline.ImportLock`) mit einem Adapter in `internal/db` | `internal/pipeline` kennt die Datenbank nicht und soll sie nicht kennenlernen (`go-architecture.md`: kleine Interfaces beim Konsumenten). Ein `nil`-Lock heißt „ungesperrt“, damit der Nullwert von `Pipeline` benutzbar bleibt und die bestehenden Pipeline-Tests unverändert laufen. |
 | D3 | `main.go` bekommt einen dritten `internal/`-Import: `internal/logging` | Die Definition of Done des Vorgängerplans nannte `internal/cli` und `internal/config`. Der Logger gehört in die Composition Root (`go-architecture.md`), und das ist hier `run`. Der Plan ändert die Invariante ausdrücklich auf drei Importe, statt sie zu umgehen. |
 | D4 | Logging wird **nach** `Parse` konfiguriert, nicht in einem kong-Hook | Ein `BeforeApply` läuft, bevor die eigenen Flagwerte sicher gesetzt sind; ein `AfterApply` würde die Reihenfolge `BeforeApply → Validate → AfterApply` (E4 des Vorgängerplans) erben und wäre nicht früher. Preis: Einen Parse- oder Validierungsfehler loggt `main` noch im Default-Format. Das ist eine Zeile vor dem Exit und keinen Hook wert. |
@@ -146,6 +146,8 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
   - `db: migrate up: context canceled` sagt nicht, was angewandt wurde. Schlimmer: ein Abbruch, der erst nach der letzten Migration eintrifft, meldet einen vollständig durchgelaufenen Lauf als Fehler (siehe den Doc-Kommentar von `migrateUp`). Die Meldung müsste sagen, dass ein erneuter Lauf gefahrlos ist und nachholt, was fehlt.
   - kong stellt der Meldung den Kommandopfad voran (`serve: config: API_TOKEN …`, R4 des Plans vom 2026-09-19). Dass der Inhalt gleich bleibt, ist geprüft; ob das Präfix einem Betreiber hilft oder im Weg steht, nie.
   - `main` loggt jeden Fehler als eine Zeile `slog.Error("fatal", "error", err)`. Die Ursache steckt damit im Attribut, während die Nachricht für alle Fehler dieselbe ist — auch für die, bei denen der Betreiber sofort wüsste, was zu tun ist.
+- **Der Shutdown von `serve` hat keine obere Schranke mehr** (aus dem Milestone-Review zu M3, 2026-09-22). Seit M3 hält ein Lauf eine Pool-Verbindung über seine ganze Dauer — die Session des Advisory-Locks. Das `defer pool.Close()` in `server.Run` wartet über puddles `destructWG` auf **jede** Verbindung, auch die ausgeliehene, also auch auf einen Import, den das 10-Sekunden-Budget gerade ausdrücklich aufgegeben hat. Zwischen „import did not stop within the shutdown budget; abandoning it" und dem tatsächlichen Return liegen dann bis zu ein `LLM_TIMEOUT` (Default 60 s) ohne eine einzige Logzeile; in der Praxis beendet die Container-Runtime den Prozess per SIGKILL, was überlebbar ist (der Lock stirbt mit der Session), aber genau den geordneten Ausstieg aushebelt, den das Budget verspricht. Der Doc-Kommentar von `Run` sagt das jetzt; eine Schranke ist es nicht. Wer das aufgreift, entscheidet zwischen drei Wegen: den Lock auf einer eigenen, nicht gepoolten Verbindung halten (`pool.Acquire` durch ein `pgx.Connect` ersetzen, dann hängt `Close` nicht daran); `pool.Close()` in eine Goroutine mit eigener Frist legen und den Prozess notfalls ohne sie verlassen; oder den Abbruch bis in den Extraktor durchreichen, sodass ein aufgegebener Lauf nicht erst nach dem nächsten LLM-Timeout endet. Das Dritte behebt die Ursache, die beiden anderen die Wirkung.
+
 - **`.env.example` und `docker-compose.yml` laufen auseinander** (aus dem Milestone-Review zu M2). Der `app`-Service reicht genau die Variablen durch, die unter `environment:` stehen; ein `env_file:` gibt es nirgends. Dreizehn Einträge aus `.env.example` erreichen den Container daher nicht — `EXTRACTION_*`, `IMPORT_*`, `LLM_*`, `ANTHROPIC_MODEL`, `INSTAGRAM_SESSION_PATH` und seit M2 auch `LOG_LEVEL`/`LOG_FORMAT` —, obwohl die README-Anleitung mit `cp .env.example .env` beginnt. Das ist keine Lücke von M2, sondern die allgemeine: entweder ein `env_file:`, oder eine bewusst dokumentierte Auswahl. Wer sie schließt, beachtet, dass `${VAR:-}` die Variable **leer** setzt und kong einen leeren Wert bei einem `enum`-Flag ablehnt (`--log-level must be one of … but got ""`, am 2026-09-21 geprüft); in die Substitution gehört also der Default, nicht der leere String — und damit steht der Default an einer zweiten Stelle, die driften kann.
 
 ---
@@ -362,6 +364,16 @@ Neu:
 // Run's still running — with one logged exception: if the ten-second shutdown
 // budget runs out, the import is abandoned rather than waited for, and Run
 // returns while it is still going.
+//
+// "Returns" is approximate in that one case, and deliberately so rather than by
+// oversight. The budget bounds how long Run waits for the import, not how long
+// Run takes: the deferred pool.Close below waits for every pooled connection to
+// come back, and a run holds one — the import lock's session — for its whole
+// length, so an abandoned import keeps Run inside that Close until it reaches
+// its next per-post cancellation check, up to one LLM_TIMEOUT past the budget
+// and with no log line saying why. The process usually gets SIGKILLed instead,
+// which is survivable (the advisory lock dies with the session) but is not the
+// orderly exit the budget promises. Bounding it is in the plan's backlog.
 ```
 
 Am Anfang des Rumpfes, direkt vor `newExtractor`, die eigene Kontextkopie einziehen:
@@ -989,6 +1001,8 @@ git commit -m "feat(cli): add --log-level and --log-format" -m "Both sit on the 
 
 Ein Importlauf darf nicht zweimal gleichzeitig laufen — nicht im selben Prozess (das verhindert `Worker.RunOnce` schon) und nicht in zweien. Der Port liegt beim Konsumenten, der Adapter in `internal/db` (D2).
 
+Die Sperre in `Pipeline.Run` ist die des **Worker-Pfads**. Der einmalige Lauf nimmt den Lock eine Ebene höher, in `ImportOnce` vor `newFetcher` (D1, Task 6): ein Lauf, der erst nach dem Login abgelehnt wird, hat genau das getan, was der Lock verhindern soll. Beide Pfade nehmen denselben Lock, aber nie beide in einem Prozess — zwei Verbindungen aus demselben Pool bekämen ihn nicht.
+
 **Files:**
 - Modify: `internal/pipeline/pipeline.go` (+ `ImportLock`, + `ErrImportInProgress`, + `Lock`-Feld, + Sperre am Anfang von `Run`)
 - Create: `internal/pipeline/lock_test.go`
@@ -1191,6 +1205,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -1199,6 +1214,15 @@ import (
 // database. The value is arbitrary and only has to stay stable: change it and
 // two versions of the binary would no longer see each other's locks.
 const importLockKey int64 = 8_233_071_001
+
+// releaseTimeout bounds the two statements that run after a run is already
+// over: the unlock, and the connection close that stands in for it when the
+// unlock fails. Both detach from the run's context, because releasing is what
+// has to happen when the run was cancelled — and detaching drops the deadline
+// along with the cancellation, so without one of their own a Postgres that
+// accepts the connection but never answers would block `defer release()`
+// forever, with no context left for a Ctrl-C to cancel.
+const releaseTimeout = 5 * time.Second
 
 // ImportLock is pipeline.ImportLock backed by a Postgres advisory lock, which
 // is what lets a running server and a one-off import command see each other.
@@ -1220,7 +1244,13 @@ func (l ImportLock) TryAcquire(ctx context.Context) (func(), bool, error) {
 
 	var got bool
 	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", importLockKey).Scan(&got); err != nil {
-		conn.Release()
+		// Whether Postgres took the lock before this failed is not knowable
+		// from here: a cancellation can land between the server executing the
+		// statement and the row reaching us. Releasing the connection would
+		// then lend the next borrower a lock nobody will ever release, so it is
+		// discarded the same way a failed unlock discards it. The cost of being
+		// wrong is one reconnect on a path that is already failing the run.
+		discard(ctx, conn)
 		return nil, false, fmt.Errorf("db: take the import lock: %w", err)
 	}
 	if !got {
@@ -1230,20 +1260,36 @@ func (l ImportLock) TryAcquire(ctx context.Context) (func(), bool, error) {
 
 	return func() {
 		// WithoutCancel because releasing is what has to happen when the run was
-		// cancelled, which is exactly when ctx is already done.
-		unlockCtx := context.WithoutCancel(ctx)
+		// cancelled, which is exactly when ctx is already done; with a deadline
+		// of its own because WithoutCancel strips the run's — see releaseTimeout.
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+		defer cancel()
 		if _, err := conn.Exec(unlockCtx, "SELECT pg_advisory_unlock($1)", importLockKey); err != nil {
 			slog.Warn("db: could not release the import lock; discarding its connection", "error", err)
 			// The lock belongs to this session. Handing the connection back to
 			// the pool would lend the next borrower a lock nobody can release;
 			// closing it ends the session, and Postgres frees the lock with it.
-			if err := conn.Hijack().Close(unlockCtx); err != nil {
-				slog.Warn("db: closing the import lock's connection failed", "error", err)
-			}
+			discard(ctx, conn)
 			return
 		}
 		conn.Release()
 	}, true, nil
+}
+
+// discard takes conn out of the pool and closes it, which ends its Postgres
+// session and with it every advisory lock that session still holds. It answers
+// both ways a connection can end up back in the pool holding a lock nobody can
+// release: an unlock that failed, and an acquire whose answer never arrived.
+//
+// It derives its own bounded context from ctx rather than taking one, because
+// every caller is on a path where ctx may already be cancelled and a close
+// still has to be attempted.
+func discard(ctx context.Context, conn *pgxpool.Conn) {
+	closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+	defer cancel()
+	if err := conn.Hijack().Close(closeCtx); err != nil {
+		slog.Warn("db: closing the import lock's connection failed", "error", err)
+	}
 }
 ```
 
@@ -1479,6 +1525,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/sBurmester/recipe-reader/internal/config"
 	"github.com/sBurmester/recipe-reader/internal/db"
@@ -1511,6 +1558,26 @@ func ImportOnce(ctx context.Context, cfg config.Config) (pipeline.ImportResult, 
 	}
 	defer pool.Close()
 
+	// Taken here, before newFetcher, and not by the Pipeline below. The lock
+	// exists to stop two processes logging into one Instagram account (D1), and
+	// the pipeline's own guard runs after the fetcher has already logged in and
+	// written the session file — so a refused run used to pay the exact cost the
+	// lock was introduced to avoid before it said no.
+	//
+	// The Pipeline built below therefore has no Lock: it would ask this pool for
+	// a second connection and Postgres would refuse this process the lock it is
+	// already holding, so the command would report itself as "another import".
+	// serve keeps the pipeline's guard — there the login happens once at
+	// startup, not per run, so the guard has nothing to get in front of.
+	release, ok, err := (db.ImportLock{Pool: pool}).TryAcquire(ctx)
+	if err != nil {
+		return pipeline.ImportResult{}, fmt.Errorf("import: taking the import lock: %w", err)
+	}
+	if !ok {
+		return pipeline.ImportResult{}, pipeline.ErrImportInProgress
+	}
+	defer release()
+
 	recipes := repository.NewRecipeRepository(pool)
 	lookups := repository.NewLookupRepository(pool)
 
@@ -1530,7 +1597,6 @@ func ImportOnce(ctx context.Context, cfg config.Config) (pipeline.ImportResult, 
 		Categories:       lookups,
 		Threshold:        cfg.Extraction.Threshold,
 		PublishThreshold: cfg.Extraction.PublishThreshold,
-		Lock:             db.ImportLock{Pool: pool},
 	}
 	return p.Run(ctx)
 }
@@ -1579,6 +1645,17 @@ func (c *ImportCmd) Run(ctx context.Context) error {
 
 	result, err := server.ImportOnce(ctx, cfg)
 	if err != nil {
+		// A fetch that fails part-way still imports what it already collected,
+		// so a failed run can carry a real tally — and "imported nine, then
+		// throttled" is a different decision from "did nothing". Only the
+		// counts, not the error: main logs that. Seen is zero for the failures
+		// that happen before the first post — a refused lock, a failed login, a
+		// fetch that returned nothing — and those get no line.
+		if result.Seen > 0 {
+			slog.Warn("import did not finish",
+				"seen", result.Seen, "imported", result.Imported, "skipped", result.Skipped,
+				"no_recipe", result.NoRecipe, "failed", result.Failed, "degraded", result.Degraded)
+		}
 		return err
 	}
 	slog.Info("import finished",
@@ -1613,12 +1690,12 @@ go run ./cmd/recipe-reader --help | grep import
 In `## Commands` der Tabelle eine Zeile anfügen:
 
 ```markdown
-| `import` | Runs one import of new saved posts and exits: before a rollout, after a restore, or after fixing a login. `serve` does the same every `IMPORT_INTERVAL`. Reads the database, Instagram, extraction, LLM and import-limit settings. Refuses to start while another import is running, in this process or in a server. With compose: `docker compose run --rm app import`. |
+| `import` | Runs one import of new saved posts and exits: before a rollout, after a restore, or after fixing a login. `serve` does the same every `IMPORT_INTERVAL`. Applies pending migrations and seeds the lookup tables first, exactly as `serve` and `migrate` do — so running it against the database of an older server migrates that database. Reads the database, Instagram, extraction, LLM and import-limit settings. Refuses to start while another import is running, in this process or in a server, and refuses before it logs in. With compose: `docker compose run --rm app import`. |
 ```
 
 In `## Architecture` den Satz aus Task 5 des Vorgängerplans erweitern: `` `migrate` to `internal/db`. `` → `` `migrate` to `internal/db`; `import` to `internal/server`, which runs the same pipeline the worker runs, once. ``
 
-Im Abschnitt über den Import ergänzen, dass ein Lauf einen Postgres-Advisory-Lock hält und ein zweiter Lauf deshalb mit Exit 1 abgelehnt wird.
+Im Abschnitt über den Import ergänzen, dass ein Lauf einen Postgres-Advisory-Lock hält und ein zweiter Lauf deshalb mit Exit 1 abgelehnt wird — **vor** dem Login, weil der Login die Kosten sind, die der Lock vermeiden soll — und dass der Worker eines Servers eine Absage nicht als Lauf verbucht, sondern weiter die letzte echte Bilanz meldet.
 
 - [ ] **Step 8: Commit-Gate und Commit**
 
