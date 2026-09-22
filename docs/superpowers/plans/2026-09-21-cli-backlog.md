@@ -92,14 +92,14 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 - [x] Die Flags gelten für **jedes** Kommando, auch für `healthcheck` und `migrate`.
 
 **US4: Betreiber importiert einmalig.** *Als Betreiber möchte ich vor einem Rollout oder nach einem Restore einmal importieren, ohne den Server zu starten.*
-- [ ] `recipe-reader import` führt genau einen Importlauf aus, loggt eine Zusammenzeile mit den Zählern und endet mit 0.
-- [ ] `import` liest nur die Einstellungen, die es braucht: Database, Instagram, Extraction, LLM und die Import-Grenzen. `--http-addr` und `--import-interval` erscheinen **nicht** in `import --help`.
-- [ ] Ohne `INSTAGRAM_USERNAME` endet `import` mit 1 und einer Meldung, die sagt, was fehlt.
-- [ ] `recipe-reader --db-dsn <dsn> import` wird abgelehnt (Entscheidung E11 des Vorgängerplans gilt weiter).
+- [x] `recipe-reader import` führt genau einen Importlauf aus, loggt eine Zusammenzeile mit den Zählern und endet mit 0.
+- [x] `import` liest nur die Einstellungen, die es braucht: Database, Instagram, Extraction, LLM und die Import-Grenzen. `--http-addr` und `--import-interval` erscheinen **nicht** in `import --help`.
+- [x] Ohne `INSTAGRAM_USERNAME` endet `import` mit 1 und einer Meldung, die sagt, was fehlt.
+- [x] `recipe-reader --db-dsn <dsn> import` wird abgelehnt (Entscheidung E11 des Vorgängerplans gilt weiter).
 
 **US5: Betreiber importiert, während der Server läuft.** *Als Betreiber möchte ich nicht aus Versehen zwei Importe gleichzeitig fahren.*
-- [ ] Solange ein Importlauf läuft — im Server oder als Kommando —, endet ein zweiter mit 1 und der Meldung, dass bereits ein Import läuft.
-- [ ] Die Sperre wird freigegeben, wenn der Lauf endet, auch wenn der Prozess stirbt (Session-Lock von Postgres).
+- [x] Solange ein Importlauf läuft — im Server oder als Kommando —, endet ein zweiter mit 1 und der Meldung, dass bereits ein Import läuft.
+- [x] Die Sperre wird freigegeben, wenn der Lauf endet, auch wenn der Prozess stirbt (Session-Lock von Postgres).
 
 ### Entscheidungen
 
@@ -125,12 +125,12 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 
 ### Definition of Done
 
-- [ ] Alle Tasks in dieser Datei abgehakt.
-- [ ] Commit-Gate grün; Docker-Gate grün für M1 (das Image wird gebaut, auch wenn sich nichts daran ändert).
-- [ ] `cmd/recipe-reader/` enthält weiterhin nur `main.go` und dessen Tests; `main.go` importiert aus `internal/*` genau `internal/cli`, `internal/config` und `internal/logging` (D3).
-- [ ] Die Flag-Liste von `serve --help` ist die bisherige plus `--log-level` und `--log-format`.
-- [ ] README aktualisiert: Commands (`import`), Configuration (Logging-Gruppe), Architecture.
-- [ ] Der Backlog-Abschnitt im Plan vom 2026-09-19 verweist auf diesen Plan.
+- [x] Alle Tasks in dieser Datei abgehakt.
+- [x] Commit-Gate grün; Docker-Gate grün für M1 (das Image wird gebaut, auch wenn sich nichts daran ändert).
+- [x] `cmd/recipe-reader/` enthält weiterhin nur `main.go` und dessen Tests; `main.go` importiert aus `internal/*` genau `internal/cli`, `internal/config` und `internal/logging` (D3).
+- [x] Die Flag-Liste von `serve --help` ist die bisherige plus `--log-level` und `--log-format`.
+- [x] README aktualisiert: Commands (`import`), Configuration (Logging-Gruppe), Architecture.
+- [x] Der Backlog-Abschnitt im Plan vom 2026-09-19 verweist auf diesen Plan.
 
 ### Backlog (bewusst nicht in diesem Plan)
 
@@ -223,10 +223,10 @@ Abnahmekriterien:
 #### M3: Einmaliger Import
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US4 und US5 sind abgehakt.
-- [ ] `import --help` zeigt weder `--http-addr` noch `--import-interval`.
-- [ ] Die Sperre ist gegen echtes Postgres getestet, nicht gegen einen Fake.
-- [ ] Die Definition of Done in Teil A ist abgehakt.
+- [x] Die Akzeptanzkriterien von US4 und US5 sind abgehakt.
+- [x] `import --help` zeigt weder `--http-addr` noch `--import-interval`.
+- [x] Die Sperre ist gegen echtes Postgres getestet, nicht gegen einen Fake.
+- [x] Die Definition of Done in Teil A ist abgehakt.
 
 #### Branches und PRs
 
@@ -249,12 +249,12 @@ Abnahmekriterien:
 - [x] **M2: Log-Flags**
   - [x] **Task 3:** `--log-level` und `--log-format` (M)
   - [x] **Milestone-Review**
-- [ ] **M3: Einmaliger Import**
-  - [ ] **Task 4:** Prozessübergreifende Import-Sperre (M)
-  - [ ] **Task 5:** `config.ImportLimits` aus `config.Import` lösen (S)
-  - [ ] **Task 6:** Kommando `import` (M)
-  - [ ] **Milestone-Review**
-  - [ ] **Abschluss-Verifikation**
+- [x] **M3: Einmaliger Import**
+  - [x] **Task 4:** Prozessübergreifende Import-Sperre (M)
+  - [x] **Task 5:** `config.ImportLimits` aus `config.Import` lösen (S)
+  - [x] **Task 6:** Kommando `import` (M)
+  - [x] **Milestone-Review**
+  - [x] **Abschluss-Verifikation**
 
 ### Ablauf der Umsetzung
 
@@ -1017,7 +1017,7 @@ Die Sperre in `Pipeline.Run` ist die des **Worker-Pfads**. Der einmalige Lauf ni
   - Feld `Pipeline.Lock ImportLock` (nil = ungesperrt)
   - `type db.ImportLock struct { Pool *pgxpool.Pool }` mit `TryAcquire`
 
-- [ ] **Step 1: Failing Test für die Pipeline-Seite** (`internal/pipeline/lock_test.go`)
+- [x] **Step 1: Failing Test für die Pipeline-Seite** (`internal/pipeline/lock_test.go`)
 
 ```go
 package pipeline
@@ -1078,12 +1078,12 @@ func TestRun_LockFailureIsReported(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test -count=1 -run 'TestRun_RefusedLock|TestRun_LockFailure' ./internal/pipeline/`
 Expected: FAIL, `undefined: ImportLock`, `undefined: ErrImportInProgress`, `unknown field Lock`
 
-- [ ] **Step 3: Port und Sperre in `internal/pipeline/pipeline.go`**
+- [x] **Step 3: Port und Sperre in `internal/pipeline/pipeline.go`**
 
 Neben den vorhandenen Ports (`PostFetcher`, `CategoryLister`) ergänzen:
 
@@ -1133,7 +1133,7 @@ Als Erstes im Rumpf von `Run`:
 	}
 ```
 
-- [ ] **Step 4: Failing Test für den Postgres-Adapter** (`internal/db/lock_test.go`)
+- [x] **Step 4: Failing Test für den Postgres-Adapter** (`internal/db/lock_test.go`)
 
 ```go
 package db_test
@@ -1191,12 +1191,12 @@ func TestImportLock_SecondHolderIsRefusedUntilTheFirstReleases(t *testing.T) {
 }
 ```
 
-- [ ] **Step 5: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 5: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test -count=1 -run TestImportLock ./internal/db/`
 Expected: FAIL, `undefined: db.ImportLock`
 
-- [ ] **Step 6: `internal/db/lock.go` anlegen**
+- [x] **Step 6: `internal/db/lock.go` anlegen**
 
 ```go
 package db
@@ -1293,7 +1293,7 @@ func discard(ctx context.Context, conn *pgxpool.Conn) {
 }
 ```
 
-- [ ] **Step 7: Den Worker-Lauf sperren** (`internal/server/server.go`)
+- [x] **Step 7: Den Worker-Lauf sperren** (`internal/server/server.go`)
 
 Im `pipeline.Pipeline`-Literal in `Run` als letztes Feld ergänzen:
 
@@ -1303,12 +1303,12 @@ Im `pipeline.Pipeline`-Literal in `Run` als letztes Feld ergänzen:
 			Lock: db.ImportLock{Pool: pool},
 ```
 
-- [ ] **Step 8: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 8: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go build ./... && go test -count=1 -race ./internal/pipeline/ ./internal/db/ ./internal/server/`
 Expected: PASS
 
-- [ ] **Step 9: Commit-Gate und Commit**
+- [x] **Step 9: Commit-Gate und Commit**
 
 ```bash
 git add internal
@@ -1329,7 +1329,7 @@ Damit `import` die Grenzen sieht, aber nicht das Intervall — dasselbe Muster w
 - Consumes: —
 - Produces: `type config.ImportLimits struct { MaxItems, MaxPages int }` mit `Validate()`; `config.Import` bettet es ein und behält `Interval` samt eigenem `Validate()`. Zugriffe wie `cfg.Import.MaxItems` bleiben durch Promotion unverändert gültig.
 
-- [ ] **Step 1: Failing Test** (an `internal/config/import_bounds_test.go` anhängen)
+- [x] **Step 1: Failing Test** (an `internal/config/import_bounds_test.go` anhängen)
 
 Die Datei ist `package config` — also ohne `config.`-Präfix — und importiert bisher nur `testing`; `strings` dazunehmen.
 
@@ -1369,12 +1369,12 @@ func TestImport_ValidateStillRejectsANonPositiveInterval(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test -count=1 -run 'TestImportLimits|TestImport_ValidateStill' ./internal/config/`
 Expected: FAIL, `undefined: config.ImportLimits`
 
-- [ ] **Step 3: Die Gruppe teilen** (`internal/config/config.go`)
+- [x] **Step 3: Die Gruppe teilen** (`internal/config/config.go`)
 
 `Import` und sein `Validate` ersetzen durch:
 
@@ -1425,7 +1425,7 @@ func (i Import) Validate() error {
 }
 ```
 
-- [ ] **Step 4: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 4: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go build ./... && go test -count=1 -race ./internal/config/ ./internal/server/ ./cmd/recipe-reader/`
 Expected: PASS. Kein Aufrufer ändert sich: `cfg.Import.MaxItems` und `cfg.Import.MaxPages` funktionieren über die Einbettung weiter.
@@ -1438,7 +1438,7 @@ go run ./cmd/recipe-reader serve --help | grep -o -- '--[a-z][a-z-]*' | sort -u 
 
 Erwartet: dieselbe Liste wie vor diesem Task (inklusive `--log-level`/`--log-format` aus Task 3).
 
-- [ ] **Step 5: Commit-Gate und Commit**
+- [x] **Step 5: Commit-Gate und Commit**
 
 ```bash
 git add internal/config
@@ -1461,7 +1461,7 @@ git commit -m "refactor(config): split the import limits from the schedule" -m "
 - Consumes: `newExtractor`, `newFetcher`, `alreadyImported` (paketintern in `internal/server`), `db.Open`, `db.ImportLock` (Task 4), `pipeline.Pipeline`, `config.ImportLimits` (Task 5), `run`/`parse`/`clearEnv`/`unreachableDSN` aus `cmd/recipe-reader`
 - Produces: `func server.ImportOnce(ctx context.Context, cfg config.Config) (pipeline.ImportResult, error)`; `type cli.ImportCmd`; `func (c *ImportCmd) Run(ctx context.Context) error`
 
-- [ ] **Step 1: Failing Tests** (`cmd/recipe-reader/import_test.go`)
+- [x] **Step 1: Failing Tests** (`cmd/recipe-reader/import_test.go`)
 
 ```go
 package main
@@ -1512,12 +1512,12 @@ Der Fall „Flag vor dem Kommandonamen“ (E11) bekommt **keinen** eigenen Test:
 		{"--db-dsn", unreachableDSN, "import"},
 ```
 
-- [ ] **Step 2: Tests laufen lassen, sie müssen fehlschlagen**
+- [x] **Step 2: Tests laufen lassen, sie müssen fehlschlagen**
 
 Run: `go test -count=1 -run 'Import' ./cmd/recipe-reader/`
 Expected: FAIL, `unexpected argument import`
 
-- [ ] **Step 3: `internal/server/import.go` anlegen**
+- [x] **Step 3: `internal/server/import.go` anlegen**
 
 ```go
 package server
@@ -1602,7 +1602,7 @@ func ImportOnce(ctx context.Context, cfg config.Config) (pipeline.ImportResult, 
 }
 ```
 
-- [ ] **Step 4: `internal/cli/import.go` anlegen**
+- [x] **Step 4: `internal/cli/import.go` anlegen**
 
 ```go
 package cli
@@ -1665,7 +1665,7 @@ func (c *ImportCmd) Run(ctx context.Context) error {
 }
 ```
 
-- [ ] **Step 5: Ins Kommando-Menü hängen** (`cmd/recipe-reader/main.go`)
+- [x] **Step 5: Ins Kommando-Menü hängen** (`cmd/recipe-reader/main.go`)
 
 Im `CLI`-Struct nach `Migrate` ergänzen (gofmt richtet die Spalten aus):
 
@@ -1673,7 +1673,7 @@ Im `CLI`-Struct nach `Migrate` ergänzen (gofmt richtet die Spalten aus):
 	Import      cli.ImportCmd      `cmd:"" help:"Run one import of new saved posts and exit. serve does the same every IMPORT_INTERVAL; this does it now, without starting the server."`
 ```
 
-- [ ] **Step 6: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 6: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go build ./... && go test -count=1 -race ./cmd/recipe-reader/ ./internal/server/ ./internal/cli/`
 Expected: PASS
@@ -1685,7 +1685,7 @@ go run ./cmd/recipe-reader import --help | grep -c -- '--http-addr\|--import-int
 go run ./cmd/recipe-reader --help | grep import
 ```
 
-- [ ] **Step 7: README**
+- [x] **Step 7: README**
 
 In `## Commands` der Tabelle eine Zeile anfügen:
 
@@ -1697,7 +1697,7 @@ In `## Architecture` den Satz aus Task 5 des Vorgängerplans erweitern: `` `migr
 
 Im Abschnitt über den Import ergänzen, dass ein Lauf einen Postgres-Advisory-Lock hält und ein zweiter Lauf deshalb mit Exit 1 abgelehnt wird — **vor** dem Login, weil der Login die Kosten sind, die der Lock vermeiden soll — und dass der Worker eines Servers eine Absage nicht als Lauf verbucht, sondern weiter die letzte echte Bilanz meldet.
 
-- [ ] **Step 8: Commit-Gate und Commit**
+- [x] **Step 8: Commit-Gate und Commit**
 
 ```bash
 git add cmd internal README.md
@@ -1708,7 +1708,7 @@ git commit -m "feat(cli): add a one-off import command" -m "import runs the pipe
 
 ### Abschluss-Verifikation
 
-- [ ] **Step 1: Paket `main` prüfen**
+- [x] **Step 1: Paket `main` prüfen**
 
 ```bash
 ls cmd/recipe-reader/
@@ -1717,11 +1717,11 @@ go list -f '{{join .Imports " "}}' ./cmd/recipe-reader
 
 Erwartet: nur `main.go` und Tests; aus `internal/*` genau `internal/cli`, `internal/config` und `internal/logging` (D3).
 
-- [ ] **Step 2: Commit-Gate komplett** (siehe Global Constraints). Alles grün.
+- [x] **Step 2: Commit-Gate komplett** (siehe Global Constraints). Alles grün.
 
-- [ ] **Step 3: Docker-Gate** (siehe Global Constraints). `smoke test passed`.
+- [x] **Step 3: Docker-Gate** (siehe Global Constraints). `smoke test passed`.
 
-- [ ] **Step 4: Compose End-to-End** (im eigenen Projekt `recipe-reader-e2e`, nie im Default-Projekt — dort liegt das Volume `db-data` mit echten Daten)
+- [x] **Step 4: Compose End-to-End** (im eigenen Projekt `recipe-reader-e2e`, nie im Default-Projekt — dort liegt das Volume `db-data` mit echten Daten)
 
 ```bash
 export API_TOKEN=$(openssl rand -hex 32) POSTGRES_PASSWORD=$(openssl rand -hex 16)
@@ -1734,13 +1734,13 @@ docker compose -p recipe-reader-e2e down -v
 
 `down -v` auch dann ausführen, wenn ein Schritt davor scheitert.
 
-- [ ] **Step 5: Akzeptanzkriterien in Teil A abhaken** (US1–US5, Definition of Done)
+- [x] **Step 5: Akzeptanzkriterien in Teil A abhaken** (US1–US5, Definition of Done)
 
-- [ ] **Step 6: Backlog des Vorgängerplans aktualisieren**
+- [x] **Step 6: Backlog des Vorgängerplans aktualisieren**
 
 In `docs/superpowers/plans/2026-09-19-kong-cli-commands.md` im Abschnitt „Backlog“ vermerken, dass die vier Punkte in diesem Plan umgesetzt sind, mit Link.
 
-- [ ] **Step 7: Diese Datei abhaken und committen**
+- [x] **Step 7: Diese Datei abhaken und committen**
 
 ```bash
 git add docs/superpowers/plans/
