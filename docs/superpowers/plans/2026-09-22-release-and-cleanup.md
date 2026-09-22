@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Die vier Einträge im Backlog von `docs/superpowers/plans/2026-09-21-cli-backlog.md` abarbeiten — der Shutdown von `serve` bekommt seine obere Schranke zurück, `.env.example` erreicht den Container, zwei irreführende Fehlermeldungen werden eindeutig, und ein Tag nach Semantic Versioning erzeugt automatisch ein GitHub-Release mit Single-Binary und Container-Image — danach die Abhängigkeiten unter Aufsicht stellen: Renovate aktualisiert Go-Module, GitHub Actions und Docker-Images, letztere beide auf Digest gepinnt — und zuletzt die Migrations-Engine von `golang-migrate` auf `pressly/goose` umstellen, samt einmaliger Übernahme bestehender Datenbanken.
+**Goal:** Die vier Einträge im Backlog von `docs/superpowers/plans/2026-09-21-cli-backlog.md` abarbeiten — der Shutdown von `serve` bekommt seine obere Schranke zurück, `.env.example` erreicht den Container, zwei irreführende Fehlermeldungen werden eindeutig, und ein Tag nach Semantic Versioning erzeugt automatisch ein GitHub-Release mit Single-Binary und Container-Image — danach die Abhängigkeiten unter Aufsicht stellen: Renovate aktualisiert Go-Module, GitHub Actions und Docker-Images, letztere beide auf Digest gepinnt — und zuletzt die Migrations-Engine von `golang-migrate` auf `pressly/goose` umstellen.
 
-**Architecture:** Drei kleine Korrekturen am bestehenden Code gehen voraus, die Release-Automatik folgt — so trägt das erste Release `v0.1.0` einen Stand, den man veröffentlichen will, und sein Changelog die drei Korrekturen. Der Advisory-Lock wandert von einer geliehenen Pool-Verbindung auf eine eigene `pgx.Connect`-Verbindung, damit `pool.Close()` nicht mehr auf ihn wartet. Die Release-Automatik besteht aus zwei getrennten Workflows: `release-please` schlägt Version und Changelog vor und legt beim Merge Tag und Release an, ein zweiter Workflow hängt beim `published`-Ereignis die Artefakte an. Renovate kommt danach, weil es die Workflows pinnen soll, die die Release-Automatik erst anlegt; es läuft selbst als Workflow in diesem Repository, nicht als fremd gehostete App. Ganz zuletzt wird `golang-migrate` durch `pressly/goose` ersetzt: goose nimmt einen `context.Context` entgegen, legt jede Migration in eine eigene Transaktion und bringt den Advisory-Lock mit, sodass der handgeschriebene Abbruchpfad in `internal/db/connect.go` ersatzlos entfällt. Die sechs `*.up.sql`/`*.down.sql`-Dateien werden zu drei annotierten Dateien, und eine einmalige Übernahme schreibt den Stand aus `schema_migrations` nach `goose_db_version`.
+**Architecture:** Drei kleine Korrekturen am bestehenden Code gehen voraus, die Release-Automatik folgt — so trägt das erste Release `v0.1.0` einen Stand, den man veröffentlichen will, und sein Changelog die drei Korrekturen. Der Advisory-Lock wandert von einer geliehenen Pool-Verbindung auf eine eigene `pgx.Connect`-Verbindung, damit `pool.Close()` nicht mehr auf ihn wartet. Die Release-Automatik besteht aus zwei getrennten Workflows: `release-please` schlägt Version und Changelog vor und legt beim Merge Tag und Release an, ein zweiter Workflow hängt beim `published`-Ereignis die Artefakte an. Renovate kommt danach, weil es die Workflows pinnen soll, die die Release-Automatik erst anlegt; es läuft selbst als Workflow in diesem Repository, nicht als fremd gehostete App. Ganz zuletzt wird `golang-migrate` durch `pressly/goose` ersetzt: goose nimmt einen `context.Context` entgegen, legt jede Migration in eine eigene Transaktion und bringt den Advisory-Lock mit, sodass der handgeschriebene Abbruchpfad in `internal/db/connect.go` ersatzlos entfällt. Die sechs `*.up.sql`/`*.down.sql`-Dateien werden zu drei annotierten Dateien. Eine Übernahme bestehender `schema_migrations`-Tabellen gibt es nicht: die Software war nie im Einsatz, also existiert keine solche Datenbank außerhalb der Entwicklung.
 
 **Tech Stack:** Go 1.27.1, pgx/v5, `github.com/alecthomas/kong` v1.16.1, Docker Compose 5.5.1, GitHub Actions (`googleapis/release-please-action@v5`, `docker/login-action@v4`, `docker/build-push-action@v7`, `renovatebot/github-action@v46`), GitHub Container Registry, `github.com/pressly/goose/v3` v3.28.0 (ersetzt `github.com/golang-migrate/migrate/v4` v4.19.1) über `github.com/jackc/pgx/v5/stdlib`. **Genau ein Abhängigkeitstausch, sonst keine neue Go-Abhängigkeit.**
 
@@ -69,7 +69,7 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 | Z3 | Eine Fehlermeldung sagt, was zu tun ist | Der Abbruchfall nennt die gefahrlose Wiederholung; ein Bedienfehler ist als solcher erkennbar (Tests) |
 | Z4 | Ein Tag erzeugt ein vollständiges Release | `v0.1.0` trägt Binaries für drei Plattformen, Prüfsummen und ein Image in der GHCR |
 | Z5 | Compose kann ein veröffentlichtes Image nutzen | `docker compose pull && docker compose up -d` läuft ohne lokalen Build |
-| Z6 | Die Migrationen brauchen keinen handgeschriebenen Abbruchpfad mehr | `internal/db/connect.go` enthält weder `migrator` noch `gracefulMigrator` noch ein `context.AfterFunc`, und eine bestehende Datenbank migriert nach dem Tausch weiter (Test) |
+| Z6 | Die Migrationen brauchen keinen handgeschriebenen Abbruchpfad mehr | `internal/db/connect.go` enthält weder `migrator` noch `gracefulMigrator` noch ein `context.AfterFunc`, und `go test -race ./...` bleibt grün |
 
 ### Nicht-Ziele
 
@@ -78,6 +78,7 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - Kein Multi-Arch-Image. Das Image wird für `linux/amd64` gebaut, wie heute auch; Multi-Arch steht im Backlog.
 - Keine Änderung am HTTP-API, an der Extraktion oder am Datenbankschema. Das gilt ausdrücklich auch für M6: die Migrationsdateien werden **umformatiert**, ihre Anweisungen bleiben Zeichen für Zeichen dieselben — mit der einen Ausnahme der `BEGIN;`/`COMMIT;`-Klammern, die goose selbst setzt, und der zwei Kommentarzeilen, die auf sie verwiesen.
 - Keine neue Migration in M6, keine Umnummerierung. `0001`, `0002`, `0003` bleiben `0001`, `0002`, `0003`.
+- **Keine Übernahme bestehender `schema_migrations`-Tabellen** (Nutzer, 2026-09-22): die Software war nie im Einsatz. Eine Entwicklungsdatenbank, die ein älterer Build angelegt hat, wird neu angelegt statt umgeschrieben — die README nennt beide Wege (Task 12).
 - Kein `goose`-Kommandozeilenwerkzeug im Image und kein `goose`-Unterkommando in der CLI. Die Binary migriert weiter über `recipe-reader migrate` und beim Start von `serve`.
 - Keine Go-Migrationen (`goose.AddMigration`). Migrationen bleiben SQL-Dateien.
 
@@ -113,14 +114,7 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - [ ] Jede Action und jedes Basisimage steht mit Digest im Repository, mit dem Tag als Kommentar.
 - [ ] Ein Go-Update-PR durchläuft die CI wie jeder andere Code-PR.
 
-**US7: Betreiber aktualisiert eine Instanz, deren Datenbank golang-migrate angelegt hat.**
-- [ ] Ein Start gegen eine Datenbank mit `schema_migrations` auf Version 3 wendet keine Migration erneut an.
-- [ ] Danach existiert `goose_db_version` mit den Versionen 0 bis 3, und `schema_migrations` ist fort.
-- [ ] Eine Datenbank, die golang-migrate als `dirty` hinterlassen hat, wird **nicht** übernommen; die Meldung sagt, was zu tun ist.
-- [ ] Eine leere Datenbank migriert wie bisher von null auf 3.
-- [ ] Ein zweiter Start ändert nichts mehr.
-
-**US8: Entwickler fügt eine Migration hinzu.**
+**US7: Entwickler fügt eine Migration hinzu.**
 - [ ] Die README beschreibt **eine** Datei mit `-- +goose Up` und `-- +goose Down`.
 - [ ] `make sqlc-generate` erzeugt danach unveränderten Code, und die CI-Drift-Prüfung bleibt grün.
 - [ ] `TestMigrations_UpDownUp` deckt die neue Migration in beide Richtungen ab, ohne dass der Test angefasst wird.
@@ -141,9 +135,9 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 | E10 | Das Pinnen macht **Renovate selbst**, nicht ein Task von Hand (Nutzer, 2026-09-22) | Genau dafür stehen `helpers:pinGitHubActionDigests` und `pinDigests` in `renovate.json`. Digests von Hand aufzulösen würde denselben Mechanismus ein zweites Mal bauen — und die Handarbeit wäre schon beim nächsten Update überholt. Task 10 stößt Renovate an, liest seine PRs und merged sie; überprüfbar ist das Ergebnis, nicht der Weg dorthin. |
 | E11 | M5 kommt **nach** M4 | Gepinnt werden soll auch, was M4 anlegt: `release-please.yml` und `release-artifacts.yml` bringen fünf weitere Actions mit. Andersherum müsste M4 an das Pinning denken, und M5 müsste nachbessern. |
 | E12 | `pressly/goose` **ersetzt** `golang-migrate` (Nutzer, 2026-09-22) | goose nimmt überall einen `context.Context`, legt jede SQL-Migration in eine eigene Transaktion und bringt den Advisory-Lock als Option mit. Damit entfallen `migrator`, `gracefulMigrator`, das `context.AfterFunc` und die `ctx.Err()`-Prüfung nach `Up()` ersatzlos — rund 70 Zeilen Gerüst plus der Kommentar, der zwei bekannte Schwächen davon einräumt. Der Preis ist ein Modultausch, kein Zuwachs: golang-migrate geht, goose kommt. |
-| E13 | M6 kommt **zuletzt**, nach M5 | Drei Gründe. Renovate steht dann schon und beobachtet die neue Abhängigkeit vom ersten Tag an. `v0.1.0` wird nicht von einem Engine-Tausch aufgehalten. Und die Übernahme bestehender Datenbanken (E15) bekommt eine echte Vorgängerversion, von der aus sie stattfindet, statt nur die Arbeitsdatenbank des Entwicklers. Preis: die Meldung aus Task 3 wird in Task 12 einmal nachgeschärft (R13). |
+| E13 | M6 kommt **zuletzt**, nach M5 | Renovate steht dann schon und beobachtet die neue Abhängigkeit vom ersten Tag an, und `v0.1.0` wird nicht von einem Engine-Tausch aufgehalten. Preis: `v0.1.0` trägt noch golang-migrate, und die Meldung aus Task 3 wird in Task 11 einmal nachgeschärft (R13). Wer das anders gewichtet, zieht M6 vor M4 — dann trägt kein veröffentlichtes Artefakt je golang-migrate. |
 | E14 | Die sechs Migrationsdateien werden zu **drei** Dateien mit `-- +goose Up`/`-- +goose Down` | Das ist goose' einziges Dateiformat; zwei Dateien je Version kann es nicht lesen. Die `BEGIN;`/`COMMIT;`-Klammern in `0002` und `0003` **entfallen dabei**, weil goose jede Migration ohnehin in eine Transaktion legt — ein `COMMIT;` mitten darin würde goose' eigene Transaktion vorzeitig beenden. Das SQL bleibt sonst unverändert, Kommentare eingeschlossen. |
-| E15 | Bestehende Datenbanken werden **einmalig und automatisch** übernommen, `schema_migrations` wird danach gelöscht | Die beiden Werkzeuge führen verschiedene Tabellen. Ohne Übernahme sähe goose eine leere Versionstabelle, würde `0001` erneut anwenden und an `CREATE TABLE units` scheitern — der Dienst startet nicht mehr. Die Übernahme läuft in **einer** Transaktion, und `schema_migrations` fällt darin mit: eine Datenbank, in der beide Tabellen stehen, würde jeden späteren Leser im Unklaren lassen, welche gilt. |
+| E15 | **Keine** Übernahme bestehender `schema_migrations`-Tabellen (Nutzer, 2026-09-22) | Die Software war nie im Einsatz, also gibt es keine Datenbank, die übernommen werden müsste. Der Code dafür wäre eine Datei, ein Testfile und eine Abfrage bei jedem Start — für einen Fall, der nicht eintritt. Was bleibt, ist die Entwicklungsdatenbank des Betreibers: sie wird neu angelegt, und wer ihre Zeilen behalten will, schreibt das Bookkeeping einmal von Hand (drei Anweisungen, in der README unter Task 12). |
 | E16 | goose bekommt den `PostgresSessionLocker` | Kein Zugewinn, sondern Gleichstand: golang-migrates pgx-Treiber nimmt von sich aus ein `pg_advisory_lock` (`database/postgres/postgres.go:241`). Ohne die Option fiele dieser Schutz beim Tausch ersatzlos weg, und zwei gleichzeitig startende Instanzen würden dieselbe Migration nebeneinander anwenden. goose' Default-ID ist `4097083626` und kollidiert nicht mit dem Import-Lock dieses Projekts (`8_233_071_001`). |
 | E17 | Die Migrationen laufen über ein **eigenes `*sql.DB`** (`pgx/v5/stdlib`), nicht über den `pgxpool` | goose spricht `database/sql`, das Projekt spricht pgx. Genau eine Stelle übersetzt, und sie wird nach dem Lauf geschlossen. Das ist zugleich die Linie aus E3: die Migration borgt sich nichts aus dem Pool, den der Dienst danach braucht. |
 | E18 | goose loggt über `slog.Default()` mit `WithVerbose(true)` | Heute migriert das Programm stumm; fällt ein Start auf, sagt nichts, welche Migration gerade läuft. goose ist ohne `WithVerbose` ebenfalls stumm, mit `WithSlog(slog.Default())` fügt es sich in `LOG_LEVEL`/`LOG_FORMAT` ein. Preis: eine Zeile je angewandter Migration und eine `no migrations to run`-Zeile je Start. |
@@ -161,11 +155,10 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 | R7 | Renovate braucht ein Token, das der Nutzer anlegen muss | Der `GITHUB_TOKEN` eines Workflows darf keine PRs öffnen, die andere Workflows auslösen. Task 9 endet mit einer ausdrücklichen Übergabe: welcher Token-Typ, welche Rechte, welcher Secret-Name. Ohne ihn läuft der Workflow, findet aber nichts zu tun — er scheitert nicht still. |
 | R8 | Renovate-PRs, die **nur** Workflows anfassen, laufen wegen der CI-Ausnahme ohne CI | Genau die Änderungen, die man geprüft haben will, sind ungeprüft. Gegenmaßnahme: Renovate fasst Action-Updates zu einem PR zusammen (`groupName`), der von Hand über `workflow_dispatch` der CI vorgelegt wird, bevor er gemergt wird. Der Hinweis steht in der README. |
 | R9 | Ein gepinntes Basisimage friert Sicherheitsupdates ein, wenn Renovate ausfällt | Heute zieht `golang:1.27-alpine` Patches beim nächsten Build von selbst — gepinnt nicht mehr. Der Zeitplan (wöchentlich) und `workflow_dispatch` sind die Gegenmaßnahme; die Kommentare im `Dockerfile`, die das alte Verhalten beschreiben, werden in Task 10 berichtigt, damit niemand sich auf etwas verlässt, das nicht mehr gilt. |
-| R10 | sqlc liest dieselben Migrationsdateien; die goose-Annotationen könnten den generierten Code ändern | Am 2026-09-22 gegen die im Modul gepinnte sqlc v1.31.1 geprüft: `internal/migrations/migrations.go:26` bricht das Einlesen bei `-- +goose down` ab (Kleinschreibung, `strings.ToLower` davor), `IsDown` streicht `*.down.sql`. Beide Formate werden also unterstützt. Task 12 belegt es trotzdem: `make sqlc-generate` und `git diff --exit-code internal/db/sqlc` — die CI prüft dieselbe Drift. |
-| R11 | `testdb.reset` truncatet jede Tabelle außer `schema_migrations` — also künftig auch `goose_db_version` | Konkret benannt in Task 12, Steps 6 und 7: die Ausnahmeliste in `internal/db/migrations_test.go:182` und in `internal/db/testdb/testdb.go:155` muss auf `goose_db_version` umgestellt werden. Bliebe sie stehen, leerte der erste Test die Versionstabelle des geteilten Containers. |
-| R12 | Die Übernahme löscht `schema_migrations`; ein Fehler darin ist nicht rückgängig zu machen | Eine Transaktion um Anlegen, Befüllen und Löschen — scheitert irgendetwas, ist nichts geschehen. Abgesichert durch `TestAdoptLegacyVersions_*` in Task 11, die gegen eine wirklich von golang-migrate migrierte Datenbank laufen. Die Abschluss-Verifikation nimmt vor dem ersten Start gegen die echte Instanz einen `pg_dump`. |
-| R13 | Die Zusicherung bei Abbruch ändert sich gegenüber Task 3 | golang-migrate bricht *zwischen* zwei Migrationen ab und beendet die laufende; goose bricht die laufende ab und rollt ihre Transaktion zurück. Beide Male ist nichts halb angewandt und ein zweiter Lauf gefahrlos — nur der Halbsatz *warum* stimmt danach nicht mehr. Task 12 schärft ihn nach; das Wort `re-running`, auf das der Test aus Task 3 prüft, bleibt erhalten. |
-| R14 | Die Übernahme muss raten, welche Versionen angewandt sind | golang-migrate merkt sich nur die höchste. Die Übernahme trägt deshalb genau die Versionen ein, die die Binary mitbringt und die unter der Marke liegen (`provider.ListSources()`), nicht `1..n` — das bliebe auch dann richtig, wenn eine Migration je einen Zeitstempel als Nummer bekäme. Liegt die Marke **über** der höchsten mitgebrachten Version, war die Datenbank an einer neueren Binary: die Übernahme verweigert dann und sagt das. |
+| R10 | sqlc liest dieselben Migrationsdateien; die goose-Annotationen könnten den generierten Code ändern | Am 2026-09-22 gegen die im Modul gepinnte sqlc v1.31.1 geprüft: `internal/migrations/migrations.go:26` bricht das Einlesen bei `-- +goose down` ab (Kleinschreibung, `strings.ToLower` davor), `IsDown` streicht `*.down.sql`. Beide Formate werden also unterstützt. Task 11 belegt es trotzdem: `make sqlc-generate` und `git diff --exit-code internal/db/sqlc` — die CI prüft dieselbe Drift. |
+| R11 | `testdb.reset` truncatet jede Tabelle außer `schema_migrations` — also künftig auch `goose_db_version` | Konkret benannt in Task 11, Steps 7 und 8: die Ausnahmeliste in `internal/db/migrations_test.go:182` und in `internal/db/testdb/testdb.go:155` muss auf `goose_db_version` umgestellt werden. Bliebe sie stehen, leerte der erste Test die Versionstabelle des geteilten Containers. |
+| R12 | Eine Datenbank, die ein Build vor M6 angelegt hat, startet nicht mehr | goose findet kein `goose_db_version`, hält die Datenbank für leer, wendet `0001` erneut an und scheitert an `CREATE TABLE units`. Das ist gewollt (E15) und betrifft nur Entwicklungsdatenbanken — die Tests legen über `testdb` immer frische an. Die README nennt beide Auswege, Neuanlegen und das Bookkeeping von Hand; die Abschluss-Verifikation führt einen davon aus. |
+| R13 | Die Zusicherung bei Abbruch ändert sich gegenüber Task 3 | golang-migrate bricht *zwischen* zwei Migrationen ab und beendet die laufende; goose bricht die laufende ab und rollt ihre Transaktion zurück. Beide Male ist nichts halb angewandt und ein zweiter Lauf gefahrlos — nur der Halbsatz *warum* stimmt danach nicht mehr. Task 11 schärft ihn nach; das Wort `re-running`, auf das der Test aus Task 3 prüft, bleibt erhalten. |
 
 ### Definition of Done
 
@@ -175,8 +168,7 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - [ ] `v0.1.0` existiert als Tag, als GitHub-Release mit Changelog und als Image in der GHCR.
 - [ ] Renovate läuft und hat mindestens einen PR geöffnet; jede Action und jedes Basisimage ist auf Digest gepinnt.
 - [ ] `go.mod` nennt `github.com/pressly/goose/v3` und **nicht** mehr `github.com/golang-migrate/migrate/v4`; `grep -rn golang-migrate --include='*.go' .` findet nichts mehr.
-- [ ] Eine von golang-migrate angelegte Datenbank startet nach dem Tausch ohne Eingriff, und `goose_db_version` trägt danach die Versionen 0 bis 3.
-- [ ] README aktualisiert: Installation aus einem Release, Betrieb über das veröffentlichte Image, Hinweis auf `env_file`, Abschnitt zu Renovate und den gepinnten Digests, das goose-Dateiformat unter „Changing the database schema“ und `goose_db_version` im Restore-Abschnitt.
+- [ ] README aktualisiert: Installation aus einem Release, Betrieb über das veröffentlichte Image, Hinweis auf `env_file`, Abschnitt zu Renovate und den gepinnten Digests, das goose-Dateiformat unter „Changing the database schema“, `goose_db_version` im Restore-Abschnitt und der Hinweis, wie eine ältere Entwicklungsdatenbank wieder brauchbar wird.
 
 ### Backlog (bewusst nicht in diesem Plan)
 
@@ -184,7 +176,6 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - **Kongs Kommandopfad-Präfix** (`serve: config: API_TOKEN …`): dass der Inhalt gleich bleibt, ist geprüft, ob das Präfix einem Betreiber hilft oder im Weg steht, nie. Braucht ein Nutzerurteil, keinen Task.
 - **Multi-Arch-Image.** Das Release baut `linux/amd64`. Ein `linux/arm64`-Image bräuchte QEMU oder einen ARM-Runner.
 - **Signatur und Provenance** der Release-Artefakte.
-- **Die Übernahme aus `schema_migrations` wieder entfernen.** `adoptLegacyVersions` ist Code auf Zeit: er läuft genau einmal je Datenbank und ist danach ein No-op, der bei jedem Start eine Abfrage kostet. Wenn feststeht, dass jede Datenbank, die dieses Projekt betreibt, übernommen wurde — frühestens ein Release nach M6 —, gehören `internal/db/adopt.go` und sein Test gelöscht. Wer das aufgreift, prüft vorher auf jeder Instanz, dass `schema_migrations` fort ist.
 - **Migrationen mit `-- +goose NO TRANSACTION`.** goose kann eine Migration auf Wunsch ohne Transaktion fahren, was `CREATE INDEX CONCURRENTLY` erst möglich macht. Keine der heutigen Migrationen braucht es; die erste, die einen Index auf einer großen Tabelle anlegen will, schon.
 
 ---
@@ -206,9 +197,6 @@ internal/db/
   lock.go                    # ImportLock hält eine eigene Verbindung
   lock_test.go               # + Test, dass der Pool unberührt bleibt
   connect.go                 # Fehlermeldung des Abbruchs; ab M6 goose statt golang-migrate
-  adopt.go                   # neu (M6): openSQL, versionStore, adoptLegacyVersions
-  adopt_test.go              # neu (M6)
-  export_test.go             # neu (M6): reicht adoptLegacyVersions an das externe Testpaket
   migrate_test.go            # M6: der Fake-Seam entfällt, ein Lock-Test tritt an seine Stelle
   migrations_test.go         # M6: fileMigrator wird zum goose-Provider
   migrations/
@@ -221,7 +209,7 @@ internal/server/
 cmd/recipe-reader/
   main.go                    # Bedienfehler vs. Laufzeitfehler
   main_test.go               # + erwartete Logzeile in der Tabelle
-README.md                    # M6: Migrationsformat, goose_db_version im Restore-Abschnitt
+README.md                    # M6: Migrationsformat, goose_db_version, Hinweis auf alte Entwicklungsdatenbanken
 ```
 
 ---
@@ -237,7 +225,7 @@ README.md                    # M6: Migrationsformat, goose_db_version im Restore
 | **M3:** Eindeutige Fehlermeldungen | Task 3, Task 4 | Abbruch und Bedienfehler sagen, was sie sind | ja |
 | **M4:** Release-Automatik | Task 5, Task 6, Task 7 | `v0.1.0` mit Binaries und Image | ja |
 | **M5:** Abhängigkeiten unter Aufsicht | Task 8, Task 9, Task 10 | Renovate hält Go, Actions und Images aktuell; Actions und Images sind auf Digest gepinnt | nein |
-| **M6:** Migrationen unter goose | Task 11, Task 12, Task 13 | `golang-migrate` ist fort, der handgeschriebene Abbruchpfad auch; bestehende Datenbanken laufen weiter | nur im Log |
+| **M6:** Migrationen unter goose | Task 11, Task 12 | `golang-migrate` ist fort, der handgeschriebene Abbruchpfad auch | nur im Log |
 
 #### M1: Shutdown-Schranke
 
@@ -273,7 +261,7 @@ Abnahmekriterien:
 #### M6: Migrationen unter goose
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US7 und US8 sind abgehakt.
+- [ ] Die Akzeptanzkriterien von US7 sind abgehakt.
 - [ ] `go test -count=1 -race ./...` ist grün.
 - [ ] `grep -rn 'golang-migrate' --include='*.go' .` findet nichts mehr, und `go.mod` nennt es nicht mehr.
 - [ ] `internal/db/connect.go` enthält weder `migrator` noch `gracefulMigrator` noch `context.AfterFunc`.
@@ -291,7 +279,7 @@ Abnahmekriterien:
 | M5 | `ci/renovate` | `ci: keep dependencies updated with renovate (5/6)` |
 | M6 | `refactor/goose-migrations` | `refactor(db)!: migrate with goose instead of golang-migrate (6/6)` |
 
-Das `!` im Titel von PR 6/6 ist beabsichtigt und keine Formsache. Die Übernahme löscht `schema_migrations` (E15), und damit wird ein Rückschritt auf eine ältere Binary unmöglich: die fände keine Versionstabelle mehr vor, hielte die Datenbank für leer und scheiterte an `CREATE TABLE units`. Genau das ist ein Breaking Change und gehört ins Changelog. Nebenbei ist es das, was `release-please` überhaupt zu einem Release bewegt: `refactor:` allein hebt keine Version — es bekommt zwar einen Abschnitt im Changelog (Task 5), löst aber keinen Bump aus.
+Das `!` im Titel von PR 6/6 ist beabsichtigt und keine Formsache. Die Versionstabelle heißt danach `goose_db_version`, und nichts überträgt die alte (E15): eine Datenbank, die ein älterer Build angelegt hat, ist danach nicht mehr benutzbar, und eine ältere Binary kann eine neu angelegte nicht lesen. Das ist ein Breaking Change und gehört ins Changelog, auch wenn niemand betroffen ist. Nebenbei ist es das, was `release-please` überhaupt zu einem Release bewegt: `refactor:` allein hebt keine Version — es bekommt zwar einen Abschnitt im Changelog (Task 5), löst aber keinen Bump aus.
 
 Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist. Ein PR enthält die Task-Commits seines Milestones, die Korrekturen aus dem Milestone-Review und einen letzten Commit `docs: mark M<n> done in the release plan`.
 
@@ -318,9 +306,8 @@ Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist.
   - [ ] **Task 10:** Renovate pinnt Actions und Images (M)
   - [ ] **Milestone-Review**
 - [ ] **M6: Migrationen unter goose**
-  - [ ] **Task 11:** Bestehende Datenbanken übernehmen (M)
-  - [ ] **Task 12:** goose ersetzt golang-migrate (L)
-  - [ ] **Task 13:** Die Anleitung beschreibt das goose-Format (S)
+  - [ ] **Task 11:** goose ersetzt golang-migrate (L)
+  - [ ] **Task 12:** Die Anleitung beschreibt das goose-Format (S)
   - [ ] **Milestone-Review**
   - [ ] **Abschluss-Verifikation**
 
@@ -629,7 +616,7 @@ Beide `ctx.Err()`-Zweige in `migrateUp` — der vor `open()` und der nach `Up()`
 
 Der Satz gilt für beide Stellen: vor `open()` wurde nichts angewandt, nach `Up()` nur vollständige Migrationen.
 
-**Dieser Wortlaut hält bis M6 und wird dort ein letztes Mal nachgeschärft** (R13): unter goose wird die laufende Migration nicht zu Ende gebracht, sondern zurückgerollt. Der Schluss bleibt derselbe — nichts ist halb angewandt, ein zweiter Lauf setzt fort —, nur die Begründung wechselt. Task 12 ändert deshalb den Satz und nicht das Wort `re-running`, auf das der Test hier prüft. Wer Task 3 reviewt, soll das nicht als Fehler melden.
+**Dieser Wortlaut hält bis M6 und wird dort ein letztes Mal nachgeschärft** (R13): unter goose wird die laufende Migration nicht zu Ende gebracht, sondern zurückgerollt. Der Schluss bleibt derselbe — nichts ist halb angewandt, ein zweiter Lauf setzt fort —, nur die Begründung wechselt. Task 11 aus M6 ändert deshalb den Satz und nicht das Wort `re-running`, auf das der Test hier prüft. Wer Task 3 reviewt, soll das nicht als Fehler melden.
 
 - [ ] **Step 4: Tests laufen lassen, sie müssen grün sein**
 
@@ -1317,423 +1304,9 @@ git commit -m "docs: say what a pinned base image means" -m "The comments promis
 
 ---
 
-### Task 11: Bestehende Datenbanken übernehmen
+### Task 11: goose ersetzt golang-migrate
 
-golang-migrate und goose führen verschiedene Versionstabellen. golang-migrate hält in `schema_migrations` **eine** Zeile — die höchste angewandte Version plus ein `dirty`-Flag —, goose hält in `goose_db_version` **eine Zeile je** angewandter Version, dazu eine Nullzeile als Marke, dass die Tabelle existiert.
-
-Ohne Übernahme fände goose beim ersten Start nach dem Tausch keine Versionstabelle, hielte die Datenbank für leer, wendete `0001` erneut an und scheiterte an `CREATE TABLE units` — der Dienst startet nicht mehr. Dieser Task schreibt die Übernahme und testet sie, **bevor** irgendetwas umgestellt wird: solange golang-migrate noch im Baum ist, kann der Test seine Ausgangslage von der echten Bibliothek erzeugen lassen.
-
-Nach diesem Task ist das Verhalten des Programms unverändert — nichts ruft die neue Funktion auf außer ihrem Test. Das ist Absicht: der Tausch in Task 12 soll sich auf eine Übernahme stützen können, die schon belegt ist.
-
-**Files:**
-- Create: `internal/db/adopt.go`
-- Create: `internal/db/export_test.go`
-- Create: `internal/db/adopt_test.go`
-- Modify: `go.mod`, `go.sum`
-
-**Interfaces:**
-- Consumes: `testdb.NewDatabase(t, name) string`, `db.Migrate(dsn) error`, `connect(t, dsn) *pgxpool.Pool` (schon in `internal/db/migrations_test.go`, gleiches Testpaket `db_test`)
-- Produces — Task 12 baut darauf auf:
-  - `func openSQL(dsn string) (*sql.DB, error)`
-  - `func versionStore() (database.Store, error)`
-  - `func adoptLegacyVersions(ctx context.Context, sqlDB *sql.DB, store database.Store, shipped []int64) error`
-  - `const legacyVersionTable = "schema_migrations"`
-  - `func AdoptLegacyVersions(ctx context.Context, dsn string, shipped []int64) error` (nur in `export_test.go`, nur für Tests)
-
-- [ ] **Step 1: goose ins Modul holen**
-
-```bash
-go get github.com/pressly/goose/v3@v3.28.0
-```
-
-Erwartet: `go.mod` nennt `github.com/pressly/goose/v3 v3.28.0` als direkte Abhängigkeit. golang-migrate bleibt vorerst stehen — es wird in Task 12 entfernt.
-
-Begründung fürs Protokoll (Global Constraints verlangen eine): goose **ersetzt** golang-migrate, es kommt nichts hinzu (E12). `pgx/v5/stdlib` ist kein neues Modul, sondern ein Paket aus dem schon vorhandenen `github.com/jackc/pgx/v5`.
-
-- [ ] **Step 2: Den failing Test schreiben** (`internal/db/adopt_test.go`, neu)
-
-```go
-package db_test
-
-import (
-	"slices"
-	"strings"
-	"testing"
-
-	"github.com/jackc/pgx/v5"
-
-	"github.com/sBurmester/recipe-reader/internal/db"
-	"github.com/sBurmester/recipe-reader/internal/db/testdb"
-)
-
-// shipped is the migration versions the binary carries. The adoption is told
-// them rather than left to count, so the tests hand it the same list.
-var shipped = []int64{1, 2, 3}
-
-// legacyDatabase returns a DSN for a database in the state golang-migrate
-// leaves behind: the full schema, plus one row in schema_migrations naming the
-// highest migration applied.
-//
-// The schema is produced by running the migrations rather than restored from a
-// dump, so it cannot drift from what the project actually applies. Only the
-// version table is written by hand — which is also what keeps this helper
-// working after Task 12, when db.Migrate produces goose's table instead.
-func legacyDatabase(t *testing.T, name string, version int64, dirty bool) string {
-	t.Helper()
-	dsn := testdb.NewDatabase(t, name)
-	if err := db.Migrate(dsn); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	pool := connect(t, dsn)
-	defer pool.Close()
-	// Two statements: pgx sends anything with parameters over the extended
-	// protocol, which refuses more than one statement per call.
-	if _, err := pool.Exec(t.Context(), `
-		DROP TABLE IF EXISTS goose_db_version;
-		DROP TABLE IF EXISTS schema_migrations;
-		CREATE TABLE schema_migrations (version BIGINT NOT NULL PRIMARY KEY, dirty BOOLEAN NOT NULL)`); err != nil {
-		t.Fatalf("build the legacy version table: %v", err)
-	}
-	if _, err := pool.Exec(t.Context(),
-		"INSERT INTO schema_migrations (version, dirty) VALUES ($1, $2)", version, dirty); err != nil {
-		t.Fatalf("record the legacy version: %v", err)
-	}
-	return dsn
-}
-
-// tableExists reports whether a table of that name is in the public schema.
-func tableExists(t *testing.T, dsn, name string) bool {
-	t.Helper()
-	pool := connect(t, dsn)
-	defer pool.Close()
-	var exists bool
-	if err := pool.QueryRow(t.Context(), "SELECT to_regclass($1) IS NOT NULL", "public."+name).Scan(&exists); err != nil {
-		t.Fatalf("look for %s: %v", name, err)
-	}
-	return exists
-}
-
-// gooseVersions lists what goose_db_version records, ascending.
-func gooseVersions(t *testing.T, dsn string) []int64 {
-	t.Helper()
-	pool := connect(t, dsn)
-	defer pool.Close()
-	rows, err := pool.Query(t.Context(), "SELECT version_id FROM goose_db_version WHERE is_applied ORDER BY version_id")
-	if err != nil {
-		t.Fatalf("read goose_db_version: %v", err)
-	}
-	versions, err := pgx.CollectRows(rows, pgx.RowTo[int64])
-	if err != nil {
-		t.Fatalf("read goose_db_version: %v", err)
-	}
-	return versions
-}
-
-// A database golang-migrate migrated has to keep its schema and lose its old
-// bookkeeping — otherwise goose takes it for empty, re-applies 0001 and the
-// service stops starting.
-func TestAdoptLegacyVersions_CarriesTheVersionOver(t *testing.T) {
-	dsn := legacyDatabase(t, "adopt_carries_over", 3, false)
-
-	if err := db.AdoptLegacyVersions(t.Context(), dsn, shipped); err != nil {
-		t.Fatalf("AdoptLegacyVersions() error = %v", err)
-	}
-
-	// Zero is goose's own marker that the table exists; without it goose reads
-	// the database as being at no version at all.
-	if got, want := gooseVersions(t, dsn), []int64{0, 1, 2, 3}; !slices.Equal(got, want) {
-		t.Errorf("goose_db_version = %v, want %v", got, want)
-	}
-	if tableExists(t, dsn, "schema_migrations") {
-		t.Error("schema_migrations survived the adoption; a database carrying both tables says nothing about which one counts")
-	}
-	if !tableExists(t, dsn, "units") {
-		t.Error("the adoption lost the schema")
-	}
-
-	// The next boot, and every boot after it.
-	if err := db.AdoptLegacyVersions(t.Context(), dsn, shipped); err != nil {
-		t.Errorf("second AdoptLegacyVersions() error = %v, want it to do nothing", err)
-	}
-	if got, want := gooseVersions(t, dsn), []int64{0, 1, 2, 3}; !slices.Equal(got, want) {
-		t.Errorf("goose_db_version after a second run = %v, want %v", got, want)
-	}
-}
-
-// dirty means a golang-migrate run failed part-way and never recorded what it
-// left behind. Carrying that over would hand goose a version it cannot trust.
-func TestAdoptLegacyVersions_RefusesADirtyDatabase(t *testing.T) {
-	dsn := legacyDatabase(t, "adopt_dirty", 2, true)
-
-	err := db.AdoptLegacyVersions(t.Context(), dsn, shipped)
-	if err == nil {
-		t.Fatal("AdoptLegacyVersions() = nil, want a dirty database refused")
-	}
-	if !strings.Contains(err.Error(), "dirty") {
-		t.Errorf("AdoptLegacyVersions() error = %q, want it to name the dirty flag", err)
-	}
-	if !tableExists(t, dsn, "schema_migrations") {
-		t.Error("the refused adoption dropped schema_migrations anyway")
-	}
-	if tableExists(t, dsn, "goose_db_version") {
-		t.Error("the refused adoption created goose_db_version anyway")
-	}
-}
-
-// A database migrated past what this binary carries was written by a newer
-// build. Adopting it would silently record a version whose migrations this
-// binary has never seen.
-func TestAdoptLegacyVersions_RefusesAVersionFromANewerBuild(t *testing.T) {
-	dsn := legacyDatabase(t, "adopt_from_the_future", 4, false)
-
-	err := db.AdoptLegacyVersions(t.Context(), dsn, shipped)
-	if err == nil {
-		t.Fatal("AdoptLegacyVersions() = nil, want a database from a newer build refused")
-	}
-	if !strings.Contains(err.Error(), "newer build") {
-		t.Errorf("AdoptLegacyVersions() error = %q, want it to say the database is ahead of this binary", err)
-	}
-	if !tableExists(t, dsn, "schema_migrations") {
-		t.Error("the refused adoption dropped schema_migrations anyway")
-	}
-}
-
-// An empty database has nothing to adopt, and the adoption must not get in
-// goose's way by creating its table early.
-func TestAdoptLegacyVersions_LeavesAFreshDatabaseAlone(t *testing.T) {
-	dsn := testdb.NewDatabase(t, "adopt_fresh")
-
-	if err := db.AdoptLegacyVersions(t.Context(), dsn, shipped); err != nil {
-		t.Fatalf("AdoptLegacyVersions() error = %v", err)
-	}
-	if tableExists(t, dsn, "goose_db_version") {
-		t.Error("the adoption created goose_db_version on a database it had nothing to say about")
-	}
-}
-```
-
-- [ ] **Step 3: Test laufen lassen, er muss fehlschlagen**
-
-Run: `go test -count=1 -run TestAdoptLegacyVersions ./internal/db/`
-Expected: FAIL beim Übersetzen — `undefined: db.AdoptLegacyVersions`
-
-- [ ] **Step 4: Die Übernahme schreiben** (`internal/db/adopt.go`, neu)
-
-```go
-package db
-
-import (
-	"context"
-	"database/sql"
-	"errors"
-	"fmt"
-	"log/slog"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
-	"github.com/pressly/goose/v3/database"
-	"github.com/pressly/goose/v3/lock"
-)
-
-// legacyVersionTable is the table golang-migrate kept the schema version in,
-// until this project stopped using it. It holds a single row — the highest
-// migration applied, plus a dirty flag — and records nothing about which
-// migrations those were.
-const legacyVersionTable = "schema_migrations"
-
-// openSQL opens a database/sql handle on dsn through pgx's stdlib adapter.
-//
-// goose speaks database/sql and the rest of this project speaks pgx, so
-// exactly one place translates between them, and this is it. The handle is
-// capped at a single connection because a migration run is a single connection
-// by construction — goose takes one *sql.Conn, holds its advisory lock on it
-// and applies every migration through it — and the cap says so rather than
-// leaving a pool idling behind the migrator. The caller closes it.
-func openSQL(dsn string) (*sql.DB, error) {
-	cfg, err := pgx.ParseConfig(dsn)
-	if err != nil {
-		return nil, fmt.Errorf("db: parse dsn: %w", err)
-	}
-	sqlDB := stdlib.OpenDB(*cfg)
-	sqlDB.SetMaxOpenConns(1)
-	return sqlDB, nil
-}
-
-// versionStore is goose's own reader and writer of goose_db_version. The
-// adoption below has to write that table before goose has ever opened it, and
-// going through the store rather than hand-written DDL is what keeps the two
-// definitions of it from drifting apart.
-func versionStore() (database.Store, error) {
-	store, err := database.NewStore(database.DialectPostgres, goose.DefaultTablename)
-	if err != nil {
-		return nil, fmt.Errorf("db: version store: %w", err)
-	}
-	return store, nil
-}
-
-// adoptLegacyVersions turns a database that golang-migrate migrated into one
-// goose recognises, and leaves every other database untouched.
-//
-// The two tools record different things, so the adoption cannot copy: it reads
-// golang-migrate's high-water mark and writes one row for every migration at
-// or below it. That is sound because golang-migrate applies migrations in
-// order and refuses to skip one.
-//
-// shipped is the versions this binary carries, in any order. It is a parameter
-// rather than a count from one because a migration numbered by timestamp would
-// break 1..n, and because a database migrated past what this binary knows is
-// worth refusing rather than guessing at.
-//
-// Everything happens in one transaction, under the same advisory lock goose
-// takes for a migration run, and the old table goes with it — a database
-// carrying both tables would leave every later reader guessing which one is
-// authoritative.
-func adoptLegacyVersions(ctx context.Context, sqlDB *sql.DB, store database.Store, shipped []int64) error {
-	var goosePresent, legacyPresent bool
-	if err := sqlDB.QueryRowContext(ctx,
-		"SELECT to_regclass($1) IS NOT NULL, to_regclass($2) IS NOT NULL",
-		"public."+store.Tablename(), "public."+legacyVersionTable,
-	).Scan(&goosePresent, &legacyPresent); err != nil {
-		return fmt.Errorf("db: look for the version tables: %w", err)
-	}
-	if goosePresent || !legacyPresent {
-		return nil
-	}
-
-	var high int64
-	var dirty bool
-	switch err := sqlDB.QueryRowContext(ctx, "SELECT version, dirty FROM "+legacyVersionTable).Scan(&high, &dirty); {
-	case errors.Is(err, sql.ErrNoRows):
-		// golang-migrate creates the table before it applies anything and
-		// empties it again on a full down, so an empty table means nothing is
-		// applied. Nothing to carry over then — only the table itself to clear
-		// away, which the transaction below still does.
-	case err != nil:
-		return fmt.Errorf("db: read %s: %w", legacyVersionTable, err)
-	case dirty:
-		return fmt.Errorf("db: %s reports version %d as dirty: a golang-migrate run failed part-way and "+
-			"never recorded what it left behind, so this database cannot be adopted unseen. Repair the "+
-			"schema by hand, set dirty to false, and start again", legacyVersionTable, high)
-	}
-
-	var newest int64
-	for _, version := range shipped {
-		newest = max(newest, version)
-	}
-	if high > newest {
-		return fmt.Errorf("db: %s reports version %d, but this build only carries migrations up to %d: "+
-			"the database was migrated by a newer build, and running this one against it would be a "+
-			"downgrade. Deploy the newer build, or restore a matching dump", legacyVersionTable, high, newest)
-	}
-
-	tx, err := sqlDB.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("db: adopt %s: %w", legacyVersionTable, err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	// The lock goose itself takes for a migration run, held for this
-	// transaction only. Without it two instances starting at once would both
-	// have seen the legacy table above, and the second would fail creating a
-	// table the first had just created.
-	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", lock.DefaultLockID); err != nil {
-		return fmt.Errorf("db: take the migration lock: %w", err)
-	}
-	var adopted bool
-	if err := tx.QueryRowContext(ctx, "SELECT to_regclass($1) IS NOT NULL", "public."+store.Tablename()).Scan(&adopted); err != nil {
-		return fmt.Errorf("db: look for %s: %w", store.Tablename(), err)
-	}
-	if adopted {
-		// Another instance did the work while this one waited for the lock.
-		return nil
-	}
-
-	if err := store.CreateVersionTable(ctx, tx); err != nil {
-		return fmt.Errorf("db: create %s: %w", store.Tablename(), err)
-	}
-	// Zero first: goose inserts it whenever it creates the table itself, and
-	// its absence would read as a database at no version at all.
-	versions := []int64{0}
-	for _, version := range shipped {
-		if version <= high {
-			versions = append(versions, version)
-		}
-	}
-	for _, version := range versions {
-		if err := store.Insert(ctx, tx, database.InsertRequest{Version: version}); err != nil {
-			return fmt.Errorf("db: record version %d in %s: %w", version, store.Tablename(), err)
-		}
-	}
-	if _, err := tx.ExecContext(ctx, "DROP TABLE "+legacyVersionTable); err != nil {
-		return fmt.Errorf("db: drop %s: %w", legacyVersionTable, err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("db: adopt %s: %w", legacyVersionTable, err)
-	}
-	slog.InfoContext(ctx, "db: adopted the schema version golang-migrate recorded",
-		"version", high, "table", store.Tablename())
-	return nil
-}
-```
-
-- [ ] **Step 5: Den Testzugang schreiben** (`internal/db/export_test.go`, neu)
-
-```go
-package db
-
-import "context"
-
-// AdoptLegacyVersions runs the adoption against dsn, opening and closing its
-// own handle.
-//
-// It exists only for tests. The test that drives the adoption needs a Postgres
-// from internal/db/testdb, testdb imports this package, and an internal test
-// file therefore cannot reach it — the test has to live in package db_test,
-// which cannot see unexported names. This file is an _test.go file, so nothing
-// outside the test binary can call it.
-func AdoptLegacyVersions(ctx context.Context, dsn string, shipped []int64) error {
-	sqlDB, err := openSQL(dsn)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = sqlDB.Close() }()
-	store, err := versionStore()
-	if err != nil {
-		return err
-	}
-	return adoptLegacyVersions(ctx, sqlDB, store, shipped)
-}
-```
-
-- [ ] **Step 6: Tests laufen lassen, sie müssen grün sein**
-
-Run: `go test -count=1 -race ./internal/db/`
-Expected: PASS, die vier `TestAdoptLegacyVersions_*` eingeschlossen. Docker muss laufen.
-
-- [ ] **Step 7: Commit-Gate** (siehe Global Constraints), dann stagen
-
-```bash
-git add go.mod go.sum internal/db/adopt.go internal/db/adopt_test.go internal/db/export_test.go
-```
-
-Commit-Message (die Hauptsession committet, siehe „Ablauf der Umsetzung"):
-
-```
-feat(db): adopt a golang-migrate version table
-
-goose keeps a row per applied version where golang-migrate kept one
-high-water mark, so a database migrated by the old tool would look empty
-to the new one: it would re-apply 0001 and fail on CREATE TABLE units.
-The adoption reads the mark, records every migration at or below it, and
-drops the old table in the same transaction. Nothing calls it yet.
-```
-
----
-
-### Task 12: goose ersetzt golang-migrate
-
-Der Tausch selbst. Er ist ein Task und nicht drei, weil kein Zwischenstand übersetzt und läuft: sobald die Migrationsdateien goose' Format tragen, findet golang-migrate keine mehr, und solange `connect.go` golang-migrate benutzt, kann goose die Dateien nicht anwenden.
+Der Tausch. Er ist ein Task und nicht drei, weil kein Zwischenstand übersetzt und läuft: sobald die Migrationsdateien goose' Format tragen, findet golang-migrate keine mehr, und solange `connect.go` golang-migrate benutzt, kann goose die Dateien nicht anwenden.
 
 Was verschwindet: das Interface `migrator`, der Adapter `gracefulMigrator`, `migrateUp` mit seinen drei Guards, das `context.AfterFunc`, die Funktionen `newMigrate` und `migrateURL` und der Kommentar, der zwei bekannte Schwächen dieser Konstruktion einräumt. Was an ihre Stelle tritt, ist ein Aufruf mit einem Kontext darin.
 
@@ -1747,12 +1320,22 @@ Was verschwindet: das Interface `migrator`, der Adapter `gracefulMigrator`, `mig
 - Modify: `go.mod`, `go.sum`
 
 **Interfaces:**
-- Consumes (aus Task 11): `openSQL(dsn) (*sql.DB, error)`, `versionStore() (database.Store, error)`, `adoptLegacyVersions(ctx, sqlDB, store, shipped) error`
+- Consumes: —
 - Produces: `Migrate(dsn) error`, `MigrateWithContext(ctx, dsn) error`, `MigrateDown(dsn) error` — **unveränderte Signaturen**. Nur die Fehlertexte ändern sich, und `migrator`/`gracefulMigrator`/`migrateUp` gibt es nicht mehr.
 
-- [ ] **Step 1: Die sechs Migrationsdateien zu drei zusammenführen**
+- [ ] **Step 1: goose ins Modul holen**
 
-Das SQL wird nicht angefasst — nur die Klammern `BEGIN;`/`COMMIT;` fallen weg, weil goose jede Migration selbst in eine Transaktion legt und ein `COMMIT;` mittendrin goose' eigene Transaktion vorzeitig beenden würde (E14). Die Kommentare, die auf „one transaction" verweisen, sagen danach, wessen Transaktion es ist.
+```bash
+go get github.com/pressly/goose/v3@v3.28.0
+```
+
+Erwartet: `go.mod` nennt `github.com/pressly/goose/v3 v3.28.0` als direkte Abhängigkeit. golang-migrate bleibt bis Step 9 stehen.
+
+Begründung fürs Protokoll (die Global Constraints verlangen eine): goose **ersetzt** golang-migrate, es kommt nichts hinzu (E12). `pgx/v5/stdlib` ist kein neues Modul, sondern ein Paket aus dem schon vorhandenen `github.com/jackc/pgx/v5`.
+
+- [ ] **Step 2: Die sechs Migrationsdateien zu drei zusammenführen**
+
+Die Anweisungen werden nicht angefasst — nur die Klammern `BEGIN;`/`COMMIT;` fallen weg, weil goose jede Migration selbst in eine Transaktion legt und ein `COMMIT;` mittendrin goose' eigene Transaktion vorzeitig beenden würde (E14). Die zwei Kommentarzeilen, die auf diese Klammern verwiesen, sagen danach, wessen Transaktion es ist.
 
 `internal/db/migrations/0001_init.sql` (neu; `0001_init.up.sql` + `0001_init.down.sql` löschen):
 
@@ -1882,20 +1465,21 @@ git rm internal/db/migrations/0001_init.up.sql internal/db/migrations/0001_init.
        internal/db/migrations/0003_recipe_ingredient_position_unique.up.sql internal/db/migrations/0003_recipe_ingredient_position_unique.down.sql
 ```
 
-- [ ] **Step 2: Belegen, dass der alte Stand die neuen Dateien nicht lesen kann**
+- [ ] **Step 3: Belegen, dass der alte Stand die neuen Dateien nicht lesen kann**
 
 Run: `go test -count=1 -run TestMigrateConnectSeed ./internal/db/`
 Expected: FAIL. golang-migrates `iofs`-Quelle erkennt nur `*.up.sql`/`*.down.sql`; die Meldung nennt `no migration found` oder `file does not exist`.
 
-Das ist der eigentliche Grund, warum dieser Task nicht teilbar ist: von hier bis Step 9 ist der Baum rot.
+Das ist der Grund, warum dieser Task nicht teilbar ist: von hier bis Step 10 ist der Baum rot.
 
-- [ ] **Step 3: `connect.go` auf goose umbauen**
+- [ ] **Step 4: `connect.go` auf goose umbauen**
 
-Der Importblock von `internal/db/connect.go` — `migrate`, der Blankimport von `database/pgx/v5`, `source/iofs` und `strings` fallen weg, `io/fs`, `log/slog` und die drei goose-Pakete kommen dazu:
+Der Importblock von `internal/db/connect.go` — `migrate`, der Blankimport von `database/pgx/v5`, `source/iofs` und `strings` fallen weg, `database/sql`, `io/fs`, `log/slog`, `pgx` selbst, `pgx/v5/stdlib` und die drei goose-Pakete kommen dazu:
 
 ```go
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
@@ -1904,7 +1488,9 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/database"
 	"github.com/pressly/goose/v3/lock"
@@ -1958,9 +1544,8 @@ func MigrateDown(dsn string) error {
 	})
 }
 
-// withMigrator opens a goose provider over the embedded migrations for dsn,
-// carries over a golang-migrate version table if it finds one, and hands the
-// provider to run.
+// withMigrator opens a goose provider over the embedded migrations for dsn and
+// hands it to run.
 //
 // The guard on the way in is the one piece of the hand-written cancellation
 // path worth keeping: without it an already cancelled context would still cost
@@ -1999,14 +1584,6 @@ func withMigrator(ctx context.Context, dsn string, run func(*goose.Provider) err
 		return fmt.Errorf("db: migration init: %w", err)
 	}
 
-	store, err := versionStore()
-	if err != nil {
-		return err
-	}
-	if err := adoptLegacyVersions(ctx, sqlDB, store, sourceVersions(provider)); err != nil {
-		return err
-	}
-
 	if err := run(provider); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return cancelledMigration(err)
@@ -2016,14 +1593,22 @@ func withMigrator(ctx context.Context, dsn string, run func(*goose.Provider) err
 	return nil
 }
 
-// sourceVersions is the versions of the migrations this binary carries.
-func sourceVersions(provider *goose.Provider) []int64 {
-	sources := provider.ListSources()
-	versions := make([]int64, 0, len(sources))
-	for _, source := range sources {
-		versions = append(versions, source.Version)
+// openSQL opens a database/sql handle on dsn through pgx's stdlib adapter.
+//
+// goose speaks database/sql and the rest of this project speaks pgx, so
+// exactly one place translates between them, and this is it. The handle is
+// capped at a single connection because a migration run is a single connection
+// by construction — goose takes one *sql.Conn, holds its advisory lock on it
+// and applies every migration through it — and the cap says so rather than
+// leaving a pool idling behind the migrator. The caller closes it.
+func openSQL(dsn string) (*sql.DB, error) {
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("db: parse dsn: %w", err)
 	}
-	return versions
+	sqlDB := stdlib.OpenDB(*cfg)
+	sqlDB.SetMaxOpenConns(1)
+	return sqlDB, nil
 }
 
 // cancelledMigration says what an operator reading the line needs to decide
@@ -2043,7 +1628,7 @@ Hinweise für den Review:
 - `lock.DefaultLockID` ist `4097083626`; der Import-Lock dieses Projekts steht auf `8_233_071_001` (`internal/db/lock.go`). Keine Kollision — aber nachsehen, nicht glauben.
 - `errors.Join(retErr, sqlDB.Close())` gibt `nil` zurück, wenn beide `nil` sind; ein Fehler beim Schließen geht damit nicht verloren, verdrängt aber auch keinen echten.
 
-- [ ] **Step 4: `migrate_test.go` ersetzen**
+- [ ] **Step 5: `migrate_test.go` ersetzen**
 
 Der bisherige Inhalt prüft das Gerüst, das es nicht mehr gibt — `stoppingMigrator`, `errNeverStopped`, `migrateUp`. Er fällt ersatzlos weg. An seine Stelle tritt der einzige Teil, den goose nicht schon selbst testet: dass der Lock überhaupt gesetzt ist, und dass ein Aufrufer, dem das Warten zu lang wird, einen Satz bekommt, mit dem er etwas anfangen kann.
 
@@ -2101,13 +1686,25 @@ func TestMigrateWithContext_WaitsForTheLockAndReportsGivingUp(t *testing.T) {
 		t.Error("MigrateWithContext() applied a migration although it never held the lock")
 	}
 }
+
+// tableExists reports whether a table of that name is in the public schema.
+func tableExists(t *testing.T, dsn, name string) bool {
+	t.Helper()
+	pool := connect(t, dsn)
+	defer pool.Close()
+	var exists bool
+	if err := pool.QueryRow(t.Context(), "SELECT to_regclass($1) IS NOT NULL", "public."+name).Scan(&exists); err != nil {
+		t.Fatalf("look for %s: %v", name, err)
+	}
+	return exists
+}
 ```
 
-`tableExists` stammt aus `adopt_test.go` (Task 11), gleiches Paket.
+`connect` stammt aus `migrations_test.go`, gleiches Testpaket.
 
-- [ ] **Step 5: `migrations_test.go` auf goose umstellen**
+- [ ] **Step 6: `migrations_test.go` auf goose umstellen**
 
-Drei Stellen. Erstens der Importblock von `internal/db/migrations_test.go`: `github.com/golang-migrate/migrate/v4`, der Blankimport `_ ".../source/file"` und `net/url` fallen weg; dazu kommen
+Drei Stellen. Erstens der Importblock: `github.com/golang-migrate/migrate/v4`, der Blankimport `_ ".../source/file"` und `net/url` fallen weg; dazu kommen
 
 ```go
 	"database/sql"
@@ -2157,7 +1754,7 @@ Drittens die Aufrufe. golang-migrates `Migrate(n)` lief in beide Richtungen, goo
 
 Beide geben `([]*goose.MigrationResult, error)` zurück; der Rückgabewert wird verworfen, der Fehler geprüft — die bestehenden `t.Fatalf`-Meldungen passen weiter.
 
-- [ ] **Step 6: Die beiden Katalogabfragen in `migrations_test.go` nachziehen**
+- [ ] **Step 7: Die beiden Katalogabfragen in `migrations_test.go` nachziehen**
 
 `tables` schließt heute `schema_migrations` aus. Die Tabelle gibt es nicht mehr; `goose_db_version` schon:
 
@@ -2176,7 +1773,7 @@ Und in `TestMigrations_UpDownUp` die Sequenzabfrage. goose' Versionstabelle hat 
 		   AND c.relname NOT LIKE 'goose\_db\_version%'`).Scan(&sequences); err != nil {
 ```
 
-- [ ] **Step 7: `reset` in `internal/db/testdb/testdb.go` nachziehen**
+- [ ] **Step 8: `reset` in `internal/db/testdb/testdb.go` nachziehen**
 
 `reset` truncatet jede Tabelle im Schema `public` außer `schema_migrations` — also künftig auch die Versionstabelle des geteilten Containers (R11). Abfrage und Kommentar:
 
@@ -2192,7 +1789,7 @@ func reset(ctx context.Context, pool *pgxpool.Pool) error {
 		 WHERE schemaname = 'public' AND tablename <> 'goose_db_version'`)
 ```
 
-- [ ] **Step 8: golang-migrate aus dem Modul entfernen**
+- [ ] **Step 9: golang-migrate aus dem Modul entfernen**
 
 ```bash
 go mod tidy
@@ -2201,12 +1798,14 @@ grep -rn 'golang-migrate' --include='*.go' . ; grep -n 'golang-migrate' go.mod
 
 Erwartet: beide `grep` finden nichts, und `go.mod` nennt `github.com/pressly/goose/v3` unter den direkten Abhängigkeiten. Findet der erste `grep` noch etwas, ist eine Stelle übersehen — nicht `go mod tidy` wiederholen, sondern die Stelle umbauen.
 
-- [ ] **Step 9: Tests laufen lassen, sie müssen grün sein**
+- [ ] **Step 10: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go test -count=1 -race ./internal/db/...`
-Expected: PASS — `TestMigrations_UpDownUp`, `TestMigration0002_*`, `TestMigration0003_*`, `TestMigrateWithContext_*`, `TestAdoptLegacyVersions_*` eingeschlossen.
+Expected: PASS — `TestMigrations_UpDownUp`, `TestMigration0002_*`, `TestMigration0003_*` und `TestMigrateWithContext_*` eingeschlossen.
 
-- [ ] **Step 10: Belegen, dass sqlc nichts anderes generiert**
+Die Tests legen ihre Datenbanken über `testdb` frisch an, es gibt darin also nie eine `schema_migrations`-Tabelle. Falls ein Lauf trotzdem an `CREATE TABLE units` scheitert, steht ein alter Container: `docker ps` und ihn wegräumen.
+
+- [ ] **Step 11: Belegen, dass sqlc nichts anderes generiert**
 
 Die Migrationsdateien sind zugleich sqlc' Schemaquelle. sqlc versteht goose' Annotationen (`internal/migrations/migrations.go:26`), aber das ist eine Behauptung über eine Fremdbibliothek — also nachmessen (R10):
 
@@ -2217,7 +1816,7 @@ git diff --exit-code internal/db/sqlc
 
 Erwartet: Exit 0, keine Ausgabe. Gibt es eine Ausgabe, hier anhalten: entweder ist eine Anweisung beim Zusammenführen verrutscht, oder sqlc liest das neue Format anders als erwartet. Beides gehört dem Nutzer vorgelegt, nicht durch Nachgenerieren übertüncht.
 
-- [ ] **Step 11: Den ganzen Baum prüfen**
+- [ ] **Step 12: Den ganzen Baum prüfen**
 
 ```bash
 go test -count=1 -race ./...
@@ -2225,7 +1824,7 @@ go test -count=1 -race ./...
 
 Erwartet: PASS. `internal/server` und `cmd/recipe-reader` migrieren über dieselben Funktionen und müssen es unverändert tun.
 
-- [ ] **Step 12: Das Image gegenprüfen**
+- [ ] **Step 13: Das Image gegenprüfen**
 
 Der Docker-Gate greift laut Global Constraints nur bei Änderungen an `Dockerfile` oder `scripts/`, und beides bleibt unberührt. Trotzdem: die Migrationen liegen als `embed.FS` in der Binary, und dass der neue Leser sie dort auch findet, zeigt erst ein Lauf gegen ein echtes Postgres im Image.
 
@@ -2236,13 +1835,13 @@ scripts/smoke-test-image.sh recipe-reader:ci smoke
 
 Erwartet: `smoke test passed: recipe-reader:ci (smoke)`.
 
-- [ ] **Step 13: Commit-Gate** (siehe Global Constraints), dann stagen
+- [ ] **Step 14: Commit-Gate** (siehe Global Constraints), dann stagen
 
 ```bash
-git add go.mod go.sum internal/db cmd
+git add go.mod go.sum internal/db
 ```
 
-Commit-Message:
+Commit-Message (die Hauptsession committet, siehe „Ablauf der Umsetzung"):
 
 ```
 refactor(db)!: migrate with goose instead of golang-migrate
@@ -2256,20 +1855,19 @@ a context, runs each migration in its own transaction and takes the
 advisory lock golang-migrate's driver took by itself, so all of that
 goes.
 
-The six *.up.sql/*.down.sql files become three annotated ones. Their SQL
-is unchanged except for the BEGIN;/COMMIT; pairs in 0002 and 0003, which
-goose now opens itself.
+The six *.up.sql/*.down.sql files become three annotated ones. Their
+statements are unchanged except for the BEGIN;/COMMIT; pairs in 0002 and
+0003, which goose now opens itself.
 
 BREAKING CHANGE: the version table moves from schema_migrations to
-goose_db_version. Existing databases are carried over automatically on
-the next start, and the old table is dropped in the same transaction — so
-an older build can no longer be run against a database this one has
-started.
+goose_db_version, and nothing carries the old one over. A database an
+earlier build created has to be recreated — see the README. The software
+has not been deployed, so no such database exists outside development.
 ```
 
 ---
 
-### Task 13: Die Anleitung beschreibt das goose-Format
+### Task 12: Die Anleitung beschreibt das goose-Format
 
 Die README beschreibt an drei Stellen, was jetzt anders ist: wie eine Migration aussieht, was ein Ctrl-C während `migrate` hinterlässt, und wie die Versionstabelle heißt, die ein Restore mitbringt. Ohne diesen Task legt der nächste Entwickler ein `000N_*.up.sql` an, das niemand liest.
 
@@ -2277,7 +1875,7 @@ Die README beschreibt an drei Stellen, was jetzt anders ist: wie eine Migration 
 - Modify: `README.md` (Zeile ~43, der `migrate`-Eintrag der Kommandotabelle; Abschnitt „Upgrading from Postgres 17"; Abschnitt „Changing the database schema")
 
 **Interfaces:**
-- Consumes: den Stand nach Task 12
+- Consumes: den Stand nach Task 11
 - Produces: keine Codeänderung
 
 - [ ] **Step 1: Den `migrate`-Eintrag der Kommandotabelle berichtigen**
@@ -2296,13 +1894,11 @@ Der Rest des Eintrags bleibt.
 
 Im Abschnitt „Upgrading from Postgres 17" steht heute:
 
-> Restore before the app starts. On first start the app runs migrations and seeds the lookup tables, and the restore would then collide with the tables and rows it created. The restored `schema_migrations` table leaves the app nothing to migrate, and the ID sequences carry on from where they were.
+> The restored `schema_migrations` table leaves the app nothing to migrate, and the ID sequences carry on from where they were.
 
 Ersetzen durch:
 
-> Restore before the app starts. On first start the app runs migrations and seeds the lookup tables, and the restore would then collide with the tables and rows it created. The restored version table leaves the app nothing to migrate, and the ID sequences carry on from where they were.
->
-> A dump taken before the move to goose carries `schema_migrations` instead of `goose_db_version`. Restoring it is fine: the first start reads the version it records, writes the matching rows into `goose_db_version` and drops `schema_migrations`, in one transaction. That is a one-way step — a build older than that move cannot be run against the database afterwards, because it would find no version table, take the database for empty and fail on `CREATE TABLE units`. Keep the dump.
+> The restored `goose_db_version` table leaves the app nothing to migrate, and the ID sequences carry on from where they were.
 
 - [ ] **Step 3: „Changing the database schema" auf das neue Format bringen**
 
@@ -2331,7 +1927,7 @@ Die Schritte 2 bis 4 bleiben unverändert.
 
 - [ ] **Step 4: Den Absatz darunter ergänzen**
 
-Hinter dem Absatz, der `TestMigrations_UpDownUp` beschreibt, einen neuen anhängen:
+Hinter dem Absatz, der `TestMigrations_UpDownUp` beschreibt, zwei neue anhängen:
 
 > Migrations run under [goose](https://github.com/pressly/goose), embedded in the binary — there is no
 > migration tool to install and no migration files in the image. goose records what it has applied in
@@ -2339,6 +1935,22 @@ Hinter dem Absatz, der `TestMigrations_UpDownUp` beschreibt, einen neuen anhäng
 > so two instances starting at once queue up instead of racing. The same files are sqlc's schema
 > source; sqlc stops reading at `-- +goose Down`, so the down direction never reaches the generated
 > code.
+>
+> Before goose the bookkeeping lived in `schema_migrations`, written by golang-migrate, and nothing
+> carries that table over. A database created by a build older than the switch is therefore not
+> usable: goose finds no version table, takes the database for empty and fails on `CREATE TABLE
+> units`. Recreate it — `docker compose down -v`, or `dropdb` and start the app — or, to keep the
+> rows, write the bookkeeping by hand once:
+>
+>     CREATE TABLE goose_db_version (
+>         id integer PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY,
+>         version_id bigint NOT NULL,
+>         is_applied boolean NOT NULL,
+>         tstamp timestamp NOT NULL DEFAULT now()
+>     );
+>     INSERT INTO goose_db_version (version_id, is_applied)
+>         VALUES (0, true), (1, true), (2, true), (3, true);
+>     DROP TABLE schema_migrations;
 
 - [ ] **Step 5: Die Änderung gegenlesen**
 
@@ -2346,9 +1958,9 @@ Hinter dem Absatz, der `TestMigrations_UpDownUp` beschreibt, einen neuen anhäng
 grep -n 'schema_migrations\|\.up\.sql\|\.down\.sql' README.md
 ```
 
-Erwartet: nur noch die Fundstelle im Restore-Abschnitt, die `schema_migrations` bewusst als den alten Namen nennt. Findet sich sonst etwas, ist eine Stelle übersehen.
+Erwartet: nur noch die Fundstellen im neuen Absatz aus Step 4, die `schema_migrations` bewusst als den alten Namen nennen. Findet sich sonst etwas, ist eine Stelle übersehen.
 
-- [ ] **Step 6: Commit-Gate** (siehe Global Constraints — der Go-Teil läuft auch bei einer reinen Dokumentationsänderung, er ist billig und beweist, dass der Baum nach Task 12 steht), dann stagen
+- [ ] **Step 6: Commit-Gate** (siehe Global Constraints — der Go-Teil läuft auch bei einer reinen Dokumentationsänderung, er ist billig und beweist, dass der Baum nach Task 11 steht), dann stagen
 
 ```bash
 git add README.md
@@ -2361,11 +1973,12 @@ docs: describe the goose migration format
 
 A migration is one file with -- +goose Up and -- +goose Down and no
 BEGIN;/COMMIT; of its own. Ctrl-C during migrate now rolls the migration
-in flight back rather than finishing it, and a dump older than the move
-carries schema_migrations, which the first start carries over and drops.
+in flight back rather than finishing it, and a database created before
+the switch has to be recreated, because nothing carries schema_migrations
+over.
 ```
 
-- [ ] **Step 7: Diese Datei abhaken** — Task 11, 12, 13 und die Abnahmekriterien von M6.
+- [ ] **Step 7: Diese Datei abhaken** — Task 11, Task 12 und die Abnahmekriterien von M6.
 
 ---
 
@@ -2437,38 +2050,40 @@ gh pr list --label dependencies --state all --limit 10 --json number,title,state
 
 Erwartet: mindestens ein grüner Lauf und mindestens ein PR, der geöffnet und gemergt wurde — der Beleg, dass Renovate nicht nur konfiguriert ist, sondern arbeitet. Findet sich kein einziger PR, ist entweder nichts zu aktualisieren (dann sagen die Logs des Laufs das) oder das Token fehlt (R7); beides ist zu unterscheiden und zu melden, nicht als Erfolg zu verbuchen.
 
-- [ ] **Step 9: Die Übernahme gegen die echte Instanz**
+- [ ] **Step 9: Die Entwicklungsdatenbank auf das neue Bookkeeping bringen**
 
-**Vor diesem Schritt den Nutzer fragen.** Er trifft die laufende Datenbank, und er ist einseitig: `schema_migrations` ist danach fort (E15, R12). Alles andere in dieser Liste lässt sich wiederholen, das hier nicht.
+Jede Datenbank, die ein Build vor M6 angelegt hat, trägt `schema_migrations` und kein `goose_db_version`. goose hält sie für leer, wendet `0001` erneut an und scheitert an `CREATE TABLE units` (R12). Die Testdatenbanken sind davon nicht betroffen — `testdb` legt sie frisch an —, die lokale Compose-Instanz schon.
 
-Das Image der Instanz wird lokal gebaut, nicht gezogen: M6 liegt nach `v0.1.0`, sein Release folgt erst mit dem nächsten Tag.
+**Den Nutzer fragen, welcher Weg.** Der erste wirft die Daten weg.
 
 ```bash
-# 1. Sicherung, bevor irgendetwas die Versionstabelle anfasst.
+# Weg A: neu anlegen. Zerstört das Volume db-data mit allem darin.
+docker compose down -v
+docker compose up -d --wait
+
+# Weg B: die Zeilen behalten und das Bookkeeping einmal von Hand schreiben.
 docker compose exec -T db pg_dump -U recipes -Fc recipes > recipes-before-goose.dump
-
-# 2. Den Stand vorher festhalten.
-docker compose exec -T db psql -U recipes -d recipes -c 'SELECT version, dirty FROM schema_migrations'
-
-# 3. Das neue Image bauen und die Migration einzeln fahren, nicht über einen Serverstart.
+docker compose exec -T db psql -U recipes -d recipes -v ON_ERROR_STOP=1 <<'SQL'
+CREATE TABLE goose_db_version (
+    id integer PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY,
+    version_id bigint NOT NULL,
+    is_applied boolean NOT NULL,
+    tstamp timestamp NOT NULL DEFAULT now()
+);
+INSERT INTO goose_db_version (version_id, is_applied)
+    VALUES (0, true), (1, true), (2, true), (3, true);
+DROP TABLE schema_migrations;
+SQL
 docker compose build app
 docker compose run --rm app migrate
-
-# 4. Den Stand danach.
-docker compose exec -T db psql -U recipes -d recipes -c 'SELECT version_id, is_applied FROM goose_db_version ORDER BY version_id'
-docker compose exec -T db psql -U recipes -d recipes -c "SELECT to_regclass('public.schema_migrations')"
-
-# 5. Und erst dann den Dienst.
 docker compose up -d --wait
 ```
 
-Erwartet: Schritt 2 zeigt `3 | f`. Der Lauf in Schritt 3 loggt `db: adopted the schema version golang-migrate recorded` **einmal** und danach `no migrations to run, current version: 3` — keine angewandte Migration. Schritt 4 zeigt `0,1,2,3` und `to_regclass` = leer. Schritt 5 wird `healthy`.
+Erwartet bei Weg B: `migrate` loggt `no migrations to run, current version: 3` und wendet nichts an. Wendet es etwas an, hier anhalten, den Dienst nicht starten und dem Nutzer vorlegen — die Sicherung aus Zeile 1 ist dann der Weg zurück.
 
-Weicht irgendetwas davon ab — besonders: es wird eine Migration angewandt —, hier anhalten, den Dienst nicht starten und dem Nutzer vorlegen. Die Sicherung aus Schritt 1 ist dann der Weg zurück.
+Erwartet bei beiden Wegen: der Stack wird `healthy`, und `docker compose exec -T db psql -U recipes -d recipes -c 'SELECT version_id FROM goose_db_version ORDER BY version_id'` zeigt `0,1,2,3`.
 
-Ein zweiter `docker compose run --rm app migrate` direkt danach muss die Übernahme-Zeile **nicht** mehr loggen. Das ist der Beleg, dass sie einmalig ist.
-
-- [ ] **Step 10: Akzeptanzkriterien in Teil A abhaken** (US1–US8, Definition of Done)
+- [ ] **Step 10: Akzeptanzkriterien in Teil A abhaken** (US1–US7, Definition of Done)
 
 - [ ] **Step 11: Diese Datei abhaken und committen**
 
@@ -2495,6 +2110,6 @@ git commit -m "docs: mark M6 done in the release plan"
 | Offene Frage „Was heißt *package* für Compose?" | E6 und Task 7 — GHCR-Image neben dem lokalen Build |
 | Renovate für Go, Actions und Docker (Nutzer, 2026-09-22) | Task 8 (Konfiguration), Task 9 (Betrieb als Workflow, E9) |
 | Actions und Docker-Abhängigkeiten auf Digest pinnen (Nutzer, 2026-09-22) | Task 8 (`helpers:pinGitHubActionDigests`, `pinDigests`), Task 10 — Renovate pinnt, der Task prüft (E10) |
-| Migration von `golang-migrate` auf `pressly/goose` (Nutzer, 2026-09-22) | Task 11 (Übernahme bestehender Datenbanken, E15), Task 12 (Dateiformat E14, Engine E12/E16/E17/E18), Task 13 (Anleitung) |
-| Offene Frage „Was wird aus dem handgeschriebenen Abbruchpfad?" | Task 12 — `migrator`, `gracefulMigrator`, `migrateUp` und das `context.AfterFunc` entfallen ersatzlos; goose nimmt den Kontext selbst |
-| Offene Frage „Was wird aus `schema_migrations` auf einer laufenden Instanz?" | Task 11 und Abschluss-Verifikation Step 9 — einmalige Übernahme nach `goose_db_version`, in einer Transaktion, danach gelöscht |
+| Migration von `golang-migrate` auf `pressly/goose` (Nutzer, 2026-09-22) | Task 11 (Dateiformat E14, Engine E12/E16/E17/E18), Task 12 (Anleitung) |
+| Offene Frage „Was wird aus dem handgeschriebenen Abbruchpfad?" | Task 11 — `migrator`, `gracefulMigrator`, `migrateUp` und das `context.AfterFunc` entfallen ersatzlos; goose nimmt den Kontext selbst |
+| Offene Frage „Was wird aus `schema_migrations`?" | Nichts — die Software war nie im Einsatz (E15). Die Entwicklungsdatenbank wird neu angelegt, Abschluss-Verifikation Step 9 |
