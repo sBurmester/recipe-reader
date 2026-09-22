@@ -208,6 +208,7 @@ func TestParse_FlagBeforeAnotherCommandIsRefused(t *testing.T) {
 	for _, args := range [][]string{
 		{"--http-addr", "127.0.0.1:1", "healthcheck"},
 		{"--db-dsn", unreachableDSN, "migrate"},
+		{"--db-dsn", unreachableDSN, "import"},
 	} {
 		_, _, err := parse(t, args...)
 		if err == nil || !strings.Contains(err.Error(), "after the command name") {
@@ -409,7 +410,7 @@ func TestParse_RejectsAnUnknownLogLevel(t *testing.T) {
 // exists so that it sees the address and nothing else — so it has no group of
 // its own to drag the heading in.
 func TestHelp_EveryCommandShowsTheLoggingGroup(t *testing.T) {
-	for _, command := range []string{"serve", "healthcheck", "migrate"} {
+	for _, command := range []string{"serve", "healthcheck", "migrate", "import"} {
 		t.Run(command, func(t *testing.T) {
 			help := commandHelp(t, command)
 			if !strings.Contains(help, "\nLogging\n") {

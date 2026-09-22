@@ -43,7 +43,7 @@ func (m *stoppingMigrator) Stop() { close(m.stopped) }
 
 func (m *stoppingMigrator) Close() (source error, database error) { return nil, nil }
 
-// The promise MigrateContext adds to golang-migrate is that a cancelled run is
+// The promise MigrateWithContext adds to golang-migrate is that a cancelled run is
 // reported as one. A gracefully stopped Up returns nil, so a run that was cut
 // short after applying part of the schema would otherwise be indistinguishable
 // from a clean one — and the caller would carry on against a half-migrated

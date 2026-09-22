@@ -41,6 +41,7 @@ default: it runs when no command is named and takes its flags without one, so `r
 | `serve` (default) | Runs the HTTP API, the embedded frontend and the background import worker. Takes every setting under [Configuration](#configuration). |
 | `healthcheck` | Probes the server already listening on `HTTP_ADDR` and exits 0 if `/api/healthz` answers ok, 1 otherwise. Reads `HTTP_ADDR` and, like every command, `LOG_LEVEL` and `LOG_FORMAT` — nothing else. |
 | `migrate` | Applies pending migrations and seeds the lookup tables, then exits: ahead of a rollout, or after a restore. `serve` does the same at every start. Reads `DB_DSN` and, like every command, `LOG_LEVEL` and `LOG_FORMAT` — nothing else. With compose: `docker compose run --rm app migrate`. Ctrl-C or `SIGTERM` stops it between two migrations — the one in flight always finishes — and it then exits 1 reporting the cancellation rather than success. Re-running is safe and picks up where it left off. |
+| `import` | Runs one import of new saved posts and exits: before a rollout, after a restore, or after fixing a login. `serve` does the same every `IMPORT_INTERVAL`. Applies pending migrations and seeds the lookup tables first, exactly as `serve` and `migrate` do — so running it against the database of an older server migrates that database. Reads the database, Instagram, extraction, LLM and import-limit settings. Refuses to start while another import is running, in this process or in a server, and refuses before it logs in. With compose: `docker compose run --rm app import`. |
 
 `recipe-reader --help` lists the commands; `recipe-reader <command> --help` lists a command's flags
 and the environment variable behind each. `--version` works with or without a command. Flags go
@@ -317,6 +318,17 @@ per-run cap counts only *new* posts. An account with more saved posts than the c
 drains across successive runs. Before this, the cap counted every post the feed returned, so the
 window stayed pinned to the newest 50 for the life of the account: everything older was
 unreachable, and each run reported `Seen: 50, Skipped: 50, Imported: 0`, which reads as healthy.
+
+Only one import runs at a time against a database. A run holds a Postgres advisory lock for its
+duration, and the background worker in a running server and `recipe-reader import` take the same
+one, so a second run is refused instead of started: the command exits 1 saying another import is
+already running, before it logs in — the login is the cost the lock exists to avoid, so paying it
+only to then refuse would defeat the purpose. The database is the only thing the two processes
+reliably share — the 15-minute floor between logins lives in the client, so it rations nothing
+across processes, and repeated logins are what gets an account flagged. A server's worker treats a
+refusal as a run it did not make: it keeps reporting the last real tally rather than overwriting it
+with zeros. The lock is session-scoped, so Postgres frees it when the
+holder's connection ends, including when the process is killed; a lock file would be left behind.
 
 When Instagram throttles a run, the error is recognised as a rate limit rather than an ordinary 4xx:
 the posts already collected are still imported, and the worker then stands down for 30 minutes.
@@ -597,7 +609,8 @@ belong to; `main` turns any failure into one log line and exit status 1. The com
 live in `internal/cli`, one type per command whose fields are its flags, and each command's `Run`
 delegates at once: `serve` to `internal/server`, the composition root that wires database,
 extraction, Instagram, import worker and HTTP API; `healthcheck` to `internal/healthcheck`;
-`migrate` to `internal/db`. The settings are declared and validated in `internal/config`, and
+`migrate` to `internal/db`; `import` to `internal/server`, which runs the same pipeline the worker
+runs, once. The settings are declared and validated in `internal/config`, and
 `internal/logging` builds the process logger that `main` installs from them before the selected
 command runs.
 

@@ -99,17 +99,17 @@ func TestOpen_MigratesAndSeedsAnEmptyDatabase(t *testing.T) {
 // Up has no context parameter, so a cancelled migrate used to be noticed only
 // by the Connect that followed it — after the schema had already changed. A
 // context that is already done must leave the database exactly as it was.
-func TestMigrateContext_CancelledContextAppliesNothing(t *testing.T) {
+func TestMigrateWithContext_CancelledContextAppliesNothing(t *testing.T) {
 	dsn := testdb.NewDatabase(t, "migrate_cancelled")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := db.MigrateContext(ctx, dsn)
+	err := db.MigrateWithContext(ctx, dsn)
 	if err == nil {
-		t.Fatal("MigrateContext() = nil, want the cancellation reported")
+		t.Fatal("MigrateWithContext() = nil, want the cancellation reported")
 	}
 	if !errors.Is(err, context.Canceled) {
-		t.Errorf("MigrateContext() error = %v, want it to wrap context.Canceled", err)
+		t.Errorf("MigrateWithContext() error = %v, want it to wrap context.Canceled", err)
 	}
 
 	pool, err := pgxpool.New(context.Background(), dsn)
@@ -123,6 +123,6 @@ func TestMigrateContext_CancelledContextAppliesNothing(t *testing.T) {
 		t.Fatalf("look for the units table: %v", err)
 	}
 	if exists {
-		t.Error("MigrateContext() applied a migration although its context was already cancelled")
+		t.Error("MigrateWithContext() applied a migration although its context was already cancelled")
 	}
 }

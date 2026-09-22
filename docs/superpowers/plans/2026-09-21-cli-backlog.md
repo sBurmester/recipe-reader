@@ -61,7 +61,7 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 | # | Ziel | Messbar an |
 | --- | --- | --- |
 | Z1 | Ein Fehlstart hinterlässt keine laufende Arbeit | `server.Run` gibt den Listen-Fehler erst zurück, nachdem seine Goroutinen zurückgekehrt sind (Test) |
-| Z2 | Eine Migration lässt sich abbrechen | `db.MigrateContext` mit abgebrochenem Kontext wendet nichts an und meldet den Abbruch als Fehler (Test) |
+| Z2 | Eine Migration lässt sich abbrechen | `db.MigrateWithContext` mit abgebrochenem Kontext wendet nichts an und meldet den Abbruch als Fehler (Test) |
 | Z3 | Logging ist einstellbar, für jedes Kommando | `--log-level debug`, `--log-format json` wirken vor und hinter dem Kommandonamen |
 | Z4 | Ein Import ohne Server ist möglich und kann den laufenden Server nicht stören | `recipe-reader import` läuft; zwei gleichzeitige Läufe sind unmöglich, der zweite endet mit 1 und einer klaren Meldung (Test gegen echtes Postgres) |
 | Z5 | Kein Verhaltensbruch | Alle bestehenden Flags, Env-Variablen und Defaults unverändert; `serve --help` bleibt bis auf die neue Gruppe „Logging“ gleich |
@@ -81,9 +81,9 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 - [x] Der Absatz im Doc-Kommentar von `Run`, der das alte Verhalten beschreibt, ist entfernt.
 
 **US2: Betreiber bricht eine Migration ab.** *Als Betreiber möchte ich `recipe-reader migrate` mit Ctrl-C abbrechen können, ohne dass mir „fertig“ gemeldet wird.*
-- [x] `db.MigrateContext(ctx, dsn)` bricht zwischen zwei Migrationen ab, wenn `ctx` abgebrochen wird, und meldet den Abbruch als Fehler.
+- [x] `db.MigrateWithContext(ctx, dsn)` bricht zwischen zwei Migrationen ab, wenn `ctx` abgebrochen wird, und meldet den Abbruch als Fehler.
 - [x] Ein bereits abgebrochener Kontext wendet **keine** Migration an.
-- [x] `db.Open` nutzt `MigrateContext`, sodass `migrate` und `serve` beide davon profitieren; `db.Migrate(dsn)` bleibt als Kurzform bestehen (Aufrufer in `testdb` und den Tests unverändert).
+- [x] `db.Open` nutzt `MigrateWithContext`, sodass `migrate` und `serve` beide davon profitieren; `db.Migrate(dsn)` bleibt als Kurzform bestehen (Aufrufer in `testdb` und den Tests unverändert).
 
 **US3: Betreiber will mehr oder weniger Log.** *Als Betreiber möchte ich im Fehlerfall Debug sehen und im Betrieb JSON an meinen Collector schicken.*
 - [x] `recipe-reader --log-level debug serve` und `recipe-reader serve --log-level debug` tun dasselbe; `LOG_LEVEL` wirkt genauso.
@@ -92,20 +92,20 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 - [x] Die Flags gelten für **jedes** Kommando, auch für `healthcheck` und `migrate`.
 
 **US4: Betreiber importiert einmalig.** *Als Betreiber möchte ich vor einem Rollout oder nach einem Restore einmal importieren, ohne den Server zu starten.*
-- [ ] `recipe-reader import` führt genau einen Importlauf aus, loggt eine Zusammenzeile mit den Zählern und endet mit 0.
-- [ ] `import` liest nur die Einstellungen, die es braucht: Database, Instagram, Extraction, LLM und die Import-Grenzen. `--http-addr` und `--import-interval` erscheinen **nicht** in `import --help`.
-- [ ] Ohne `INSTAGRAM_USERNAME` endet `import` mit 1 und einer Meldung, die sagt, was fehlt.
-- [ ] `recipe-reader --db-dsn <dsn> import` wird abgelehnt (Entscheidung E11 des Vorgängerplans gilt weiter).
+- [x] `recipe-reader import` führt genau einen Importlauf aus, loggt eine Zusammenzeile mit den Zählern und endet mit 0.
+- [x] `import` liest nur die Einstellungen, die es braucht: Database, Instagram, Extraction, LLM und die Import-Grenzen. `--http-addr` und `--import-interval` erscheinen **nicht** in `import --help`.
+- [x] Ohne `INSTAGRAM_USERNAME` endet `import` mit 1 und einer Meldung, die sagt, was fehlt.
+- [x] `recipe-reader --db-dsn <dsn> import` wird abgelehnt (Entscheidung E11 des Vorgängerplans gilt weiter).
 
 **US5: Betreiber importiert, während der Server läuft.** *Als Betreiber möchte ich nicht aus Versehen zwei Importe gleichzeitig fahren.*
-- [ ] Solange ein Importlauf läuft — im Server oder als Kommando —, endet ein zweiter mit 1 und der Meldung, dass bereits ein Import läuft.
-- [ ] Die Sperre wird freigegeben, wenn der Lauf endet, auch wenn der Prozess stirbt (Session-Lock von Postgres).
+- [x] Solange ein Importlauf läuft — im Server oder als Kommando —, endet ein zweiter mit 1 und der Meldung, dass bereits ein Import läuft.
+- [x] Die Sperre wird freigegeben, wenn der Lauf endet, auch wenn der Prozess stirbt (Session-Lock von Postgres).
 
 ### Entscheidungen
 
 | # | Entscheidung | Begründung |
 | --- | --- | --- |
-| D1 | Gleichzeitige Importe werden über einen **Postgres-Advisory-Lock** verhindert, nicht über eine Lock-Datei | Die Datenbank ist der einzige Ort, den beide Prozesse sicher teilen — die Session-Datei sagt nichts über einen laufenden Lauf, und ein `flock` schützt den Login, nicht die Pipeline. Ein Session-Lock stirbt mit der Verbindung, also auch mit einem `kill -9`; eine Lock-Datei bliebe liegen. Vom Nutzer am 2026-09-21 entschieden. |
+| D1 | Gleichzeitige Importe werden über einen **Postgres-Advisory-Lock** verhindert, nicht über eine Lock-Datei | Die Datenbank ist der einzige Ort, den beide Prozesse sicher teilen — die Session-Datei sagt nichts über einen laufenden Lauf, und ein `flock` schützt den Login, nicht die Pipeline. Ein Session-Lock stirbt mit der Verbindung, also auch mit einem `kill -9`; eine Lock-Datei bliebe liegen. Vom Nutzer am 2026-09-21 entschieden. **Daraus folgt, wo der Lock genommen wird:** Wenn der Login die Kosten sind, die der Lock vermeiden soll, muss die Absage **vor** dem Login kommen. `server.ImportOnce` nimmt ihn deshalb selbst, direkt nach `db.Open` und vor `newFetcher`, und gibt der Pipeline **kein** `Lock`-Feld mit — die Pipeline-Sperre läuft erst, wenn der Fetcher sich schon eingeloggt und die Session-Datei geschrieben hat. Der Worker in `server.Run` behält die Pipeline-Sperre: dort passiert der Login einmal beim Start, nicht pro Lauf. (Korrektur aus dem M3-Review, 2026-09-22.) |
 | D2 | Der Lock ist ein **Port am Konsumenten** (`pipeline.ImportLock`) mit einem Adapter in `internal/db` | `internal/pipeline` kennt die Datenbank nicht und soll sie nicht kennenlernen (`go-architecture.md`: kleine Interfaces beim Konsumenten). Ein `nil`-Lock heißt „ungesperrt“, damit der Nullwert von `Pipeline` benutzbar bleibt und die bestehenden Pipeline-Tests unverändert laufen. |
 | D3 | `main.go` bekommt einen dritten `internal/`-Import: `internal/logging` | Die Definition of Done des Vorgängerplans nannte `internal/cli` und `internal/config`. Der Logger gehört in die Composition Root (`go-architecture.md`), und das ist hier `run`. Der Plan ändert die Invariante ausdrücklich auf drei Importe, statt sie zu umgehen. |
 | D4 | Logging wird **nach** `Parse` konfiguriert, nicht in einem kong-Hook | Ein `BeforeApply` läuft, bevor die eigenen Flagwerte sicher gesetzt sind; ein `AfterApply` würde die Reihenfolge `BeforeApply → Validate → AfterApply` (E4 des Vorgängerplans) erben und wäre nicht früher. Preis: Einen Parse- oder Validierungsfehler loggt `main` noch im Default-Format. Das ist eine Zeile vor dem Exit und keinen Hook wert. |
@@ -119,18 +119,18 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 | # | Risiko | Gegenmaßnahme |
 | --- | --- | --- |
 | R1 | `pg_advisory_unlock` scheitert und die Verbindung geht mit gehaltenem Lock zurück in den Pool | Der Adapter nimmt die Verbindung in dem Fall per `Hijack` aus dem Pool und schließt sie; Postgres gibt den Lock mit der Session frei. Der Fall wird geloggt. |
-| R2 | `golang-migrate` verhält sich anders als angenommen | Am 2026-09-21 gegen v4.19.1 geprüft: `GracefulStop` ist gepuffert (`make(chan bool, 1)`, `migrate.go:185`), `stop()` liest ihn zwischen den Migrationen (`migrate.go:815-828`), und ein gestopptes `Up()` gibt **`nil`** zurück. Deshalb prüft `MigrateContext` nach `Up()` zusätzlich `ctx.Err()` — sonst sähe ein abgebrochener Lauf wie ein erfolgreicher aus. |
+| R2 | `golang-migrate` verhält sich anders als angenommen | Am 2026-09-21 gegen v4.19.1 geprüft: `GracefulStop` ist gepuffert (`make(chan bool, 1)`, `migrate.go:185`), `stop()` liest ihn zwischen den Migrationen (`migrate.go:815-828`), und ein gestopptes `Up()` gibt **`nil`** zurück. Deshalb prüft `MigrateWithContext` nach `Up()` zusätzlich `ctx.Err()` — sonst sähe ein abgebrochener Lauf wie ein erfolgreicher aus. |
 | R3 | Der Goroutine-Test in Task 1 wird flaky | Er vergleicht nur mit seiner eigenen Grundlinie und pollt mit großzügiger Frist (15 s). Nicht Teil der Gegenmaßnahme: `testdb.Main` startet den Container **nicht** — der kommt beim ersten `New` über `shared.once.Do(start)` hoch, also innerhalb des Tests. Deshalb liegt der 100-ms-Settle zwischen diesem `NewDatabase` und der Grundlinie. Wird der Test trotzdem unruhig, hier anhalten und melden, statt die Frist immer weiter hochzudrehen. |
 | R4 | Der Lock serialisiert mehr als gewollt (z. B. zwei Deployments gegen dieselbe Datenbank) | Genau das ist die Absicht: Der Lock hängt an der Datenbank, und zwei Prozesse an derselben Datenbank sind genau der Fall, den D1 verhindern soll. |
 
 ### Definition of Done
 
-- [ ] Alle Tasks in dieser Datei abgehakt.
-- [ ] Commit-Gate grün; Docker-Gate grün für M1 (das Image wird gebaut, auch wenn sich nichts daran ändert).
-- [ ] `cmd/recipe-reader/` enthält weiterhin nur `main.go` und dessen Tests; `main.go` importiert aus `internal/*` genau `internal/cli`, `internal/config` und `internal/logging` (D3).
-- [ ] Die Flag-Liste von `serve --help` ist die bisherige plus `--log-level` und `--log-format`.
-- [ ] README aktualisiert: Commands (`import`), Configuration (Logging-Gruppe), Architecture.
-- [ ] Der Backlog-Abschnitt im Plan vom 2026-09-19 verweist auf diesen Plan.
+- [x] Alle Tasks in dieser Datei abgehakt.
+- [x] Commit-Gate grün; Docker-Gate grün für M1 (das Image wird gebaut, auch wenn sich nichts daran ändert).
+- [x] `cmd/recipe-reader/` enthält weiterhin nur `main.go` und dessen Tests; `main.go` importiert aus `internal/*` genau `internal/cli`, `internal/config` und `internal/logging` (D3).
+- [x] Die Flag-Liste von `serve --help` ist die bisherige plus `--log-level` und `--log-format`.
+- [x] README aktualisiert: Commands (`import`), Configuration (Logging-Gruppe), Architecture.
+- [x] Der Backlog-Abschnitt im Plan vom 2026-09-19 verweist auf diesen Plan.
 
 ### Backlog (bewusst nicht in diesem Plan)
 
@@ -146,6 +146,8 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
   - `db: migrate up: context canceled` sagt nicht, was angewandt wurde. Schlimmer: ein Abbruch, der erst nach der letzten Migration eintrifft, meldet einen vollständig durchgelaufenen Lauf als Fehler (siehe den Doc-Kommentar von `migrateUp`). Die Meldung müsste sagen, dass ein erneuter Lauf gefahrlos ist und nachholt, was fehlt.
   - kong stellt der Meldung den Kommandopfad voran (`serve: config: API_TOKEN …`, R4 des Plans vom 2026-09-19). Dass der Inhalt gleich bleibt, ist geprüft; ob das Präfix einem Betreiber hilft oder im Weg steht, nie.
   - `main` loggt jeden Fehler als eine Zeile `slog.Error("fatal", "error", err)`. Die Ursache steckt damit im Attribut, während die Nachricht für alle Fehler dieselbe ist — auch für die, bei denen der Betreiber sofort wüsste, was zu tun ist.
+- **Der Shutdown von `serve` hat keine obere Schranke mehr** (aus dem Milestone-Review zu M3, 2026-09-22). Seit M3 hält ein Lauf eine Pool-Verbindung über seine ganze Dauer — die Session des Advisory-Locks. Das `defer pool.Close()` in `server.Run` wartet über puddles `destructWG` auf **jede** Verbindung, auch die ausgeliehene, also auch auf einen Import, den das 10-Sekunden-Budget gerade ausdrücklich aufgegeben hat. Zwischen „import did not stop within the shutdown budget; abandoning it" und dem tatsächlichen Return liegen dann bis zu ein `LLM_TIMEOUT` (Default 60 s) ohne eine einzige Logzeile; in der Praxis beendet die Container-Runtime den Prozess per SIGKILL, was überlebbar ist (der Lock stirbt mit der Session), aber genau den geordneten Ausstieg aushebelt, den das Budget verspricht. Der Doc-Kommentar von `Run` sagt das jetzt; eine Schranke ist es nicht. Wer das aufgreift, entscheidet zwischen drei Wegen: den Lock auf einer eigenen, nicht gepoolten Verbindung halten (`pool.Acquire` durch ein `pgx.Connect` ersetzen, dann hängt `Close` nicht daran); `pool.Close()` in eine Goroutine mit eigener Frist legen und den Prozess notfalls ohne sie verlassen; oder den Abbruch bis in den Extraktor durchreichen, sodass ein aufgegebener Lauf nicht erst nach dem nächsten LLM-Timeout endet. Das Dritte behebt die Ursache, die beiden anderen die Wirkung.
+
 - **`.env.example` und `docker-compose.yml` laufen auseinander** (aus dem Milestone-Review zu M2). Der `app`-Service reicht genau die Variablen durch, die unter `environment:` stehen; ein `env_file:` gibt es nirgends. Dreizehn Einträge aus `.env.example` erreichen den Container daher nicht — `EXTRACTION_*`, `IMPORT_*`, `LLM_*`, `ANTHROPIC_MODEL`, `INSTAGRAM_SESSION_PATH` und seit M2 auch `LOG_LEVEL`/`LOG_FORMAT` —, obwohl die README-Anleitung mit `cp .env.example .env` beginnt. Das ist keine Lücke von M2, sondern die allgemeine: entweder ein `env_file:`, oder eine bewusst dokumentierte Auswahl. Wer sie schließt, beachtet, dass `${VAR:-}` die Variable **leer** setzt und kong einen leeren Wert bei einem `enum`-Flag ablehnt (`--log-level must be one of … but got ""`, am 2026-09-21 geprüft); in die Substitution gehört also der Default, nicht der leere String — und damit steht der Default an einer zweiten Stelle, die driften kann.
 
 ---
@@ -181,7 +183,7 @@ internal/pipeline/
   pipeline.go              # + ImportLock-Port, + Lock-Feld, + ErrImportInProgress
   lock_test.go             # neu
 internal/db/
-  connect.go               # + MigrateContext; Migrate delegiert; Open nutzt es
+  connect.go               # + MigrateWithContext; Migrate delegiert; Open nutzt es
   migrate_test.go          # neu: treibt das paketinterne migrateUp mit einem Fake
   lock.go                  # neu: ImportLock (Adapter)
   lock_test.go             # neu
@@ -221,10 +223,10 @@ Abnahmekriterien:
 #### M3: Einmaliger Import
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US4 und US5 sind abgehakt.
-- [ ] `import --help` zeigt weder `--http-addr` noch `--import-interval`.
-- [ ] Die Sperre ist gegen echtes Postgres getestet, nicht gegen einen Fake.
-- [ ] Die Definition of Done in Teil A ist abgehakt.
+- [x] Die Akzeptanzkriterien von US4 und US5 sind abgehakt.
+- [x] `import --help` zeigt weder `--http-addr` noch `--import-interval`.
+- [x] Die Sperre ist gegen echtes Postgres getestet, nicht gegen einen Fake.
+- [x] Die Definition of Done in Teil A ist abgehakt.
 
 #### Branches und PRs
 
@@ -247,12 +249,12 @@ Abnahmekriterien:
 - [x] **M2: Log-Flags**
   - [x] **Task 3:** `--log-level` und `--log-format` (M)
   - [x] **Milestone-Review**
-- [ ] **M3: Einmaliger Import**
-  - [ ] **Task 4:** Prozessübergreifende Import-Sperre (M)
-  - [ ] **Task 5:** `config.ImportLimits` aus `config.Import` lösen (S)
-  - [ ] **Task 6:** Kommando `import` (M)
-  - [ ] **Milestone-Review**
-  - [ ] **Abschluss-Verifikation**
+- [x] **M3: Einmaliger Import**
+  - [x] **Task 4:** Prozessübergreifende Import-Sperre (M)
+  - [x] **Task 5:** `config.ImportLimits` aus `config.Import` lösen (S)
+  - [x] **Task 6:** Kommando `import` (M)
+  - [x] **Milestone-Review**
+  - [x] **Abschluss-Verifikation**
 
 ### Ablauf der Umsetzung
 
@@ -362,6 +364,16 @@ Neu:
 // Run's still running — with one logged exception: if the ten-second shutdown
 // budget runs out, the import is abandoned rather than waited for, and Run
 // returns while it is still going.
+//
+// "Returns" is approximate in that one case, and deliberately so rather than by
+// oversight. The budget bounds how long Run waits for the import, not how long
+// Run takes: the deferred pool.Close below waits for every pooled connection to
+// come back, and a run holds one — the import lock's session — for its whole
+// length, so an abandoned import keeps Run inside that Close until it reaches
+// its next per-post cancellation check, up to one LLM_TIMEOUT past the budget
+// and with no log line saying why. The process usually gets SIGKILLed instead,
+// which is survivable (the advisory lock dies with the session) but is not the
+// orderly exit the budget promises. Bounding it is in the plan's backlog.
 ```
 
 Am Anfang des Rumpfes, direkt vor `newExtractor`, die eigene Kontextkopie einziehen:
@@ -434,13 +446,13 @@ git commit -m "fix(server): drain before returning a failed start" -m "Run works
 `Migrate` bekommt eine Kontextvariante. `golang-migrate` kennt keinen Kontextparameter, wohl aber den Kanal `GracefulStop`, der zwischen zwei Migrationen gelesen wird.
 
 **Files:**
-- Modify: `internal/db/connect.go` (+ `MigrateContext`, `Migrate` delegiert, `Open` nutzt es)
-- Modify: `internal/db/db_test.go` (+ `TestMigrateContext_CancelledContextAppliesNothing`)
+- Modify: `internal/db/connect.go` (+ `MigrateWithContext`, `Migrate` delegiert, `Open` nutzt es)
+- Modify: `internal/db/db_test.go` (+ `TestMigrateWithContext_CancelledContextAppliesNothing`)
 - Create: `internal/db/migrate_test.go` (Paket `db`: der Fake und `TestMigrateUp_GracefulStopIsReportedAsCancellation` — `migrateUp` ist paketintern und aus `db_test` nicht erreichbar)
 
 **Interfaces:**
 - Consumes: `newMigrate` (unverändert, paketintern)
-- Produces: `func db.MigrateContext(ctx context.Context, dsn string) error`; `func db.Migrate(dsn string) error` bleibt bestehen und ruft `MigrateContext(context.Background(), dsn)`.
+- Produces: `func db.MigrateWithContext(ctx context.Context, dsn string) error`; `func db.Migrate(dsn string) error` bleibt bestehen und ruft `MigrateWithContext(context.Background(), dsn)`.
 
 - [x] **Step 1: Failing Test schreiben** (an `internal/db/db_test.go` anhängen)
 
@@ -448,17 +460,17 @@ git commit -m "fix(server): drain before returning a failed start" -m "Run works
 // Up has no context parameter, so a cancelled migrate used to be noticed only
 // by the Connect that followed it — after the schema had already changed. A
 // context that is already done must leave the database exactly as it was.
-func TestMigrateContext_CancelledContextAppliesNothing(t *testing.T) {
+func TestMigrateWithContext_CancelledContextAppliesNothing(t *testing.T) {
 	dsn := testdb.NewDatabase(t, "migrate_cancelled")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := db.MigrateContext(ctx, dsn)
+	err := db.MigrateWithContext(ctx, dsn)
 	if err == nil {
-		t.Fatal("MigrateContext() = nil, want the cancellation reported")
+		t.Fatal("MigrateWithContext() = nil, want the cancellation reported")
 	}
 	if !errors.Is(err, context.Canceled) {
-		t.Errorf("MigrateContext() error = %v, want it to wrap context.Canceled", err)
+		t.Errorf("MigrateWithContext() error = %v, want it to wrap context.Canceled", err)
 	}
 
 	pool, err := pgxpool.New(context.Background(), dsn)
@@ -472,7 +484,7 @@ func TestMigrateContext_CancelledContextAppliesNothing(t *testing.T) {
 		t.Fatalf("look for the units table: %v", err)
 	}
 	if exists {
-		t.Error("MigrateContext() applied a migration although its context was already cancelled")
+		t.Error("MigrateWithContext() applied a migration although its context was already cancelled")
 	}
 }
 
@@ -515,7 +527,7 @@ func (m *stoppingMigrator) Stop() { close(m.stopped) }
 
 func (m *stoppingMigrator) Close() (source error, database error) { return nil, nil }
 
-// The promise MigrateContext adds to golang-migrate is that a cancelled run is
+// The promise MigrateWithContext adds to golang-migrate is that a cancelled run is
 // reported as one. A gracefully stopped Up returns nil, so a run that was cut
 // short after applying part of the schema would otherwise be indistinguishable
 // from a clean one — and the caller would carry on against a half-migrated
@@ -543,10 +555,10 @@ Die Imports `errors`, `context` und `github.com/jackc/pgx/v5/pgxpool` in `db_tes
 
 - [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
-Run: `go test -count=1 -run TestMigrateContext ./internal/db/`
-Expected: FAIL, `undefined: db.MigrateContext`
+Run: `go test -count=1 -run TestMigrateWithContext ./internal/db/`
+Expected: FAIL, `undefined: db.MigrateWithContext`
 
-- [x] **Step 3: `MigrateContext` implementieren** (`internal/db/connect.go`)
+- [x] **Step 3: `MigrateWithContext` implementieren** (`internal/db/connect.go`)
 
 `Migrate` ersetzen durch:
 
@@ -554,16 +566,16 @@ Expected: FAIL, `undefined: db.MigrateContext`
 // Migrate applies all pending embedded migrations against dsn (a
 // postgres:// URL — the same one passed to Connect).
 func Migrate(dsn string) error {
-	return MigrateContext(context.Background(), dsn)
+	return MigrateWithContext(context.Background(), dsn)
 }
 
-// MigrateContext is Migrate, bounded by ctx. Cancelling it stops the migrator
+// MigrateWithContext is Migrate, bounded by ctx. Cancelling it stops the migrator
 // between two migrations; the one in flight is always finished, because a
 // half-applied migration is worse than a slow Ctrl-C.
 //
 // golang-migrate has no context parameter, only the GracefulStop channel, so
 // the cancellation path is this file's own — see migrateUp, which holds it.
-func MigrateContext(ctx context.Context, dsn string) error {
+func MigrateWithContext(ctx context.Context, dsn string) error {
 	return migrateUp(ctx, func() (migrator, error) {
 		m, err := newMigrate(dsn)
 		if err != nil {
@@ -639,7 +651,7 @@ func migrateUp(ctx context.Context, open func() (migrator, error)) error {
 }
 ```
 
-- [x] **Step 4: `Open` auf `MigrateContext` umstellen** (`internal/db/connect.go`)
+- [x] **Step 4: `Open` auf `MigrateWithContext` umstellen** (`internal/db/connect.go`)
 
 In `Open` ersetzen:
 
@@ -650,7 +662,7 @@ In `Open` ersetzen:
 durch
 
 ```go
-	if err := MigrateContext(ctx, dsn); err != nil {
+	if err := MigrateWithContext(ctx, dsn); err != nil {
 ```
 
 - [x] **Step 5: Tests laufen lassen, sie müssen grün sein**
@@ -662,7 +674,7 @@ Expected: PASS. `TestOpen_MigratesAndSeedsAnEmptyDatabase` und `TestRun_MigrateM
 
 ```bash
 git add internal/db
-git commit -m "feat(db): let a migration be cancelled" -m "MigrateContext wires ctx to golang-migrate's GracefulStop and reports the cancellation, which a stopped Up does not. Open uses it, so Ctrl-C during recipe-reader migrate stops between migrations instead of being noticed by the connect that follows."
+git commit -m "feat(db): let a migration be cancelled" -m "MigrateWithContext wires ctx to golang-migrate's GracefulStop and reports the cancellation, which a stopped Up does not. Open uses it, so Ctrl-C during recipe-reader migrate stops between migrations instead of being noticed by the connect that follows."
 ```
 
 ---
@@ -989,6 +1001,8 @@ git commit -m "feat(cli): add --log-level and --log-format" -m "Both sit on the 
 
 Ein Importlauf darf nicht zweimal gleichzeitig laufen — nicht im selben Prozess (das verhindert `Worker.RunOnce` schon) und nicht in zweien. Der Port liegt beim Konsumenten, der Adapter in `internal/db` (D2).
 
+Die Sperre in `Pipeline.Run` ist die des **Worker-Pfads**. Der einmalige Lauf nimmt den Lock eine Ebene höher, in `ImportOnce` vor `newFetcher` (D1, Task 6): ein Lauf, der erst nach dem Login abgelehnt wird, hat genau das getan, was der Lock verhindern soll. Beide Pfade nehmen denselben Lock, aber nie beide in einem Prozess — zwei Verbindungen aus demselben Pool bekämen ihn nicht.
+
 **Files:**
 - Modify: `internal/pipeline/pipeline.go` (+ `ImportLock`, + `ErrImportInProgress`, + `Lock`-Feld, + Sperre am Anfang von `Run`)
 - Create: `internal/pipeline/lock_test.go`
@@ -1003,7 +1017,7 @@ Ein Importlauf darf nicht zweimal gleichzeitig laufen — nicht im selben Prozes
   - Feld `Pipeline.Lock ImportLock` (nil = ungesperrt)
   - `type db.ImportLock struct { Pool *pgxpool.Pool }` mit `TryAcquire`
 
-- [ ] **Step 1: Failing Test für die Pipeline-Seite** (`internal/pipeline/lock_test.go`)
+- [x] **Step 1: Failing Test für die Pipeline-Seite** (`internal/pipeline/lock_test.go`)
 
 ```go
 package pipeline
@@ -1064,12 +1078,12 @@ func TestRun_LockFailureIsReported(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test -count=1 -run 'TestRun_RefusedLock|TestRun_LockFailure' ./internal/pipeline/`
 Expected: FAIL, `undefined: ImportLock`, `undefined: ErrImportInProgress`, `unknown field Lock`
 
-- [ ] **Step 3: Port und Sperre in `internal/pipeline/pipeline.go`**
+- [x] **Step 3: Port und Sperre in `internal/pipeline/pipeline.go`**
 
 Neben den vorhandenen Ports (`PostFetcher`, `CategoryLister`) ergänzen:
 
@@ -1119,7 +1133,7 @@ Als Erstes im Rumpf von `Run`:
 	}
 ```
 
-- [ ] **Step 4: Failing Test für den Postgres-Adapter** (`internal/db/lock_test.go`)
+- [x] **Step 4: Failing Test für den Postgres-Adapter** (`internal/db/lock_test.go`)
 
 ```go
 package db_test
@@ -1177,12 +1191,12 @@ func TestImportLock_SecondHolderIsRefusedUntilTheFirstReleases(t *testing.T) {
 }
 ```
 
-- [ ] **Step 5: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 5: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test -count=1 -run TestImportLock ./internal/db/`
 Expected: FAIL, `undefined: db.ImportLock`
 
-- [ ] **Step 6: `internal/db/lock.go` anlegen**
+- [x] **Step 6: `internal/db/lock.go` anlegen**
 
 ```go
 package db
@@ -1191,6 +1205,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -1199,6 +1214,15 @@ import (
 // database. The value is arbitrary and only has to stay stable: change it and
 // two versions of the binary would no longer see each other's locks.
 const importLockKey int64 = 8_233_071_001
+
+// releaseTimeout bounds the two statements that run after a run is already
+// over: the unlock, and the connection close that stands in for it when the
+// unlock fails. Both detach from the run's context, because releasing is what
+// has to happen when the run was cancelled — and detaching drops the deadline
+// along with the cancellation, so without one of their own a Postgres that
+// accepts the connection but never answers would block `defer release()`
+// forever, with no context left for a Ctrl-C to cancel.
+const releaseTimeout = 5 * time.Second
 
 // ImportLock is pipeline.ImportLock backed by a Postgres advisory lock, which
 // is what lets a running server and a one-off import command see each other.
@@ -1220,7 +1244,13 @@ func (l ImportLock) TryAcquire(ctx context.Context) (func(), bool, error) {
 
 	var got bool
 	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", importLockKey).Scan(&got); err != nil {
-		conn.Release()
+		// Whether Postgres took the lock before this failed is not knowable
+		// from here: a cancellation can land between the server executing the
+		// statement and the row reaching us. Releasing the connection would
+		// then lend the next borrower a lock nobody will ever release, so it is
+		// discarded the same way a failed unlock discards it. The cost of being
+		// wrong is one reconnect on a path that is already failing the run.
+		discard(ctx, conn)
 		return nil, false, fmt.Errorf("db: take the import lock: %w", err)
 	}
 	if !got {
@@ -1230,24 +1260,40 @@ func (l ImportLock) TryAcquire(ctx context.Context) (func(), bool, error) {
 
 	return func() {
 		// WithoutCancel because releasing is what has to happen when the run was
-		// cancelled, which is exactly when ctx is already done.
-		unlockCtx := context.WithoutCancel(ctx)
+		// cancelled, which is exactly when ctx is already done; with a deadline
+		// of its own because WithoutCancel strips the run's — see releaseTimeout.
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+		defer cancel()
 		if _, err := conn.Exec(unlockCtx, "SELECT pg_advisory_unlock($1)", importLockKey); err != nil {
 			slog.Warn("db: could not release the import lock; discarding its connection", "error", err)
 			// The lock belongs to this session. Handing the connection back to
 			// the pool would lend the next borrower a lock nobody can release;
 			// closing it ends the session, and Postgres frees the lock with it.
-			if err := conn.Hijack().Close(unlockCtx); err != nil {
-				slog.Warn("db: closing the import lock's connection failed", "error", err)
-			}
+			discard(ctx, conn)
 			return
 		}
 		conn.Release()
 	}, true, nil
 }
+
+// discard takes conn out of the pool and closes it, which ends its Postgres
+// session and with it every advisory lock that session still holds. It answers
+// both ways a connection can end up back in the pool holding a lock nobody can
+// release: an unlock that failed, and an acquire whose answer never arrived.
+//
+// It derives its own bounded context from ctx rather than taking one, because
+// every caller is on a path where ctx may already be cancelled and a close
+// still has to be attempted.
+func discard(ctx context.Context, conn *pgxpool.Conn) {
+	closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+	defer cancel()
+	if err := conn.Hijack().Close(closeCtx); err != nil {
+		slog.Warn("db: closing the import lock's connection failed", "error", err)
+	}
+}
 ```
 
-- [ ] **Step 7: Den Worker-Lauf sperren** (`internal/server/server.go`)
+- [x] **Step 7: Den Worker-Lauf sperren** (`internal/server/server.go`)
 
 Im `pipeline.Pipeline`-Literal in `Run` als letztes Feld ergänzen:
 
@@ -1257,12 +1303,12 @@ Im `pipeline.Pipeline`-Literal in `Run` als letztes Feld ergänzen:
 			Lock: db.ImportLock{Pool: pool},
 ```
 
-- [ ] **Step 8: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 8: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go build ./... && go test -count=1 -race ./internal/pipeline/ ./internal/db/ ./internal/server/`
 Expected: PASS
 
-- [ ] **Step 9: Commit-Gate und Commit**
+- [x] **Step 9: Commit-Gate und Commit**
 
 ```bash
 git add internal
@@ -1283,7 +1329,7 @@ Damit `import` die Grenzen sieht, aber nicht das Intervall — dasselbe Muster w
 - Consumes: —
 - Produces: `type config.ImportLimits struct { MaxItems, MaxPages int }` mit `Validate()`; `config.Import` bettet es ein und behält `Interval` samt eigenem `Validate()`. Zugriffe wie `cfg.Import.MaxItems` bleiben durch Promotion unverändert gültig.
 
-- [ ] **Step 1: Failing Test** (an `internal/config/import_bounds_test.go` anhängen)
+- [x] **Step 1: Failing Test** (an `internal/config/import_bounds_test.go` anhängen)
 
 Die Datei ist `package config` — also ohne `config.`-Präfix — und importiert bisher nur `testing`; `strings` dazunehmen.
 
@@ -1315,7 +1361,7 @@ func TestImportLimits_ValidateRejectsABoundBelowOne(t *testing.T) {
 // The interval stays with Import, and a valid pair of limits must not make it
 // pass on its own.
 func TestImport_ValidateStillRejectsANonPositiveInterval(t *testing.T) {
-	cfg := Import{ImportLimits: ImportLimits{MaxItems: 50, MaxPages: 100}}
+	cfg := Import{MaxItems: 50, MaxPages: 100}
 
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("Validate() = nil for a zero interval, want an error")
@@ -1323,12 +1369,12 @@ func TestImport_ValidateStillRejectsANonPositiveInterval(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test -count=1 -run 'TestImportLimits|TestImport_ValidateStill' ./internal/config/`
 Expected: FAIL, `undefined: config.ImportLimits`
 
-- [ ] **Step 3: Die Gruppe teilen** (`internal/config/config.go`)
+- [x] **Step 3: Die Gruppe teilen** (`internal/config/config.go`)
 
 `Import` und sein `Validate` ersetzen durch:
 
@@ -1379,7 +1425,7 @@ func (i Import) Validate() error {
 }
 ```
 
-- [ ] **Step 4: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 4: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go build ./... && go test -count=1 -race ./internal/config/ ./internal/server/ ./cmd/recipe-reader/`
 Expected: PASS. Kein Aufrufer ändert sich: `cfg.Import.MaxItems` und `cfg.Import.MaxPages` funktionieren über die Einbettung weiter.
@@ -1392,7 +1438,7 @@ go run ./cmd/recipe-reader serve --help | grep -o -- '--[a-z][a-z-]*' | sort -u 
 
 Erwartet: dieselbe Liste wie vor diesem Task (inklusive `--log-level`/`--log-format` aus Task 3).
 
-- [ ] **Step 5: Commit-Gate und Commit**
+- [x] **Step 5: Commit-Gate und Commit**
 
 ```bash
 git add internal/config
@@ -1415,7 +1461,7 @@ git commit -m "refactor(config): split the import limits from the schedule" -m "
 - Consumes: `newExtractor`, `newFetcher`, `alreadyImported` (paketintern in `internal/server`), `db.Open`, `db.ImportLock` (Task 4), `pipeline.Pipeline`, `config.ImportLimits` (Task 5), `run`/`parse`/`clearEnv`/`unreachableDSN` aus `cmd/recipe-reader`
 - Produces: `func server.ImportOnce(ctx context.Context, cfg config.Config) (pipeline.ImportResult, error)`; `type cli.ImportCmd`; `func (c *ImportCmd) Run(ctx context.Context) error`
 
-- [ ] **Step 1: Failing Tests** (`cmd/recipe-reader/import_test.go`)
+- [x] **Step 1: Failing Tests** (`cmd/recipe-reader/import_test.go`)
 
 ```go
 package main
@@ -1466,12 +1512,12 @@ Der Fall „Flag vor dem Kommandonamen“ (E11) bekommt **keinen** eigenen Test:
 		{"--db-dsn", unreachableDSN, "import"},
 ```
 
-- [ ] **Step 2: Tests laufen lassen, sie müssen fehlschlagen**
+- [x] **Step 2: Tests laufen lassen, sie müssen fehlschlagen**
 
 Run: `go test -count=1 -run 'Import' ./cmd/recipe-reader/`
 Expected: FAIL, `unexpected argument import`
 
-- [ ] **Step 3: `internal/server/import.go` anlegen**
+- [x] **Step 3: `internal/server/import.go` anlegen**
 
 ```go
 package server
@@ -1479,6 +1525,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/sBurmester/recipe-reader/internal/config"
 	"github.com/sBurmester/recipe-reader/internal/db"
@@ -1511,6 +1558,26 @@ func ImportOnce(ctx context.Context, cfg config.Config) (pipeline.ImportResult, 
 	}
 	defer pool.Close()
 
+	// Taken here, before newFetcher, and not by the Pipeline below. The lock
+	// exists to stop two processes logging into one Instagram account (D1), and
+	// the pipeline's own guard runs after the fetcher has already logged in and
+	// written the session file — so a refused run used to pay the exact cost the
+	// lock was introduced to avoid before it said no.
+	//
+	// The Pipeline built below therefore has no Lock: it would ask this pool for
+	// a second connection and Postgres would refuse this process the lock it is
+	// already holding, so the command would report itself as "another import".
+	// serve keeps the pipeline's guard — there the login happens once at
+	// startup, not per run, so the guard has nothing to get in front of.
+	release, ok, err := (db.ImportLock{Pool: pool}).TryAcquire(ctx)
+	if err != nil {
+		return pipeline.ImportResult{}, fmt.Errorf("import: taking the import lock: %w", err)
+	}
+	if !ok {
+		return pipeline.ImportResult{}, pipeline.ErrImportInProgress
+	}
+	defer release()
+
 	recipes := repository.NewRecipeRepository(pool)
 	lookups := repository.NewLookupRepository(pool)
 
@@ -1530,13 +1597,12 @@ func ImportOnce(ctx context.Context, cfg config.Config) (pipeline.ImportResult, 
 		Categories:       lookups,
 		Threshold:        cfg.Extraction.Threshold,
 		PublishThreshold: cfg.Extraction.PublishThreshold,
-		Lock:             db.ImportLock{Pool: pool},
 	}
 	return p.Run(ctx)
 }
 ```
 
-- [ ] **Step 4: `internal/cli/import.go` anlegen**
+- [x] **Step 4: `internal/cli/import.go` anlegen**
 
 ```go
 package cli
@@ -1579,6 +1645,17 @@ func (c *ImportCmd) Run(ctx context.Context) error {
 
 	result, err := server.ImportOnce(ctx, cfg)
 	if err != nil {
+		// A fetch that fails part-way still imports what it already collected,
+		// so a failed run can carry a real tally — and "imported nine, then
+		// throttled" is a different decision from "did nothing". Only the
+		// counts, not the error: main logs that. Seen is zero for the failures
+		// that happen before the first post — a refused lock, a failed login, a
+		// fetch that returned nothing — and those get no line.
+		if result.Seen > 0 {
+			slog.Warn("import did not finish",
+				"seen", result.Seen, "imported", result.Imported, "skipped", result.Skipped,
+				"no_recipe", result.NoRecipe, "failed", result.Failed, "degraded", result.Degraded)
+		}
 		return err
 	}
 	slog.Info("import finished",
@@ -1588,7 +1665,7 @@ func (c *ImportCmd) Run(ctx context.Context) error {
 }
 ```
 
-- [ ] **Step 5: Ins Kommando-Menü hängen** (`cmd/recipe-reader/main.go`)
+- [x] **Step 5: Ins Kommando-Menü hängen** (`cmd/recipe-reader/main.go`)
 
 Im `CLI`-Struct nach `Migrate` ergänzen (gofmt richtet die Spalten aus):
 
@@ -1596,7 +1673,7 @@ Im `CLI`-Struct nach `Migrate` ergänzen (gofmt richtet die Spalten aus):
 	Import      cli.ImportCmd      `cmd:"" help:"Run one import of new saved posts and exit. serve does the same every IMPORT_INTERVAL; this does it now, without starting the server."`
 ```
 
-- [ ] **Step 6: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 6: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go build ./... && go test -count=1 -race ./cmd/recipe-reader/ ./internal/server/ ./internal/cli/`
 Expected: PASS
@@ -1608,19 +1685,19 @@ go run ./cmd/recipe-reader import --help | grep -c -- '--http-addr\|--import-int
 go run ./cmd/recipe-reader --help | grep import
 ```
 
-- [ ] **Step 7: README**
+- [x] **Step 7: README**
 
 In `## Commands` der Tabelle eine Zeile anfügen:
 
 ```markdown
-| `import` | Runs one import of new saved posts and exits: before a rollout, after a restore, or after fixing a login. `serve` does the same every `IMPORT_INTERVAL`. Reads the database, Instagram, extraction, LLM and import-limit settings. Refuses to start while another import is running, in this process or in a server. With compose: `docker compose run --rm app import`. |
+| `import` | Runs one import of new saved posts and exits: before a rollout, after a restore, or after fixing a login. `serve` does the same every `IMPORT_INTERVAL`. Applies pending migrations and seeds the lookup tables first, exactly as `serve` and `migrate` do — so running it against the database of an older server migrates that database. Reads the database, Instagram, extraction, LLM and import-limit settings. Refuses to start while another import is running, in this process or in a server, and refuses before it logs in. With compose: `docker compose run --rm app import`. |
 ```
 
 In `## Architecture` den Satz aus Task 5 des Vorgängerplans erweitern: `` `migrate` to `internal/db`. `` → `` `migrate` to `internal/db`; `import` to `internal/server`, which runs the same pipeline the worker runs, once. ``
 
-Im Abschnitt über den Import ergänzen, dass ein Lauf einen Postgres-Advisory-Lock hält und ein zweiter Lauf deshalb mit Exit 1 abgelehnt wird.
+Im Abschnitt über den Import ergänzen, dass ein Lauf einen Postgres-Advisory-Lock hält und ein zweiter Lauf deshalb mit Exit 1 abgelehnt wird — **vor** dem Login, weil der Login die Kosten sind, die der Lock vermeiden soll — und dass der Worker eines Servers eine Absage nicht als Lauf verbucht, sondern weiter die letzte echte Bilanz meldet.
 
-- [ ] **Step 8: Commit-Gate und Commit**
+- [x] **Step 8: Commit-Gate und Commit**
 
 ```bash
 git add cmd internal README.md
@@ -1631,7 +1708,7 @@ git commit -m "feat(cli): add a one-off import command" -m "import runs the pipe
 
 ### Abschluss-Verifikation
 
-- [ ] **Step 1: Paket `main` prüfen**
+- [x] **Step 1: Paket `main` prüfen**
 
 ```bash
 ls cmd/recipe-reader/
@@ -1640,11 +1717,11 @@ go list -f '{{join .Imports " "}}' ./cmd/recipe-reader
 
 Erwartet: nur `main.go` und Tests; aus `internal/*` genau `internal/cli`, `internal/config` und `internal/logging` (D3).
 
-- [ ] **Step 2: Commit-Gate komplett** (siehe Global Constraints). Alles grün.
+- [x] **Step 2: Commit-Gate komplett** (siehe Global Constraints). Alles grün.
 
-- [ ] **Step 3: Docker-Gate** (siehe Global Constraints). `smoke test passed`.
+- [x] **Step 3: Docker-Gate** (siehe Global Constraints). `smoke test passed`.
 
-- [ ] **Step 4: Compose End-to-End** (im eigenen Projekt `recipe-reader-e2e`, nie im Default-Projekt — dort liegt das Volume `db-data` mit echten Daten)
+- [x] **Step 4: Compose End-to-End** (im eigenen Projekt `recipe-reader-e2e`, nie im Default-Projekt — dort liegt das Volume `db-data` mit echten Daten)
 
 ```bash
 export API_TOKEN=$(openssl rand -hex 32) POSTGRES_PASSWORD=$(openssl rand -hex 16)
@@ -1657,20 +1734,20 @@ docker compose -p recipe-reader-e2e down -v
 
 `down -v` auch dann ausführen, wenn ein Schritt davor scheitert.
 
-- [ ] **Step 5: Akzeptanzkriterien in Teil A abhaken** (US1–US5, Definition of Done)
+- [x] **Step 5: Akzeptanzkriterien in Teil A abhaken** (US1–US5, Definition of Done)
 
-- [ ] **Step 6: Backlog des Vorgängerplans aktualisieren**
+- [x] **Step 6: Backlog des Vorgängerplans aktualisieren**
 
 In `docs/superpowers/plans/2026-09-19-kong-cli-commands.md` im Abschnitt „Backlog“ vermerken, dass die vier Punkte in diesem Plan umgesetzt sind, mit Link.
 
-- [ ] **Step 7: Diese Datei abhaken und committen**
+- [x] **Step 7: Diese Datei abhaken und committen**
 
 ```bash
 git add docs/superpowers/plans/
 git commit -m "docs: mark M3 done in the CLI backlog plan"
 ```
 
-- [ ] **Step 8: PR 3/3** erst nach Freigabe durch den Nutzer öffnen.
+- [x] **Step 8: PR 3/3** erst nach Freigabe durch den Nutzer öffnen.
 
 ---
 

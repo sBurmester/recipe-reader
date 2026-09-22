@@ -138,6 +138,8 @@
 
 ### Backlog (bewusst nicht in diesem Plan)
 
+> **Erledigt.** Alle drei Punkte sind im Plan [2026-09-21-cli-backlog.md](2026-09-21-cli-backlog.md) umgesetzt: `server.Run` drainiert auch im Fehlerfall und eine Migration beachtet ihren Kontext (M1), `--log-level`/`--log-format` sitzen an der Wurzel des Kommandobaums (M2), und `import` läuft einmalig, gegen den Worker eines laufenden Servers über einen Postgres-Advisory-Lock serialisiert (M3). Die beiden offenen Fragen beim `import` sind dort als Entscheidungen D1 (Advisory-Lock statt Lock-Datei) und D5 (Log-Zeilen plus Zusammenfassung, kein `--json`) beantwortet.
+
 - `import`-Kommando für einen einmaligen Importlauf ohne Server. Offene Fragen: gleichzeitiger Betrieb mit laufendem `serve` (Session-Datei, Login-Floor) und Ausgabeformat.
 - `--log-level` / `--log-format` als globale Flags.
 - `server.Run` soll auch bei einem Fehler drainen (aus dem Milestone-Review von M1, F2). Heute kehrt `Run` sofort zurück, wenn `newHTTPServer` oder `ListenAndServe` scheitert (z. B. Port belegt). Der Pool ist dann geschlossen, aber der bereits gestartete Import-Zeitplan und die Shutdown-Goroutine laufen unter `ctx` weiter, bis der Aufrufer ihn abbricht. Das Verhalten ist nicht neu; beide Aufrufer beenden den Prozess danach mit 1. Seit M1 steht es im Doc-Kommentar. Vorschlag: am Anfang `ctx, cancel := context.WithCancel(ctx)` mit `defer cancel()`, `worker.Start` erst nach erfolgreichem `newHTTPServer`, und im Fehlerpfad von `ListenAndServe` `cancel()` gefolgt von `<-shutdownDone`. Danach den Absatz im Doc-Kommentar kürzen.
