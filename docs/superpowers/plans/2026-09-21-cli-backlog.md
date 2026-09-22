@@ -1747,7 +1747,7 @@ git add docs/superpowers/plans/
 git commit -m "docs: mark M3 done in the CLI backlog plan"
 ```
 
-- [ ] **Step 8: PR 3/3** erst nach Freigabe durch den Nutzer öffnen.
+- [x] **Step 8: PR 3/3** erst nach Freigabe durch den Nutzer öffnen.
 
 ---
 
