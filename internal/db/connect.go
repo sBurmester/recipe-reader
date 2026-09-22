@@ -77,7 +77,7 @@ func Connect(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 // and migrate both start with it, so the order is written down once. The
 // caller closes the pool.
 func Open(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
-	if err := MigrateContext(ctx, dsn); err != nil {
+	if err := MigrateWithContext(ctx, dsn); err != nil {
 		return nil, err
 	}
 	pool, err := Connect(ctx, dsn)
@@ -134,16 +134,16 @@ func dsnParams(dsn string) map[string]struct{} {
 // Migrate applies all pending embedded migrations against dsn (a
 // postgres:// URL — the same one passed to Connect).
 func Migrate(dsn string) error {
-	return MigrateContext(context.Background(), dsn)
+	return MigrateWithContext(context.Background(), dsn)
 }
 
-// MigrateContext is Migrate, bounded by ctx. Cancelling it stops the migrator
+// MigrateWithContext is Migrate, bounded by ctx. Cancelling it stops the migrator
 // between two migrations; the one in flight is always finished, because a
 // half-applied migration is worse than a slow Ctrl-C.
 //
 // golang-migrate has no context parameter, only the GracefulStop channel, so
 // the cancellation path is this file's own — see migrateUp, which holds it.
-func MigrateContext(ctx context.Context, dsn string) error {
+func MigrateWithContext(ctx context.Context, dsn string) error {
 	return migrateUp(ctx, func() (migrator, error) {
 		m, err := newMigrate(dsn)
 		if err != nil {

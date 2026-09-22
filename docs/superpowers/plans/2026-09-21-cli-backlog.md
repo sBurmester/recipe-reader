@@ -61,7 +61,7 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 | # | Ziel | Messbar an |
 | --- | --- | --- |
 | Z1 | Ein Fehlstart hinterlässt keine laufende Arbeit | `server.Run` gibt den Listen-Fehler erst zurück, nachdem seine Goroutinen zurückgekehrt sind (Test) |
-| Z2 | Eine Migration lässt sich abbrechen | `db.MigrateContext` mit abgebrochenem Kontext wendet nichts an und meldet den Abbruch als Fehler (Test) |
+| Z2 | Eine Migration lässt sich abbrechen | `db.MigrateWithContext` mit abgebrochenem Kontext wendet nichts an und meldet den Abbruch als Fehler (Test) |
 | Z3 | Logging ist einstellbar, für jedes Kommando | `--log-level debug`, `--log-format json` wirken vor und hinter dem Kommandonamen |
 | Z4 | Ein Import ohne Server ist möglich und kann den laufenden Server nicht stören | `recipe-reader import` läuft; zwei gleichzeitige Läufe sind unmöglich, der zweite endet mit 1 und einer klaren Meldung (Test gegen echtes Postgres) |
 | Z5 | Kein Verhaltensbruch | Alle bestehenden Flags, Env-Variablen und Defaults unverändert; `serve --help` bleibt bis auf die neue Gruppe „Logging“ gleich |
@@ -81,9 +81,9 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 - [x] Der Absatz im Doc-Kommentar von `Run`, der das alte Verhalten beschreibt, ist entfernt.
 
 **US2: Betreiber bricht eine Migration ab.** *Als Betreiber möchte ich `recipe-reader migrate` mit Ctrl-C abbrechen können, ohne dass mir „fertig“ gemeldet wird.*
-- [x] `db.MigrateContext(ctx, dsn)` bricht zwischen zwei Migrationen ab, wenn `ctx` abgebrochen wird, und meldet den Abbruch als Fehler.
+- [x] `db.MigrateWithContext(ctx, dsn)` bricht zwischen zwei Migrationen ab, wenn `ctx` abgebrochen wird, und meldet den Abbruch als Fehler.
 - [x] Ein bereits abgebrochener Kontext wendet **keine** Migration an.
-- [x] `db.Open` nutzt `MigrateContext`, sodass `migrate` und `serve` beide davon profitieren; `db.Migrate(dsn)` bleibt als Kurzform bestehen (Aufrufer in `testdb` und den Tests unverändert).
+- [x] `db.Open` nutzt `MigrateWithContext`, sodass `migrate` und `serve` beide davon profitieren; `db.Migrate(dsn)` bleibt als Kurzform bestehen (Aufrufer in `testdb` und den Tests unverändert).
 
 **US3: Betreiber will mehr oder weniger Log.** *Als Betreiber möchte ich im Fehlerfall Debug sehen und im Betrieb JSON an meinen Collector schicken.*
 - [x] `recipe-reader --log-level debug serve` und `recipe-reader serve --log-level debug` tun dasselbe; `LOG_LEVEL` wirkt genauso.
@@ -119,7 +119,7 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 | # | Risiko | Gegenmaßnahme |
 | --- | --- | --- |
 | R1 | `pg_advisory_unlock` scheitert und die Verbindung geht mit gehaltenem Lock zurück in den Pool | Der Adapter nimmt die Verbindung in dem Fall per `Hijack` aus dem Pool und schließt sie; Postgres gibt den Lock mit der Session frei. Der Fall wird geloggt. |
-| R2 | `golang-migrate` verhält sich anders als angenommen | Am 2026-09-21 gegen v4.19.1 geprüft: `GracefulStop` ist gepuffert (`make(chan bool, 1)`, `migrate.go:185`), `stop()` liest ihn zwischen den Migrationen (`migrate.go:815-828`), und ein gestopptes `Up()` gibt **`nil`** zurück. Deshalb prüft `MigrateContext` nach `Up()` zusätzlich `ctx.Err()` — sonst sähe ein abgebrochener Lauf wie ein erfolgreicher aus. |
+| R2 | `golang-migrate` verhält sich anders als angenommen | Am 2026-09-21 gegen v4.19.1 geprüft: `GracefulStop` ist gepuffert (`make(chan bool, 1)`, `migrate.go:185`), `stop()` liest ihn zwischen den Migrationen (`migrate.go:815-828`), und ein gestopptes `Up()` gibt **`nil`** zurück. Deshalb prüft `MigrateWithContext` nach `Up()` zusätzlich `ctx.Err()` — sonst sähe ein abgebrochener Lauf wie ein erfolgreicher aus. |
 | R3 | Der Goroutine-Test in Task 1 wird flaky | Er vergleicht nur mit seiner eigenen Grundlinie und pollt mit großzügiger Frist (15 s). Nicht Teil der Gegenmaßnahme: `testdb.Main` startet den Container **nicht** — der kommt beim ersten `New` über `shared.once.Do(start)` hoch, also innerhalb des Tests. Deshalb liegt der 100-ms-Settle zwischen diesem `NewDatabase` und der Grundlinie. Wird der Test trotzdem unruhig, hier anhalten und melden, statt die Frist immer weiter hochzudrehen. |
 | R4 | Der Lock serialisiert mehr als gewollt (z. B. zwei Deployments gegen dieselbe Datenbank) | Genau das ist die Absicht: Der Lock hängt an der Datenbank, und zwei Prozesse an derselben Datenbank sind genau der Fall, den D1 verhindern soll. |
 
@@ -181,7 +181,7 @@ internal/pipeline/
   pipeline.go              # + ImportLock-Port, + Lock-Feld, + ErrImportInProgress
   lock_test.go             # neu
 internal/db/
-  connect.go               # + MigrateContext; Migrate delegiert; Open nutzt es
+  connect.go               # + MigrateWithContext; Migrate delegiert; Open nutzt es
   migrate_test.go          # neu: treibt das paketinterne migrateUp mit einem Fake
   lock.go                  # neu: ImportLock (Adapter)
   lock_test.go             # neu
@@ -434,13 +434,13 @@ git commit -m "fix(server): drain before returning a failed start" -m "Run works
 `Migrate` bekommt eine Kontextvariante. `golang-migrate` kennt keinen Kontextparameter, wohl aber den Kanal `GracefulStop`, der zwischen zwei Migrationen gelesen wird.
 
 **Files:**
-- Modify: `internal/db/connect.go` (+ `MigrateContext`, `Migrate` delegiert, `Open` nutzt es)
-- Modify: `internal/db/db_test.go` (+ `TestMigrateContext_CancelledContextAppliesNothing`)
+- Modify: `internal/db/connect.go` (+ `MigrateWithContext`, `Migrate` delegiert, `Open` nutzt es)
+- Modify: `internal/db/db_test.go` (+ `TestMigrateWithContext_CancelledContextAppliesNothing`)
 - Create: `internal/db/migrate_test.go` (Paket `db`: der Fake und `TestMigrateUp_GracefulStopIsReportedAsCancellation` — `migrateUp` ist paketintern und aus `db_test` nicht erreichbar)
 
 **Interfaces:**
 - Consumes: `newMigrate` (unverändert, paketintern)
-- Produces: `func db.MigrateContext(ctx context.Context, dsn string) error`; `func db.Migrate(dsn string) error` bleibt bestehen und ruft `MigrateContext(context.Background(), dsn)`.
+- Produces: `func db.MigrateWithContext(ctx context.Context, dsn string) error`; `func db.Migrate(dsn string) error` bleibt bestehen und ruft `MigrateWithContext(context.Background(), dsn)`.
 
 - [x] **Step 1: Failing Test schreiben** (an `internal/db/db_test.go` anhängen)
 
@@ -448,17 +448,17 @@ git commit -m "fix(server): drain before returning a failed start" -m "Run works
 // Up has no context parameter, so a cancelled migrate used to be noticed only
 // by the Connect that followed it — after the schema had already changed. A
 // context that is already done must leave the database exactly as it was.
-func TestMigrateContext_CancelledContextAppliesNothing(t *testing.T) {
+func TestMigrateWithContext_CancelledContextAppliesNothing(t *testing.T) {
 	dsn := testdb.NewDatabase(t, "migrate_cancelled")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := db.MigrateContext(ctx, dsn)
+	err := db.MigrateWithContext(ctx, dsn)
 	if err == nil {
-		t.Fatal("MigrateContext() = nil, want the cancellation reported")
+		t.Fatal("MigrateWithContext() = nil, want the cancellation reported")
 	}
 	if !errors.Is(err, context.Canceled) {
-		t.Errorf("MigrateContext() error = %v, want it to wrap context.Canceled", err)
+		t.Errorf("MigrateWithContext() error = %v, want it to wrap context.Canceled", err)
 	}
 
 	pool, err := pgxpool.New(context.Background(), dsn)
@@ -472,7 +472,7 @@ func TestMigrateContext_CancelledContextAppliesNothing(t *testing.T) {
 		t.Fatalf("look for the units table: %v", err)
 	}
 	if exists {
-		t.Error("MigrateContext() applied a migration although its context was already cancelled")
+		t.Error("MigrateWithContext() applied a migration although its context was already cancelled")
 	}
 }
 
@@ -515,7 +515,7 @@ func (m *stoppingMigrator) Stop() { close(m.stopped) }
 
 func (m *stoppingMigrator) Close() (source error, database error) { return nil, nil }
 
-// The promise MigrateContext adds to golang-migrate is that a cancelled run is
+// The promise MigrateWithContext adds to golang-migrate is that a cancelled run is
 // reported as one. A gracefully stopped Up returns nil, so a run that was cut
 // short after applying part of the schema would otherwise be indistinguishable
 // from a clean one — and the caller would carry on against a half-migrated
@@ -543,10 +543,10 @@ Die Imports `errors`, `context` und `github.com/jackc/pgx/v5/pgxpool` in `db_tes
 
 - [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
-Run: `go test -count=1 -run TestMigrateContext ./internal/db/`
-Expected: FAIL, `undefined: db.MigrateContext`
+Run: `go test -count=1 -run TestMigrateWithContext ./internal/db/`
+Expected: FAIL, `undefined: db.MigrateWithContext`
 
-- [x] **Step 3: `MigrateContext` implementieren** (`internal/db/connect.go`)
+- [x] **Step 3: `MigrateWithContext` implementieren** (`internal/db/connect.go`)
 
 `Migrate` ersetzen durch:
 
@@ -554,16 +554,16 @@ Expected: FAIL, `undefined: db.MigrateContext`
 // Migrate applies all pending embedded migrations against dsn (a
 // postgres:// URL — the same one passed to Connect).
 func Migrate(dsn string) error {
-	return MigrateContext(context.Background(), dsn)
+	return MigrateWithContext(context.Background(), dsn)
 }
 
-// MigrateContext is Migrate, bounded by ctx. Cancelling it stops the migrator
+// MigrateWithContext is Migrate, bounded by ctx. Cancelling it stops the migrator
 // between two migrations; the one in flight is always finished, because a
 // half-applied migration is worse than a slow Ctrl-C.
 //
 // golang-migrate has no context parameter, only the GracefulStop channel, so
 // the cancellation path is this file's own — see migrateUp, which holds it.
-func MigrateContext(ctx context.Context, dsn string) error {
+func MigrateWithContext(ctx context.Context, dsn string) error {
 	return migrateUp(ctx, func() (migrator, error) {
 		m, err := newMigrate(dsn)
 		if err != nil {
@@ -639,7 +639,7 @@ func migrateUp(ctx context.Context, open func() (migrator, error)) error {
 }
 ```
 
-- [x] **Step 4: `Open` auf `MigrateContext` umstellen** (`internal/db/connect.go`)
+- [x] **Step 4: `Open` auf `MigrateWithContext` umstellen** (`internal/db/connect.go`)
 
 In `Open` ersetzen:
 
@@ -650,7 +650,7 @@ In `Open` ersetzen:
 durch
 
 ```go
-	if err := MigrateContext(ctx, dsn); err != nil {
+	if err := MigrateWithContext(ctx, dsn); err != nil {
 ```
 
 - [x] **Step 5: Tests laufen lassen, sie müssen grün sein**
@@ -662,7 +662,7 @@ Expected: PASS. `TestOpen_MigratesAndSeedsAnEmptyDatabase` und `TestRun_MigrateM
 
 ```bash
 git add internal/db
-git commit -m "feat(db): let a migration be cancelled" -m "MigrateContext wires ctx to golang-migrate's GracefulStop and reports the cancellation, which a stopped Up does not. Open uses it, so Ctrl-C during recipe-reader migrate stops between migrations instead of being noticed by the connect that follows."
+git commit -m "feat(db): let a migration be cancelled" -m "MigrateWithContext wires ctx to golang-migrate's GracefulStop and reports the cancellation, which a stopped Up does not. Open uses it, so Ctrl-C during recipe-reader migrate stops between migrations instead of being noticed by the connect that follows."
 ```
 
 ---
