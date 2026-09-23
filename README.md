@@ -458,10 +458,12 @@ database the container would use. It needs `POSTGRES_PASSWORD` too.
 
 ### Postgres version
 
-The database is **Postgres 18** (`postgres:18-alpine`). The tag names only the major version, so
-patch releases arrive with `docker compose pull`; they share the on-disk format. The test
-containers and `scripts/smoke-test-image.sh` run the same image, so tests cover the version you
-deploy.
+The database is **Postgres 18** (`postgres:18-alpine`, pinned by digest in `docker-compose.yml`).
+`docker compose pull` fetches exactly that image; a patch release (18.x, same on-disk format)
+arrives when Renovate raises the digest — weekly, or at once from the Dependency Dashboard (see
+[Dependencies](#dependencies)). The test containers and `scripts/smoke-test-image.sh` run
+`postgres:18-alpine` unpinned, so tests cover the same major version and the newest patch of it,
+which the deployed digest follows within a week.
 
 The volume is mounted at `/var/lib/postgresql`, not `/var/lib/postgresql/data` as it was on 17. The
 18 image keeps its data one level down, in a per-version directory (`18/docker`), and refuses to

@@ -1,8 +1,11 @@
 services:
   db:
-    # The major version only: patch releases (18.x) share the on-disk format
-    # and arrive with `docker compose pull`. A major version does not — see
-    # "Upgrading from Postgres 17" in the README before changing this.
+    # Pinned by digest, so `docker compose pull` fetches exactly this image and
+    # no newer patch release on its own. Renovate raises the digest weekly —
+    # or at once from the Dependency Dashboard; patch releases (18.x) share
+    # the on-disk format. A major version does not, and Renovate leaves it
+    # alone — see "Upgrading from Postgres 17" in the README before changing
+    # the 18.
     image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-recipes}
