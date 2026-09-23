@@ -582,6 +582,13 @@ Monday mornings (before 6am, Europe/Berlin), labelled `dependencies`, at most fi
 request at once instead of waiting for Monday. Its run logs are on
 [developer.mend.io](https://developer.mend.io), not in the Actions tab.
 
+Security fixes do not wait for Monday. Renovate checks every dependency against the
+[OSV](https://osv.dev) vulnerability database on each of its runs — the app runs several times a
+day, on a cadence Mend sets — and opens a fix, labelled `security`, as soon as a patched version
+exists. This covers Go modules, npm packages and images by tag; it is no substitute for
+`govulncheck`, which also knows whether the vulnerable code is actually called and covers the Go
+standard library.
+
 Actions and base images are pinned to digests, with the readable version next to them
 (`actions/checkout@<sha> # v7`, `postgres:18-alpine@sha256:…`). A tag can be moved to other code;
 a digest cannot. The flip side is that a pinned image no longer picks up patch releases on the

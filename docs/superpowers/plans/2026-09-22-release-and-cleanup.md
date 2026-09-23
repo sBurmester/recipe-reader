@@ -111,6 +111,7 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 **US6: Entwickler hält die Abhängigkeiten aktuell, ohne sie zu suchen.**
 - [ ] Renovate läuft nach Zeitplan als GitHub-App und lässt sich über das „Dependency Dashboard“-Issue von Hand anstoßen.
 - [ ] Es öffnet PRs für Go-Module, GitHub Actions und Docker-Images.
+- [ ] Sicherheitslücken (OSV) werden mindestens täglich geprüft; ein Fix-PR wartet nicht auf den Wochenplan.
 - [ ] Jede Action und jedes Basisimage steht mit Digest im Repository, mit dem Tag als Kommentar.
 - [ ] Ein Go-Update-PR durchläuft die CI wie jeder andere Code-PR.
 
@@ -1091,6 +1092,8 @@ git commit -m "ci: publish the image to ghcr and let compose pull it" -m "compos
 Die Konfiguration ist von der Frage unabhängig, wie Renovate läuft — sie gilt für die App (E9) genauso wie für eine selbst gehostete Variante. Deshalb ein eigener Task: er lässt sich lesen und beurteilen, bevor die App installiert ist. Liegt `renovate.json` auf `main`, bevor die App installiert wird, überspringt Renovate seinen Onboarding-PR.
 
 > **Abweichung (2026-09-23).** Zusätzlich zur Datei unten eine Regel, die Postgres-Majors ausschließt (`matchPackageNames: ["postgres"]`, `matchUpdateTypes: ["major"]`, `enabled: false`): ein Wechsel von 18 auf 19 ändert das Datenformat auf der Platte und braucht die Upgrade-Anleitung der README, keinen Renovate-PR. `renovate-config-validator`: „Config validated successfully“.
+
+> **Ergänzung (Nutzer, 2026-09-23).** Renovate prüft zusätzlich täglich auf Sicherheitslücken: `osvVulnerabilityAlerts: true` (OSV-Datenbank, keine Repository-Einstellung nötig — die Dependabot-Alerts des Repos sind aus) und `vulnerabilityAlerts` mit `schedule: ["at any time"]` und dem Label `security`. Sicherheits-PRs warten damit nicht auf Montag, sondern entstehen beim nächsten Lauf der App, der mehrmals täglich stattfindet. `prPriority` lehnt der Validator in `vulnerabilityAlerts` ab und ist deshalb weggelassen.
 
 **Files:**
 - Create: `renovate.json`

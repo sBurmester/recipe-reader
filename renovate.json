@@ -8,6 +8,12 @@
   "schedule": ["before 6am on monday"],
   "prConcurrentLimit": 5,
   "labels": ["dependencies"],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "description": "Security fixes skip the weekly schedule: the app checks the OSV database on every run, several times a day, and opens a fix as soon as one exists.",
+    "schedule": ["at any time"],
+    "labels": ["dependencies", "security"]
+  },
   "packageRules": [
     {
       "description": "go mod tidy after a module update, so go.sum matches what the PR changed instead of failing CI on the first run.",
