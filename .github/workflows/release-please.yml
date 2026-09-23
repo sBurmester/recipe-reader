@@ -1,0 +1,27 @@
+name: Release Please
+
+# Runs on every push to main and keeps a release PR open that shows the next
+# version and the changelog it would write. Merging that PR is what creates the
+# tag and the GitHub release.
+#
+# The PR and the release are made with GITHUB_TOKEN, which needs the repository
+# setting "Allow GitHub Actions to create and approve pull requests". It also
+# means neither of them triggers another workflow: a release made this way
+# fires no `release` event anywhere else.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: googleapis/release-please-action@v5
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

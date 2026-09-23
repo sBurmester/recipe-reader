@@ -518,6 +518,23 @@ version is passed in as a build argument instead:
 
 `make docker` and CI both do this. A bare `docker build` with no `--build-arg` produces `dev`.
 
+## Releases
+
+Versions are not tagged by hand. [release-please](https://github.com/googleapis/release-please)
+reads the Conventional Commits prefixes on `main` — `fix:` raises the patch, `feat:` the minor, a
+`!` or a `BREAKING CHANGE:` footer the major — and keeps a release PR open that shows the next
+version and the `CHANGELOG.md` it would write. Read it before merging: a wrong prefix is a wrong
+version. Merging it creates the tag and the GitHub release.
+
+Counting starts at `v0.1.0`, not `v1.0.0`. Under SemVer a `0.x` version may break in any minor, and
+this project still does; while it is below `1.0.0`, a breaking change raises the minor rather than
+the major. `docs:`, `test:` and `chore:` commits are left out of the changelog.
+
+The workflow opens its PR and creates the release with the workflow's own token, which needs
+*Settings → Actions → General → Allow GitHub Actions to create and approve pull requests*. A PR
+opened that way starts no other workflow, so CI does not run on the release PR; it changes only
+the changelog and the version manifest.
+
 ## Testing & linting
 
     make check   # gofmt + go vet + golangci-lint + frontend typecheck/build
