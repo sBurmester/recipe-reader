@@ -1,10 +1,16 @@
 name: Release artifacts
 
-# Hangs the binaries on a release. release-please.yml calls this once it has
-# created one, rather than this listening for the release event: a release
-# made with GITHUB_TOKEN fires no event that starts another workflow, so an
-# `on: release` trigger would never run. workflow_dispatch rebuilds and
-# re-uploads for a release that already exists.
+# Hangs the binaries on a release and then publishes it. release-please.yml
+# calls this once it has created one, rather than this listening for the
+# release event: a release made with GITHUB_TOKEN fires no event that starts
+# another workflow, so an `on: release` trigger would never run.
+#
+# The release arrives as a draft. This repository has immutable releases on,
+# and a published release takes no more assets — v0.1.0 went out without its
+# binaries that way. So publishing is the last step here, after the binaries
+# are attached and the image is pushed, and a release is never public without
+# them. workflow_dispatch finishes a draft whose run failed; a published
+# release cannot be changed any more.
 on:
   workflow_call:
     inputs:
@@ -72,8 +78,8 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-  upload:
-    needs: binaries
+  publish:
+    needs: [binaries, image]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -85,7 +91,7 @@ jobs:
 
       # One checksums.txt over all binaries, computed here: per-job files of the
       # same name would overwrite each other when the artifacts are merged.
-      - name: Upload to the release
+      - name: Upload to the release and publish it
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
@@ -95,6 +101,7 @@ jobs:
           cat checksums.txt
           gh release upload "$TAG" recipe-reader_* checksums.txt --clobber \
             --repo "$GITHUB_REPOSITORY"
+          gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
 
   image:
     runs-on: ubuntu-latest
