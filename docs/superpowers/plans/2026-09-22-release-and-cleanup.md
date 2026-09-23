@@ -99,13 +99,13 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - [x] Eine abgelehnte Kommandozeile wird als Bedienfehler gemeldet, ein gescheiterter Lauf als Fehler; beide enden weiterhin mit 1.
 
 **US4: Betreiber installiert eine Version.**
-- [ ] Ein Merge des Release-PRs erzeugt Tag und GitHub-Release mit Changelog.
-- [ ] Das Release trägt Binaries für `linux/amd64`, `linux/arm64` und `darwin/arm64` sowie eine `checksums.txt`.
-- [ ] `recipe-reader --version` einer geladenen Binary meldet genau das Tag.
-- [ ] Das Image `ghcr.io/sburmester/recipe-reader:<tag>` existiert und besteht den Smoke-Test.
+- [x] Ein Merge des Release-PRs erzeugt Tag und GitHub-Release mit Changelog.
+- [x] Das Release trägt Binaries für `linux/amd64`, `linux/arm64` und `darwin/arm64` sowie eine `checksums.txt`.
+- [x] `recipe-reader --version` einer geladenen Binary meldet genau das Tag.
+- [x] Das Image `ghcr.io/sburmester/recipe-reader:<tag>` existiert und besteht den Smoke-Test.
 
 **US5: Betreiber betreibt über Compose.**
-- [ ] `docker compose pull && docker compose up -d` startet ohne lokalen Build.
+- [x] `docker compose pull && docker compose up -d` startet ohne lokalen Build.
 - [x] `docker compose up --build` baut weiterhin lokal, für die Entwicklung.
 
 **US6: Entwickler hält die Abhängigkeiten aktuell, ohne sie zu suchen.**
@@ -165,7 +165,7 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - [ ] Alle Tasks in dieser Datei abgehakt.
 - [ ] Commit-Gate grün; Docker-Gate grün für die Tasks, die das Image betreffen.
 - [ ] Die vier Backlog-Einträge im Plan vom 2026-09-21 sind als erledigt markiert oder verweisen auf diesen Plan.
-- [ ] `v0.1.0` existiert als Tag, als GitHub-Release mit Changelog und als Image in der GHCR.
+- [x] `v0.1.0` existiert als Tag, als GitHub-Release mit Changelog und als Image in der GHCR.
 - [ ] Renovate läuft und hat mindestens einen PR geöffnet; jede Action und jedes Basisimage ist auf Digest gepinnt.
 - [ ] `go.mod` nennt `github.com/pressly/goose/v3` und **nicht** mehr `github.com/golang-migrate/migrate/v4`; `grep -rn golang-migrate --include='*.go' .` findet nichts mehr.
 - [ ] README aktualisiert: Installation aus einem Release, Betrieb über das veröffentlichte Image, Hinweis auf `env_file`, Abschnitt zu Renovate und den gepinnten Digests, das goose-Dateiformat unter „Changing the database schema“, `goose_db_version` im Restore-Abschnitt und der Hinweis, wie eine ältere Entwicklungsdatenbank wieder brauchbar wird.
@@ -248,8 +248,10 @@ Abnahmekriterien:
 #### M4: Release-Automatik
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US4 und US5 sind abgehakt.
-- [ ] `v0.1.0` existiert als Tag, Release und Image.
+- [x] Die Akzeptanzkriterien von US4 und US5 sind abgehakt.
+- [x] `v0.1.0` existiert als Tag, Release und Image.
+
+> **Abnahme (2026-09-23).** `v0.1.0` existiert als Tag, Release und Image, aber ohne Binaries (Immutable Releases, siehe Task 6). Vollständig ist das erste Release `v0.1.1` (Lauf 35897640656): als Entwurf angelegt, drei Binaries und `checksums.txt` angehängt, danach veröffentlicht; `isImmutable: true`. Geprüft wie ein Betreiber: `gh release download` + `sha256sum --check` OK, `--version` = `v0.1.1`, keine Build-Pfade, echtes Vite-Bundle eingebettet; `ghcr.io/sburmester/recipe-reader:v0.1.1` anonym ziehbar, `latest` hat denselben Digest, Smoke-Test bestanden; `docker compose pull && up -d --no-build` → beide Container healthy, `/api/healthz` meldet `v0.1.1`; `RECIPE_READER_VERSION=v0.1.0` zieht die ältere Version.
 
 #### M5: Abhängigkeiten unter Aufsicht
 
