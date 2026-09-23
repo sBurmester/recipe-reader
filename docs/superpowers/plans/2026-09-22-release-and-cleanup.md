@@ -113,7 +113,7 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - [x] Es öffnet PRs für Go-Module, GitHub Actions und Docker-Images.
 - [ ] Sicherheitslücken (OSV) werden mindestens täglich geprüft; ein Fix-PR wartet nicht auf den Wochenplan.
 - [x] Jede Action und jedes Basisimage steht mit Digest im Repository, mit dem Tag als Kommentar.
-- [ ] Ein Go-Update-PR durchläuft die CI wie jeder andere Code-PR.
+- [x] Ein Go-Update-PR durchläuft die CI wie jeder andere Code-PR.
 
 **US7: Entwickler fügt eine Migration hinzu.**
 - [ ] Die README beschreibt **eine** Datei mit `-- +goose Up` und `-- +goose Down`.
@@ -262,6 +262,8 @@ Abnahmekriterien:
 - [x] Jedes `FROM` im `Dockerfile` und jedes `image:` in `docker-compose.yml`, das nicht aus der GHCR dieses Projekts stammt, trägt einen Digest.
 
 > **Stand (2026-09-23).** Offen bis zum ersten regulären Lauf: *„Ein Go-Update-PR durchläuft die CI“* (die Gruppe `go modules` war rate-limited, die Limits hebt #53 auf) und *„Sicherheitslücken … mindestens täglich“* (konfiguriert, noch ohne Anlass). Damit ist auch das Abnahmekriterium „Akzeptanzkriterien von US6“ noch offen.
+
+> **Nachtrag (2026-09-23).** Der Go-Update-PR ist belegt: #56 `fix(go): update go modules` (Labels `dependencies`, `go`; anthropic-sdk-go 1.75.0, golang-migrate 4.20.1, pgx 5.11.0, `go.mod` + `go.sum`) lief durch backend, frontend und docker, alles grün. Offen bleibt allein der erste Sicherheits-PR — er entsteht erst, wenn OSV eine Lücke in einer Abhängigkeit meldet. Außerdem belegt: der Release-PR #55 (`v0.1.3`) enthält nur den `fix:` aus #52; die `ci:`/`docs:`/`chore:`-Commits #49–#54 erscheinen nicht und lösten kein Release aus.
 
 #### M6: Migrationen unter goose
 
