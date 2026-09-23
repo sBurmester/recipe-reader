@@ -282,7 +282,7 @@ Abnahmekriterien:
 | M5 | `ci/renovate` | `ci: keep dependencies updated with renovate (5/6)` |
 | M6 | `refactor/goose-migrations` | `refactor(db)!: migrate with goose instead of golang-migrate (6/6)` |
 
-Das `!` im Titel von PR 6/6 ist beabsichtigt und keine Formsache. Die Versionstabelle heißt danach `goose_db_version`, und nichts überträgt die alte (E15): eine Datenbank, die ein älterer Build angelegt hat, ist danach nicht mehr benutzbar, und eine ältere Binary kann eine neu angelegte nicht lesen. Das ist ein Breaking Change und gehört ins Changelog, auch wenn niemand betroffen ist. Nebenbei ist es das, was `release-please` überhaupt zu einem Release bewegt: `refactor:` allein hebt keine Version — es bekommt zwar einen Abschnitt im Changelog (Task 5), löst aber keinen Bump aus.
+Das `!` im Titel von PR 6/6 ist beabsichtigt und keine Formsache. Die Versionstabelle heißt danach `goose_db_version`, und nichts überträgt die alte (E15): eine Datenbank, die ein älterer Build angelegt hat, ist danach nicht mehr benutzbar, und eine ältere Binary kann eine neu angelegte nicht lesen. Das ist ein Breaking Change und gehört ins Changelog, auch wenn niemand betroffen ist. Nebenbei ist es das, was `release-please` überhaupt zu einem Release bewegt: `refactor:` allein hebt keine Version und steht nicht im Changelog (seit 2026-09-23 `hidden`, siehe Task 5); erst das `!` macht daraus einen Breaking Change mit Release.
 
 Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist. Ein PR enthält die Task-Commits seines Milestones, die Korrekturen aus dem Milestone-Review und einen letzten Commit `docs: mark M<n> done in the release plan`.
 
@@ -743,6 +743,8 @@ git commit -m "fix(cli): name a bad command line apart from a failed run" -m "Bo
 
 > **Abweichung (2026-09-23, mit dem Nutzer entschieden).** Die Repository-Einstellung „Allow GitHub Actions to create and approve pull requests“ war aus; ohne sie kann `release-please` mit `GITHUB_TOKEN` keinen PR öffnen. Sie ist per `gh api` eingeschaltet (`can_approve_pull_request_reviews=true`, `default_workflow_permissions` bleibt `read`). Der Workflow ruft außerdem `release-artifacts.yml` als Job `artifacts` auf, siehe Task 6. Syntaxprüfung zusätzlich mit `actionlint`. Nebenbefund für M5: das Repository ist **öffentlich**, nicht privat, wie E9 annimmt.
 
+> **Korrektur (2026-09-23, mit dem Nutzer entschieden).** release-please behandelt jeden Commit-Typ als release-würdig, dessen Abschnitt im Changelog sichtbar ist — ein reiner `ci:`-Commit (#45) erzeugte `v0.1.2`. `refactor`, `perf`, `build` und `ci` sind deshalb jetzt `hidden`: nur `feat`, `fix` und Breaking Changes lösen ein Release aus und erscheinen im Changelog.
+
 **Files:**
 - Create: `.github/workflows/release-please.yml`
 - Create: `release-please-config.json`
@@ -1094,6 +1096,8 @@ Die Konfiguration ist von der Frage unabhängig, wie Renovate läuft — sie gil
 > **Abweichung (2026-09-23).** Zusätzlich zur Datei unten eine Regel, die Postgres-Majors ausschließt (`matchPackageNames: ["postgres"]`, `matchUpdateTypes: ["major"]`, `enabled: false`): ein Wechsel von 18 auf 19 ändert das Datenformat auf der Platte und braucht die Upgrade-Anleitung der README, keinen Renovate-PR. `renovate-config-validator`: „Config validated successfully“.
 
 > **Ergänzung (Nutzer, 2026-09-23).** Renovate prüft zusätzlich täglich auf Sicherheitslücken: `osvVulnerabilityAlerts: true` (OSV-Datenbank, keine Repository-Einstellung nötig — die Dependabot-Alerts des Repos sind aus) und `vulnerabilityAlerts` mit `schedule: ["at any time"]` und dem Label `security`. Sicherheits-PRs warten damit nicht auf Montag, sondern entstehen beim nächsten Lauf der App, der mehrmals täglich stattfindet. `prPriority` lehnt der Validator in `vulnerabilityAlerts` ab und ist deshalb weggelassen.
+
+> **Ergänzung (Nutzer, 2026-09-23).** Jede Renovate-Regel setzt einen `semanticCommitScope` und ein zusätzliches Label, damit Titel und Labels zeigen, was aktualisiert wird: `go`/`go`, `web`/`npm`, `docker`/`docker`, `actions`/`github-actions` — aus `chore(deps): pin dependencies` wird `chore(docker): pin dependencies`. Außerdem bekannt seit dem ersten Lauf: die Mend-App startete im *Silent Mode* (`dryRun=lookup`, keine PRs und Issues, nur „Pending Approval“ im Portal), weil sie für alle Repositories installiert war; der Nutzer hat auf *Interactive* umgestellt.
 
 **Files:**
 - Create: `renovate.json`

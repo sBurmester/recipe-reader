@@ -543,8 +543,13 @@ version. Merging it creates the tag and the GitHub release, as a draft until its
 Counting starts at `v0.1.0`, not `v1.0.0`. Under SemVer a `0.x` version may break in any minor, and
 this project still does; while it is below `1.0.0`, a breaking change raises the minor rather than
 the major. The start is `initial-version` in `release-please-config.json`: with no release tag yet,
-release-please ignores the version in its manifest and would otherwise begin at `1.0.0`. `docs:`,
-`test:` and `chore:` commits are left out of the changelog.
+release-please ignores the version in its manifest and would otherwise begin at `1.0.0`.
+
+Only `feat:`, `fix:` and breaking changes (`!`) make a release, and only they appear in the
+changelog. release-please counts every commit type the changelog shows as releasable, so the
+others — `ci:`, `refactor:`, `build:`, `perf:`, `docs:`, `test:`, `chore:` — are hidden; a `ci:`
+change alone once produced `v0.1.2`. A breaking `refactor!:` still releases and is listed under
+the breaking changes.
 
 The workflow opens its PR and creates the release with the workflow's own token, which needs
 *Settings → Actions → General → Allow GitHub Actions to create and approve pull requests*. A PR
@@ -577,7 +582,11 @@ release stays a draft; fix the cause and finish it by hand with its tag
 
 [Renovate](https://docs.renovatebot.com/) keeps Go modules, GitHub Actions and Docker images up to
 date. It runs as the Renovate GitHub app and reads `renovate.json`: it opens pull requests on
-Monday mornings (before 6am, Europe/Berlin), labelled `dependencies`, at most five at a time. The
+Monday mornings (before 6am, Europe/Berlin), at most five at a time. The title's scope and a
+second label next to `dependencies` say what is updated: `(go)`/`go` for Go modules, `(web)`/`npm`
+for frontend packages, `(docker)`/`docker` for images, `(actions)`/`github-actions` for workflow
+actions — for example `fix(go): update module github.com/jackc/pgx/v5 to v5.11.0`. Go and npm
+updates are `fix:` and therefore make a release; pins and action updates are `chore:` and do not. The
 *Dependency Dashboard* issue lists everything it knows about; ticking a box there opens that pull
 request at once instead of waiting for Monday. Its run logs are on
 [developer.mend.io](https://developer.mend.io), not in the Actions tab.
