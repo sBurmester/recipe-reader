@@ -54,12 +54,28 @@ services:
     # /api/healthz), so `docker compose ps` already reports it and a service
     # added later can wait on `condition: service_healthy`. Restating it here
     # would be a second copy of the same probe, free to drift from the first.
+    #
+    # Everything the operator put in .env reaches the container, not just the
+    # names repeated under environment: below. Thirteen variables from
+    # .env.example used to stop at the compose file — the README tells people to
+    # start with `cp .env.example .env`, so that was a promise the file broke.
+    #
+    # required: false because a checkout without .env has to start: the
+    # defaults in the binary are a working configuration on their own.
+    # environment: below still wins over it, which keeps HTTP_ADDR and the
+    # composed DB_DSN authoritative over the host-side values in .env.
+    env_file:
+      - path: .env
+        required: false
     environment:
       # Built from the same variables the db service uses, so the two cannot
-      # drift. Set DB_DSN yourself to override it wholesale — which is also the
-      # answer for a password carrying characters a URL would have to
-      # percent-encode.
-      DB_DSN: ${DB_DSN:-postgres://${POSTGRES_USER:-recipes}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-recipes}?sslmode=disable}
+      # drift. Not ${DB_DSN}: the DB_DSN in .env is the one a binary on the
+      # host uses, pointing at localhost, and compose would substitute it here
+      # too — `cp .env.example .env && docker compose up` then gave the app a
+      # database it cannot reach. Set CONTAINER_DB_DSN to override it
+      # wholesale, which is also the answer for a password carrying characters
+      # a URL would have to percent-encode.
+      DB_DSN: ${CONTAINER_DB_DSN:-postgres://${POSTGRES_USER:-recipes}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-recipes}?sslmode=disable}
       # The container has to bind every interface for the published port to
       # reach it, which is exactly the network-reachable case the server
       # refuses to start in without a token. Compose fails first, with a
