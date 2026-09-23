@@ -16,19 +16,34 @@
   },
   "packageRules": [
     {
-      "description": "go mod tidy after a module update, so go.sum matches what the PR changed instead of failing CI on the first run.",
+      "description": "One pull request per ecosystem, so Go, npm, Docker images and actions can each be taken or held back on their own. go mod tidy after the update, so go.sum matches what the PR changed instead of failing CI on the first run.",
       "matchManagers": ["gomod"],
-      "postUpdateOptions": ["gomodTidy"]
+      "postUpdateOptions": ["gomodTidy"],
+      "groupName": "go modules",
+      "semanticCommitScope": "go",
+      "addLabels": ["go"]
+    },
+    {
+      "description": "Frontend packages, as one pull request like every ecosystem, named as such in the title and the labels.",
+      "matchManagers": ["npm"],
+      "groupName": "npm packages",
+      "semanticCommitScope": "web",
+      "addLabels": ["npm"]
     },
     {
       "description": "Base images by digest, like the actions. The tag stays in front of the digest, so the file still says which version it means.",
       "matchManagers": ["dockerfile", "docker-compose"],
-      "pinDigests": true
+      "pinDigests": true,
+      "groupName": "docker images",
+      "semanticCommitScope": "docker",
+      "addLabels": ["docker"]
     },
     {
       "description": "Action updates arrive as one pull request. CI skips a change that touches only .github/workflows (see #29), so these are read and run by hand — one pull request a week is reviewable, a dozen is not.",
       "matchManagers": ["github-actions"],
-      "groupName": "github actions"
+      "groupName": "github actions",
+      "semanticCommitScope": "actions",
+      "addLabels": ["github-actions"]
     },
     {
       "description": "A Postgres major version changes the on-disk format and needs the upgrade procedure in the README; Renovate raises patches and digests only.",
