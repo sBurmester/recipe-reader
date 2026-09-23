@@ -415,6 +415,20 @@ embedded directory, falling back to the app shell rather than a 404.
       docker compose up --build        # app on :8080, Postgres on 127.0.0.1:5432
     docker compose down
 
+That builds the image from the checkout, which is the development path. To run a published
+release instead, pull it — the `app` service names `ghcr.io/sburmester/recipe-reader` next to its
+`build:`, so compose uses the image it has and builds only when told to:
+
+    docker compose pull && docker compose up -d                              # newest release
+    RECIPE_READER_VERSION=v0.1.0 docker compose pull && \
+      RECIPE_READER_VERSION=v0.1.0 docker compose up -d                      # a pinned one
+
+Both paths share that image name, so a local `--build` replaces a pulled `latest` and the next
+`pull` replaces it back. Every release pushes the image once under its tag and moves `latest`
+(see [Releases](#releases)). A package on GHCR starts out private; if `docker compose pull` is
+refused on another machine, either `docker login ghcr.io` there or make the package public under
+the package's *Package settings → Change visibility*.
+
 Two variables are mandatory and have no defaults; compose fails with a message naming each one
 rather than starting something open to the network.
 
@@ -517,6 +531,40 @@ version is passed in as a build argument instead:
     VERSION="$(git describe --tags --always --dirty)" docker compose up --build
 
 `make docker` and CI both do this. A bare `docker build` with no `--build-arg` produces `dev`.
+
+## Releases
+
+Versions are not tagged by hand. [release-please](https://github.com/googleapis/release-please)
+reads the Conventional Commits prefixes on `main` — `fix:` raises the patch, `feat:` the minor, a
+`!` or a `BREAKING CHANGE:` footer the major — and keeps a release PR open that shows the next
+version and the `CHANGELOG.md` it would write. Read it before merging: a wrong prefix is a wrong
+version. Merging it creates the tag and the GitHub release.
+
+Counting starts at `v0.1.0`, not `v1.0.0`. Under SemVer a `0.x` version may break in any minor, and
+this project still does; while it is below `1.0.0`, a breaking change raises the minor rather than
+the major. `docs:`, `test:` and `chore:` commits are left out of the changelog.
+
+The workflow opens its PR and creates the release with the workflow's own token, which needs
+*Settings → Actions → General → Allow GitHub Actions to create and approve pull requests*. A PR
+opened that way starts no other workflow, so CI does not run on the release PR; it changes only
+the changelog and the version manifest.
+
+Each release carries a single static binary for `linux/amd64`, `linux/arm64` and `darwin/arm64`,
+with the frontend embedded and the tag stamped in, plus a `checksums.txt`. Installing one:
+
+    tag=v0.1.0; file=recipe-reader_${tag}_linux_amd64
+    gh release download "$tag" -R sBurmester/recipe-reader -p "$file" -p checksums.txt
+    sha256sum --check --ignore-missing checksums.txt
+    install -m 0755 "$file" ~/.local/bin/recipe-reader && recipe-reader --version   # v0.1.0
+
+The binaries are not signed. On macOS, one downloaded through a browser is quarantined and refused
+on first start; `xattr -d com.apple.quarantine recipe-reader` lifts that (`gh` does not set it).
+
+The image is built from the same tag, has to pass `scripts/smoke-test-image.sh` before it is
+pushed, and lands in `ghcr.io/sburmester/recipe-reader` under the tag and `latest`. Both are the
+job of `release-artifacts.yml`, which `release-please.yml` calls once it has made the release; to
+rebuild the assets of an existing release, run it by hand with that tag
+(`gh workflow run release-artifacts.yml -f tag=v0.1.0`). A manual run leaves `latest` alone.
 
 ## Testing & linting
 
