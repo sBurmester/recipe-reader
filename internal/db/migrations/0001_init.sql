@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE units (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE
@@ -45,3 +46,11 @@ CREATE TABLE recipe_categories (
     category_id BIGINT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
     PRIMARY KEY (recipe_id, category_id)
 );
+
+-- +goose Down
+DROP TABLE IF EXISTS recipe_categories;
+DROP TABLE IF EXISTS recipe_ingredients;
+DROP TABLE IF EXISTS recipes;
+DROP TABLE IF EXISTS ingredients;
+DROP TABLE IF EXISTS categories;
+DROP TABLE IF EXISTS units;

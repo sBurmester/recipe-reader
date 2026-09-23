@@ -1,3 +1,4 @@
+-- +goose Up
 -- persistence P9 asked whether a recipe may list the same ingredient twice, and
 -- the answer is yes: "Für den Teig: 200 g Zucker" and "Für den Belag: 50 g
 -- Zucker" are two lines of one recipe. UNIQUE (recipe_id, ingredient_id) would
@@ -11,9 +12,7 @@
 -- rows, so nothing it wrote collides. A row written by hand may; each recipe's
 -- lines are renumbered first, in the order they are already read in
 -- (position, then id), which changes no position that was already unique. One
--- transaction, as in 0002, so a failure leaves neither half behind.
-BEGIN;
-
+-- transaction, as in 0002, and goose is the one that opens it.
 UPDATE recipe_ingredients AS ri
 SET position = renumbered.position
 FROM (
@@ -25,4 +24,7 @@ WHERE ri.id = renumbered.id AND ri.position <> renumbered.position;
 ALTER TABLE recipe_ingredients
     ADD CONSTRAINT recipe_ingredients_recipe_id_position_key UNIQUE (recipe_id, position);
 
-COMMIT;
+-- +goose Down
+-- The renumbered positions are not restored: which rows collided was never
+-- recorded, and the renumbering kept their order.
+ALTER TABLE recipe_ingredients DROP CONSTRAINT IF EXISTS recipe_ingredients_recipe_id_position_key;
