@@ -42,12 +42,12 @@ func ImportOnce(ctx context.Context, cfg config.Config) (pipeline.ImportResult, 
 	// written the session file — so a refused run used to pay the exact cost the
 	// lock was introduced to avoid before it said no.
 	//
-	// The Pipeline built below therefore has no Lock: it would ask this pool for
-	// a second connection and Postgres would refuse this process the lock it is
-	// already holding, so the command would report itself as "another import".
+	// The Pipeline built below therefore has no Lock: it would open a second
+	// session and Postgres would refuse this process the lock it is already
+	// holding, so the command would report itself as "another import".
 	// serve keeps the pipeline's guard — there the login happens once at
 	// startup, not per run, so the guard has nothing to get in front of.
-	release, ok, err := (db.ImportLock{Pool: pool}).TryAcquire(ctx)
+	release, ok, err := (db.ImportLock{DSN: cfg.Database.DSN}).TryAcquire(ctx)
 	if err != nil {
 		return pipeline.ImportResult{}, fmt.Errorf("import: taking the import lock: %w", err)
 	}
