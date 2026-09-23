@@ -46,7 +46,7 @@ default: it runs when no command is named and takes its flags without one, so `r
 | --- | --- |
 | `serve` (default) | Runs the HTTP API, the embedded frontend and the background import worker. Takes every setting under [Configuration](#configuration). |
 | `healthcheck` | Probes the server already listening on `HTTP_ADDR` and exits 0 if `/api/healthz` answers ok, 1 otherwise. Reads `HTTP_ADDR` and, like every command, `LOG_LEVEL` and `LOG_FORMAT` — nothing else. |
-| `migrate` | Applies pending migrations and seeds the lookup tables, then exits: ahead of a rollout, or after a restore. `serve` does the same at every start. Reads `DB_DSN` and, like every command, `LOG_LEVEL` and `LOG_FORMAT` — nothing else. With compose: `docker compose run --rm app migrate`. Ctrl-C or `SIGTERM` stops it between two migrations — the one in flight always finishes — and it then exits 1 reporting the cancellation rather than success. Re-running is safe and picks up where it left off. |
+| `migrate` | Applies pending migrations and seeds the lookup tables, then exits: ahead of a rollout, or after a restore. `serve` does the same at every start. Reads `DB_DSN` and, like every command, `LOG_LEVEL` and `LOG_FORMAT` — nothing else. With compose: `docker compose run --rm app migrate`. Ctrl-C or `SIGTERM` rolls back the migration in flight and leaves every earlier one applied; it then exits 1 reporting the cancellation rather than success. Re-running is safe and picks up where it left off. |
 | `import` | Runs one import of new saved posts and exits: before a rollout, after a restore, or after fixing a login. `serve` does the same every `IMPORT_INTERVAL`. Applies pending migrations and seeds the lookup tables first, exactly as `serve` and `migrate` do — so running it against the database of an older server migrates that database. Reads the database, Instagram, extraction, LLM and import-limit settings. Refuses to start while another import is running, in this process or in a server, and refuses before it logs in. With compose: `docker compose run --rm app import`. |
 
 `recipe-reader --help` lists the commands; `recipe-reader <command> --help` lists a command's flags
@@ -496,7 +496,7 @@ them.
     docker compose up -d
 
 Restore before the app starts. On first start the app runs migrations and seeds the lookup
-tables, and the restore would then collide with the tables and rows it created. The restored `schema_migrations`
+tables, and the restore would then collide with the tables and rows it created. The restored `goose_db_version`
 table leaves the app nothing to migrate, and the ID sequences carry on from where they were. If the
 dump predates a migration, `docker compose run --rm app migrate` applies the missing ones before the
 app starts; against an up-to-date dump it changes nothing.
@@ -702,7 +702,20 @@ than overlooked: the window is milliseconds on a collection that changes every f
 
 ## Changing the database schema
 
-1. Add `internal/db/migrations/000N_*.up.sql` and the matching `.down.sql`.
+1. Add one file, `internal/db/migrations/000N_<name>.sql`, holding both directions:
+
+   ```sql
+   -- +goose Up
+   ALTER TABLE recipes ADD COLUMN servings INT NOT NULL DEFAULT 0;
+
+   -- +goose Down
+   ALTER TABLE recipes DROP COLUMN IF EXISTS servings;
+   ```
+
+   Do not write `BEGIN;`/`COMMIT;` — goose runs each migration in a transaction of its own, and a
+   `COMMIT;` in the middle would end it early. A statement that cannot run inside a transaction,
+   `CREATE INDEX CONCURRENTLY` above all, needs `-- +goose NO TRANSACTION` on the first line of the
+   file instead.
 2. Add or edit the relevant `internal/db/queries/*.sql`.
 3. Run `make sqlc-generate`.
 4. Commit the migration, the query, and the regenerated `internal/db/sqlc/` files together — CI
@@ -710,10 +723,33 @@ than overlooked: the window is milliseconds on a collection that changes every f
 
 `TestMigrations_UpDownUp` runs every migration up, all of them down over a database holding a row in
 every table, and up again, through the same embedded source the binary uses (`db.MigrateDown`), so
-a new migration's down file is exercised without any extra work. If the migration has to transform
+a new migration's down section is exercised without any extra work. If the migration has to transform
 data already in the table — `0002` and `0003` both do — give it a test of its own that stops at the
 previous version, writes the rows that need transforming, and migrates over them; `testdb.NewDatabase`
 provides the empty database for that.
+
+Migrations run under [goose](https://github.com/pressly/goose), embedded in the binary — there is no
+migration tool to install and no migration files in the image. goose records what it has applied in
+`goose_db_version`, one row per version, and holds a Postgres advisory lock for the length of a run,
+so two instances starting at once queue up instead of racing. The same files are sqlc's schema
+source; sqlc stops reading at `-- +goose Down`, so the down direction never reaches the generated
+code.
+
+Before goose the bookkeeping lived in `schema_migrations`, written by golang-migrate, and nothing
+carries that table over. A database created by a build older than the switch is therefore not
+usable: goose finds no version table, takes the database for empty and fails on `CREATE TABLE
+units`. Recreate it — `docker compose down -v`, or `dropdb` and start the app — or, to keep the
+rows, write the bookkeeping by hand once:
+
+    CREATE TABLE goose_db_version (
+        id integer PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY,
+        version_id bigint NOT NULL,
+        is_applied boolean NOT NULL,
+        tstamp timestamp NOT NULL DEFAULT now()
+    );
+    INSERT INTO goose_db_version (version_id, is_applied)
+        VALUES (0, true), (1, true), (2, true), (3, true);
+    DROP TABLE schema_migrations;
 
 ## Architecture
 
