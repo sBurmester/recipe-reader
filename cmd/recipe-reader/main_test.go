@@ -298,12 +298,13 @@ func TestMain_ExitStatus(t *testing.T) {
 	defer srv.Close()
 
 	for _, tc := range []struct {
-		args string
-		want int
+		args    string
+		want    int
+		wantLog string
 	}{
-		{"--does-not-exist", 1},
-		{"healthcheck --http-addr 127.0.0.1:1", 1},
-		{"healthcheck --http-addr " + srv.Listener.Addr().String(), 0},
+		{"--does-not-exist", 1, "invalid command line"},
+		{"healthcheck --http-addr 127.0.0.1:1", 1, "fatal"},
+		{"healthcheck --http-addr " + srv.Listener.Addr().String(), 0, ""},
 	} {
 		// A child that started serve by mistake would never exit on its own;
 		// the deadline turns that into a failure instead of a hung test binary.
@@ -320,6 +321,12 @@ func TestMain_ExitStatus(t *testing.T) {
 		}
 		if code != tc.want {
 			t.Errorf("recipe-reader %s exited %d, want %d; output:\n%s", tc.args, code, tc.want, out)
+		}
+		// A command line the binary could not read and a run that went wrong
+		// are different problems for whoever reads the log: the first is fixed
+		// by reading --help, the second is not.
+		if tc.wantLog != "" && !strings.Contains(string(out), tc.wantLog) {
+			t.Errorf("recipe-reader %s logged:\n%s\nwant it to contain %q", tc.args, out, tc.wantLog)
 		}
 	}
 }

@@ -54,7 +54,9 @@ and the environment variable behind each. `--version` works with or without a co
 after the command name: `recipe-reader healthcheck --http-addr 127.0.0.1:9090`. Because `serve`
 takes its flags unnamed, a flag in front of another command would otherwise be read as a `serve`
 flag and silently dropped, so it is refused instead. Every failure, a rejected command line as
-much as a failed command, exits 1.
+much as a failed command, exits 1. The log line tells them apart: `invalid command line` for a
+flag or value the binary could not accept — including one read from its environment variable —
+and `fatal` for a command that ran and failed.
 
 `healthcheck` replaces the `--health-check` flag of earlier versions, which is now refused as an
 unknown flag. The image's own `HEALTHCHECK` ships in the same image as the binary and was switched
