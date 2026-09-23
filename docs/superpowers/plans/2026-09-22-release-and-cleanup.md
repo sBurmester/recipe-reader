@@ -2088,7 +2088,7 @@ git add docs/superpowers/plans/
 git commit -m "docs: mark M6 done in the release plan"
 ```
 
-- [ ] **Step 12: PR 6/6** erst nach Freigabe durch den Nutzer öffnen.
+- [x] **Step 12: PR 6/6** erst nach Freigabe durch den Nutzer öffnen. *(#62, 2026-09-23)*
 
 ---
 
