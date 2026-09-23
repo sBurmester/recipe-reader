@@ -49,7 +49,19 @@ func anthropicMessagesStub(t *testing.T, args string) *httptest.Server {
 // single record_recipe tool call with args as the arguments string.
 func openAIChatStub(t *testing.T, args string) *httptest.Server {
 	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	return openAIChatStubRecording(t, args, nil)
+}
+
+// openAIChatStubRecording is openAIChatStub that also decodes the request body
+// into *req, when req is not nil.
+func openAIChatStubRecording(t *testing.T, args string, req *map[string]any) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if req != nil {
+			if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+				t.Errorf("decode the chat completion request: %v", err)
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id": "chatcmpl_01", "object": "chat.completion", "created": 0, "model": "test",
@@ -130,6 +142,42 @@ func TestLLMExtractor_OpenAICompatibleProvider(t *testing.T) {
 		t.Fatalf("Extract() error = %v", err)
 	}
 	assertKuerbisRisotto(t, got)
+}
+
+// The response stubs above answer whatever they are sent, so nothing else
+// notices when the request changes shape — and a major version of the OpenAI
+// SDK (v1 to v3) rebuilt exactly the part that says which tool the model must
+// call. A provider that receives no record_recipe tool, or no tool_choice
+// forcing it, answers in prose and every extraction fails at the tool-call
+// check. This pins the wire shape instead of the SDK's Go types.
+func TestLLMExtractor_OpenAIRequestForcesTheRecordRecipeTool(t *testing.T) {
+	var req map[string]any
+	srv := openAIChatStubRecording(t, recordArgsJSON, &req)
+
+	e, err := NewLLMExtractor(LLMConfig{
+		Provider: ProviderOpenAI, APIKey: "test", Model: "llama-3.3-70b", BaseURL: srv.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewLLMExtractor() error = %v", err)
+	}
+	if _, err := e.Extract(context.Background(), "irrelevant caption"); err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	tools, _ := req["tools"].([]any)
+	if len(tools) != 1 {
+		t.Fatalf("tools = %v, want exactly one", req["tools"])
+	}
+	tool, _ := tools[0].(map[string]any)
+	fn, _ := tool["function"].(map[string]any)
+	if tool["type"] != "function" || fn["name"] != "record_recipe" || fn["parameters"] == nil {
+		t.Errorf("tools[0] = %v, want a function tool record_recipe with parameters", tool)
+	}
+	choice, _ := req["tool_choice"].(map[string]any)
+	choiceFn, _ := choice["function"].(map[string]any)
+	if choice["type"] != "function" || choiceFn["name"] != "record_recipe" {
+		t.Errorf("tool_choice = %v, want the record_recipe function forced", req["tool_choice"])
+	}
 }
 
 // The no-recipe outcome has to survive both transports, since it is what keeps

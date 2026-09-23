@@ -7,8 +7,8 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	anthropicoption "github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/openai/openai-go"
-	openaioption "github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/v3"
+	openaioption "github.com/openai/openai-go/v3/option"
 )
 
 // llmClient performs one structured-extraction round-trip: given the caption it
@@ -220,14 +220,14 @@ func (c *openAIClient) recordRecipe(ctx context.Context, caption string) ([]byte
 			openai.SystemMessage(systemPrompt),
 			openai.UserMessage(caption),
 		},
-		Tools: []openai.ChatCompletionToolParam{{
-			Function: openai.FunctionDefinitionParam{
+		Tools: []openai.ChatCompletionToolUnionParam{
+			openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
 				Name:        "record_recipe",
 				Description: openai.String("Record the structured recipe extracted from the caption."),
 				Parameters:  recordRecipeParameters,
-			},
-		}},
-		ToolChoice: openai.ChatCompletionToolChoiceOptionParamOfChatCompletionNamedToolChoice(
+			}),
+		},
+		ToolChoice: openai.ToolChoiceOptionFunctionToolChoice(
 			openai.ChatCompletionNamedToolChoiceFunctionParam{Name: "record_recipe"},
 		),
 	})
