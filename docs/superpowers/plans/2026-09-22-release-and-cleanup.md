@@ -1099,6 +1099,8 @@ Die Konfiguration ist von der Frage unabhängig, wie Renovate läuft — sie gil
 
 > **Ergänzung (Nutzer, 2026-09-23).** Jede Renovate-Regel setzt einen `semanticCommitScope` und ein zusätzliches Label, damit Titel und Labels zeigen, was aktualisiert wird: `go`/`go`, `web`/`npm`, `docker`/`docker`, `actions`/`github-actions` — aus `chore(deps): pin dependencies` wird `chore(docker): pin dependencies`. Außerdem bekannt seit dem ersten Lauf: die Mend-App startete im *Silent Mode* (`dryRun=lookup`, keine PRs und Issues, nur „Pending Approval“ im Portal), weil sie für alle Repositories installiert war; der Nutzer hat auf *Interactive* umgestellt.
 
+> **Ergänzung (Nutzer, 2026-09-23).** Ein PR je Ökosystem: `groupName` `go modules`, `npm packages`, `docker images` (auch für die Pins — vorher bündelte Renovates Pin-Gruppe golang, node, alpine und postgres), `github actions`. Majors bleiben je Ökosystem ein eigener PR (`separateMajorMinor` aus `config:recommended`), Sicherheits-Fixes einzeln.
+
 **Files:**
 - Create: `renovate.json`
 

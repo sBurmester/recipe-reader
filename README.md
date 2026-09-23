@@ -585,8 +585,12 @@ date. It runs as the Renovate GitHub app and reads `renovate.json`: it opens pul
 Monday mornings (before 6am, Europe/Berlin), at most five at a time. The title's scope and a
 second label next to `dependencies` say what is updated: `(go)`/`go` for Go modules, `(web)`/`npm`
 for frontend packages, `(docker)`/`docker` for images, `(actions)`/`github-actions` for workflow
-actions — for example `fix(go): update module github.com/jackc/pgx/v5 to v5.11.0`. Go and npm
-updates are `fix:` and therefore make a release; pins and action updates are `chore:` and do not. The
+actions — for example `fix(go): update go modules`. Each ecosystem
+arrives as **one** pull request — all Go modules together, all npm packages, all Docker images, all
+actions — so each can be taken or held back on its own. A major version comes as a second pull
+request for its ecosystem (`renovate/major-…`), because it may need code changes the others must
+not wait for; security fixes come one by one. Go and npm updates are `fix:` and therefore make a
+release; pins and action updates are `chore:` and do not. The
 *Dependency Dashboard* issue lists everything it knows about; ticking a box there opens that pull
 request at once instead of waiting for Monday. Its run logs are on
 [developer.mend.io](https://developer.mend.io), not in the Actions tab.
