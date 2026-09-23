@@ -31,16 +31,6 @@ import (
 // Run's still running — with one logged exception: if the ten-second shutdown
 // budget runs out, the import is abandoned rather than waited for, and Run
 // returns while it is still going.
-//
-// "Returns" is approximate in that one case, and deliberately so rather than by
-// oversight. The budget bounds how long Run waits for the import, not how long
-// Run takes: the deferred pool.Close below waits for every pooled connection to
-// come back, and a run holds one — the import lock's session — for its whole
-// length, so an abandoned import keeps Run inside that Close until it reaches
-// its next per-post cancellation check, up to one LLM_TIMEOUT past the budget
-// and with no log line saying why. The process usually gets SIGKILLed instead,
-// which is survivable (the advisory lock dies with the session) but is not the
-// orderly exit the budget promises. Bounding it is in the plan's backlog.
 func Run(ctx context.Context, cfg config.Config, version string) error {
 	// Run's own handle on cancellation: the caller's ctx still stops it, and a
 	// failure below can stop it too, without reaching back into the caller's.
@@ -85,7 +75,7 @@ func Run(ctx context.Context, cfg config.Config, version string) error {
 			PublishThreshold: cfg.Extraction.PublishThreshold,
 			// The same lock the import command takes, so the two cannot run at
 			// once against one Instagram account.
-			Lock: db.ImportLock{Pool: pool},
+			Lock: db.ImportLock{DSN: cfg.Database.DSN},
 		}
 		worker = pipeline.NewWorker(p, cfg.Import.Interval)
 		if loginErr != nil {

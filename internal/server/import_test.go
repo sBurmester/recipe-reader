@@ -34,13 +34,8 @@ func TestImportOnce_RefusedLockIsReportedBeforeTheLogin(t *testing.T) {
 	ctx := context.Background()
 	cfg := importOnceConfig(t, "import_once_refused")
 
-	// A second pool, the way a running server's worker would hold it.
-	holder, err := db.Connect(ctx, cfg.Database.DSN)
-	if err != nil {
-		t.Fatalf("Connect() error = %v", err)
-	}
-	defer holder.Close()
-	release, ok, err := db.ImportLock{Pool: holder}.TryAcquire(ctx)
+	// A session of its own, the way a running server's worker would hold it.
+	release, ok, err := (db.ImportLock{DSN: cfg.Database.DSN}).TryAcquire(ctx)
 	if err != nil {
 		t.Fatalf("TryAcquire() error = %v", err)
 	}
@@ -56,8 +51,8 @@ func TestImportOnce_RefusedLockIsReportedBeforeTheLogin(t *testing.T) {
 }
 
 // Every return from ImportOnce has to give the lock back, or one failed command
-// would block the server's worker until that process's pool is closed. The
-// login failure is the shortest path out after the lock is held.
+// would block the server's worker until that process exits. The login failure
+// is the shortest path out after the lock is held.
 func TestImportOnce_ReleasesTheLockWhenTheRunFails(t *testing.T) {
 	ctx := context.Background()
 	cfg := importOnceConfig(t, "import_once_release")
@@ -66,12 +61,7 @@ func TestImportOnce_ReleasesTheLockWhenTheRunFails(t *testing.T) {
 		t.Fatal("ImportOnce() = nil, want the error from an account that cannot log in")
 	}
 
-	after, err := db.Connect(ctx, cfg.Database.DSN)
-	if err != nil {
-		t.Fatalf("Connect() error = %v", err)
-	}
-	defer after.Close()
-	release, ok, err := db.ImportLock{Pool: after}.TryAcquire(ctx)
+	release, ok, err := (db.ImportLock{DSN: cfg.Database.DSN}).TryAcquire(ctx)
 	if err != nil {
 		t.Fatalf("TryAcquire() error = %v", err)
 	}

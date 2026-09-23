@@ -85,9 +85,9 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 ### User Stories & Akzeptanzkriterien
 
 **US1: Betreiber fährt den Server herunter, während ein Import läuft.**
-- [ ] Der Advisory-Lock belegt keine Verbindung aus dem Pool; `pool.Stat().AcquiredConns()` ist null, während der Lock gehalten wird.
-- [ ] `server.Run` kehrt nach einem `SIGTERM` innerhalb seines Budgets zurück, auch wenn ein Import aufgegeben wurde.
-- [ ] Der Doc-Kommentar von `Run` behauptet nichts mehr, was nicht gilt.
+- [x] Der Advisory-Lock belegt keine Verbindung aus dem Pool; `pool.Stat().AcquiredConns()` ist null, während der Lock gehalten wird.
+- [x] `server.Run` kehrt nach einem `SIGTERM` innerhalb seines Budgets zurück, auch wenn ein Import aufgegeben wurde.
+- [x] Der Doc-Kommentar von `Run` behauptet nichts mehr, was nicht gilt.
 
 **US2: Betreiber konfiguriert über `.env`.**
 - [ ] Eine Variable, die nur in `.env` steht (z. B. `EXTRACTION_MODE`), ist im laufenden `app`-Container gesetzt.
@@ -230,8 +230,8 @@ README.md                    # M6: Migrationsformat, goose_db_version, Hinweis a
 #### M1: Shutdown-Schranke
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US1 sind abgehakt.
-- [ ] `go test -count=1 -race ./internal/db/ ./internal/server/` ist grün.
+- [x] Die Akzeptanzkriterien von US1 sind abgehakt.
+- [x] `go test -count=1 -race ./internal/db/ ./internal/server/` ist grün.
 
 #### M2: Konfiguration erreicht den Container
 
@@ -285,9 +285,9 @@ Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist.
 
 ### Aufgabenliste
 
-- [ ] **M1: Shutdown-Schranke**
-  - [ ] **Task 1:** Der Import-Lock hält eine eigene Verbindung (S)
-  - [ ] **Milestone-Review**
+- [x] **M1: Shutdown-Schranke**
+  - [x] **Task 1:** Der Import-Lock hält eine eigene Verbindung (S)
+  - [x] **Milestone-Review**
 - [ ] **M2: Konfiguration erreicht den Container**
   - [ ] **Task 2:** `env_file` für den `app`-Service (S)
   - [ ] **Milestone-Review**
@@ -325,6 +325,8 @@ Wie im Vorgängerplan: ein frischer Subagent pro Task, strikt nacheinander; nach
 
 Die Freigabe wird dabei einfacher: Postgres verwirft jeden Advisory-Lock einer Session, sobald sie endet. Wer seine eigene Verbindung schließt, braucht kein `pg_advisory_unlock` und auch kein `Hijack` für den Fall, dass es scheitert.
 
+> **Abweichung aus dem Milestone-Review (2026-09-23).** Der Code in Step 3 öffnet die Verbindung mit `pgx.Connect(ctx, l.DSN)`. Das scheitert an jedem DSN, der die Pool-Einstellungen trägt, die die README dokumentiert (`pool_max_conns=…`): `pgx.ParseConfig` reicht sie als Laufzeitparameter an Postgres weiter, und Postgres lehnt die Verbindung ab — jeder Import wäre gescheitert. Umgesetzt ist deshalb `pgxpool.ParseConfig` + `applyPoolDefaults` + `pgx.ConnectConfig(ctx, cfg.ConnConfig)`; die Verbindung bleibt eine eigene (E3), bekommt aber den `connect_timeout`-Default des Pools, womit sich auch R6 erledigt. Abgesichert durch `TestImportLock_AcceptsPoolSettingsInTheDSN`. Außerdem nennt die Files-Liste `internal/server/import_test.go` nicht, obwohl es zwei `ImportLock{Pool: …}`-Literale enthielt; es ist mit umgestellt.
+
 **Files:**
 - Modify: `internal/db/lock.go` (komplett ersetzt)
 - Modify: `internal/db/lock_test.go` (bestehender Test auf den neuen Typ, + neuer Test)
@@ -336,7 +338,7 @@ Die Freigabe wird dabei einfacher: Postgres verwirft jeden Advisory-Lock einer S
 - Consumes: `pipeline.ImportLock` (Port, unverändert), `testdb.NewDatabase(t, name) string`, `db.Connect(ctx, dsn) (*pgxpool.Pool, error)`
 - Produces: `type db.ImportLock struct { DSN string }` mit unveränderter Methode `TryAcquire(ctx context.Context) (release func(), ok bool, err error)`. **Das Feld heißt jetzt `DSN` statt `Pool`**; beide Aufrufer werden mit umgestellt.
 
-- [ ] **Step 1: Failing Test schreiben** (an `internal/db/lock_test.go` anhängen)
+- [x] **Step 1: Failing Test schreiben** (an `internal/db/lock_test.go` anhängen)
 
 ```go
 // The lock used to live on a pooled connection, so server.Run's deferred
@@ -369,12 +371,12 @@ func TestImportLock_HoldsNoPoolConnection(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test -count=1 -run TestImportLock_HoldsNoPoolConnection ./internal/db/`
 Expected: FAIL, `unknown field DSN in struct literal of type db.ImportLock`
 
-- [ ] **Step 3: `internal/db/lock.go` ersetzen**
+- [x] **Step 3: `internal/db/lock.go` ersetzen**
 
 ```go
 package db
@@ -446,7 +448,7 @@ func (l ImportLock) close(ctx context.Context, conn *pgx.Conn) {
 }
 ```
 
-- [ ] **Step 4: Den bestehenden Lock-Test umstellen** (`internal/db/lock_test.go`)
+- [x] **Step 4: Den bestehenden Lock-Test umstellen** (`internal/db/lock_test.go`)
 
 `TestImportLock_SecondHolderIsRefusedUntilTheFirstReleases` baut heute zwei Pools, weil der Lock einen Pool brauchte. Er braucht jetzt keinen mehr: zwei `ImportLock`-Werte mit demselben DSN sind zwei Sessions. Die beiden `db.Connect`-Aufrufe und ihre `defer …Close()` entfallen, und die drei `TryAcquire`-Aufrufe werden zu
 
@@ -462,7 +464,7 @@ beziehungsweise für den zweiten Halter
 
 Der Kommentar über dem Test spricht von „two pools" — er muss jetzt von zwei Verbindungen sprechen, sonst beschreibt er einen Aufbau, den es nicht mehr gibt.
 
-- [ ] **Step 5: Die beiden Aufrufer umstellen**
+- [x] **Step 5: Die beiden Aufrufer umstellen**
 
 In `internal/server/server.go`, im `pipeline.Pipeline`-Literal:
 
@@ -476,20 +478,20 @@ In `internal/server/import.go`:
 	release, ok, err := (db.ImportLock{DSN: cfg.Database.DSN}).TryAcquire(ctx)
 ```
 
-- [ ] **Step 6: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 6: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go build ./... && go test -count=1 -race ./internal/db/ ./internal/server/ ./internal/pipeline/`
 Expected: PASS
 
-- [ ] **Step 7: Den Doc-Kommentar von `Run` berichtigen** (`internal/server/server.go`)
+- [x] **Step 7: Den Doc-Kommentar von `Run` berichtigen** (`internal/server/server.go`)
 
 Der Kommentar nennt seit M3 zwei Ausnahmen von der Zusage, dass beim Rückkehren nichts mehr läuft: den aufgegebenen Import (gilt weiter) und das `pool.Close()`, das auf dessen Lock-Verbindung wartet (gilt nicht mehr). Den zweiten Teil entfernen, den ersten wortgleich stehen lassen.
 
-- [ ] **Step 8: Den Backlog-Eintrag im Vorgängerplan als erledigt markieren**
+- [x] **Step 8: Den Backlog-Eintrag im Vorgängerplan als erledigt markieren**
 
 In `docs/superpowers/plans/2026-09-21-cli-backlog.md` den Eintrag „Der Shutdown von `serve` hat keine obere Schranke mehr" mit einem Verweis auf diesen Plan versehen, im Stil des bereits erledigten Backlogs im Plan vom 2026-09-19: ein `> **Erledigt.**`-Absatz über dem Eintrag, der auf `2026-09-22-release-and-cleanup.md` und E3 zeigt und festhält, dass die Ursache (LLM-Timeout) weiterhin offen ist.
 
-- [ ] **Step 9: Commit-Gate und Commit**
+- [x] **Step 9: Commit-Gate und Commit**
 
 ```bash
 git add internal docs/superpowers/plans/2026-09-21-cli-backlog.md
