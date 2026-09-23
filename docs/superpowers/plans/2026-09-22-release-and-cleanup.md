@@ -90,9 +90,9 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - [x] Der Doc-Kommentar von `Run` behauptet nichts mehr, was nicht gilt.
 
 **US2: Betreiber konfiguriert über `.env`.**
-- [ ] Eine Variable, die nur in `.env` steht (z. B. `EXTRACTION_MODE`), ist im laufenden `app`-Container gesetzt.
-- [ ] Fehlt `.env`, startet Compose trotzdem.
-- [ ] Die zusammengesetzten Werte unter `environment:` (`DB_DSN`) gewinnen weiterhin gegen `.env`.
+- [x] Eine Variable, die nur in `.env` steht (z. B. `EXTRACTION_MODE`), ist im laufenden `app`-Container gesetzt.
+- [x] Fehlt `.env`, startet Compose trotzdem.
+- [x] Die zusammengesetzten Werte unter `environment:` (`DB_DSN`) gewinnen gegen `.env` — für `DB_DSN` erst seit M2, siehe die Abweichung in Task 2.
 
 **US3: Betreiber liest eine Fehlermeldung.**
 - [ ] Ein abgebrochener `migrate`-Lauf sagt, dass bereits angewandte Migrationen angewandt bleiben und ein erneuter Lauf gefahrlos fortsetzt.
@@ -236,8 +236,8 @@ Abnahmekriterien:
 #### M2: Konfiguration erreicht den Container
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US2 sind abgehakt.
-- [ ] Der Compose-Lauf aus Task 2, Step 4 ist belegt.
+- [x] Die Akzeptanzkriterien von US2 sind abgehakt.
+- [x] Der Compose-Lauf aus Task 2, Step 4 ist belegt.
 
 #### M3: Eindeutige Fehlermeldungen
 
@@ -288,9 +288,9 @@ Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist.
 - [x] **M1: Shutdown-Schranke**
   - [x] **Task 1:** Der Import-Lock hält eine eigene Verbindung (S)
   - [x] **Milestone-Review**
-- [ ] **M2: Konfiguration erreicht den Container**
-  - [ ] **Task 2:** `env_file` für den `app`-Service (S)
-  - [ ] **Milestone-Review**
+- [x] **M2: Konfiguration erreicht den Container**
+  - [x] **Task 2:** `env_file` für den `app`-Service (S)
+  - [x] **Milestone-Review**
 - [ ] **M3: Eindeutige Fehlermeldungen**
   - [ ] **Task 3:** Der Abbruch einer Migration sagt, dass Wiederholen gefahrlos ist (S)
   - [ ] **Task 4:** `main` unterscheidet Bedienfehler von Laufzeitfehler (S)
@@ -504,6 +504,8 @@ git commit -m "fix(db): hold the import lock on its own connection" -m "A pooled
 
 Compose liest `.env` im Projektverzeichnis heute nur für die `${VAR}`-Substitution *innerhalb* der Compose-Datei. In den Container gelangt davon nichts, außer was unter `environment:` noch einmal ausdrücklich aufgeführt ist. Dreizehn Variablen aus `.env.example` sind das nicht.
 
+> **Abweichung (2026-09-23, mit dem Nutzer entschieden).** Step 3 erwartet den zusammengesetzten `DB_DSN`, auch wenn `.env` einen eigenen trägt. Das galt nie: `${DB_DSN:-…}` substituiert den Wert aus `.env`, und `.env.example` setzt ihn auf `localhost` — für eine Binary auf dem Host. `cp .env.example .env && docker compose up` gab der App also schon vor M2 eine unerreichbare Datenbank. Umgesetzt ist deshalb `DB_DSN: ${CONTAINER_DB_DSN:-postgres://…@db:5432/…}`; das Überschreiben läuft über die neue Variable `CONTAINER_DB_DSN` (in `.env.example` mit leerem Wert, leer heißt: zusammensetzen). Der Name meidet das Präfix `COMPOSE_`, das Compose für eigene Einstellungen nutzt. Der Kommentar aus Step 2 ist entsprechend berichtigt. Außerdem braucht Step 4 `--entrypoint env`, weil der Entrypoint des Images `recipe-reader` ist; geprüft wurde zusätzlich `docker compose run --rm app migrate` gegen den `db`-Service mit einer aus `.env.example` kopierten `.env` (Exit 0).
+
 **Files:**
 - Modify: `docker-compose.yml` (`env_file` beim `app`-Service)
 - Modify: `README.md` (der Abschnitt, der `cp .env.example .env` erklärt)
@@ -513,7 +515,7 @@ Compose liest `.env` im Projektverzeichnis heute nur für die `${VAR}`-Substitut
 - Consumes: —
 - Produces: —
 
-- [ ] **Step 1: Den Ist-Zustand festhalten**
+- [x] **Step 1: Den Ist-Zustand festhalten**
 
 ```bash
 docker compose config | sed -n '/^  app:/,/^  [a-z]/p' | head -40
@@ -521,7 +523,7 @@ docker compose config | sed -n '/^  app:/,/^  [a-z]/p' | head -40
 
 Die Ausgabe in den Bericht aufnehmen: sie zeigt, welche Variablen der Container heute sieht, und ist die Vergleichsgrundlage für Step 4.
 
-- [ ] **Step 2: `env_file` ergänzen** (`docker-compose.yml`)
+- [x] **Step 2: `env_file` ergänzen** (`docker-compose.yml`)
 
 Beim `app`-Service, **vor** dem bestehenden `environment:`-Block:
 
@@ -540,7 +542,7 @@ Beim `app`-Service, **vor** dem bestehenden `environment:`-Block:
         required: false
 ```
 
-- [ ] **Step 3: Die Reihenfolge prüfen**
+- [x] **Step 3: Die Reihenfolge prüfen**
 
 ```bash
 docker compose config | grep -A2 'DB_DSN'
@@ -548,7 +550,7 @@ docker compose config | grep -A2 'DB_DSN'
 
 Erwartet: der aus `POSTGRES_PASSWORD` zusammengesetzte Wert, nicht ein Wert aus `.env`. Compose gibt `environment:` den Vorrang vor `env_file:`; diese Prüfung belegt es für genau diese Datei.
 
-- [ ] **Step 4: Den Durchgriff belegen**
+- [x] **Step 4: Den Durchgriff belegen**
 
 `.env` ist die Datei des Betreibers. **Existiert sie bereits, wird sie nicht angefasst**; existiert sie nicht, wird sie für die Prüfung angelegt und danach gelöscht:
 
@@ -559,15 +561,15 @@ docker compose -p recipe-reader-e2e run --rm app env | grep -E '^(EXTRACTION_MOD
 
 Erwartet: beide Variablen erscheinen mit ihren Werten aus `.env`. Vor dieser Änderung wäre die Ausgabe leer. Wurde `.env` für die Prüfung angelegt, danach wieder entfernen.
 
-- [ ] **Step 5: README**
+- [x] **Step 5: README**
 
 Im Abschnitt, der `cp .env.example .env` nennt, einen Satz ergänzen: dass jede Variable aus dieser Datei den Container erreicht, dass die zusammengesetzten Werte in `docker-compose.yml` (`DB_DSN`) Vorrang behalten, und dass ein Start ohne `.env` mit den Defaults funktioniert.
 
-- [ ] **Step 6: Den Backlog-Eintrag im Vorgängerplan als erledigt markieren**
+- [x] **Step 6: Den Backlog-Eintrag im Vorgängerplan als erledigt markieren**
 
 Wie Task 1, Step 8, für den Eintrag „`.env.example` und `docker-compose.yml` laufen auseinander", mit Verweis auf diesen Plan und E4.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 Das Commit-Gate betrifft keinen Go-Code, läuft aber trotzdem (Pflicht laut Global Constraints). Das Docker-Gate entfällt: `Dockerfile` und `scripts/` sind unberührt.
 
