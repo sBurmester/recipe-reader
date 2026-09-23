@@ -1,67 +1,63 @@
-package db
+package db_test
 
 import (
 	"context"
-	"errors"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/pressly/goose/v3/lock"
+
+	"github.com/sBurmester/recipe-reader/internal/db"
+	"github.com/sBurmester/recipe-reader/internal/db/testdb"
 )
 
-// stopWait bounds the fake's Up. A migrateUp that never stops its migrator
-// would otherwise block here for as long as the suite is willing to wait; this
-// turns that into a failed assertion with a name on it.
-const stopWait = 5 * time.Second
+// The advisory lock is goose's, but asking for it is this package's doing, and
+// nothing else in the suite would notice if the option were dropped: a lock
+// that is never contended looks exactly like no lock at all. So the test
+// contends it — and then checks that a caller who gives up waiting is told
+// what that means, because that sentence is the other thing this file owns.
+func TestMigrateWithContext_WaitsForTheLockAndReportsGivingUp(t *testing.T) {
+	dsn := testdb.NewDatabase(t, "migrate_lock_contention")
 
-// errNeverStopped is what the fake reports when the cancellation never reached
-// it, which is the failure the AfterFunc in migrateUp exists to prevent.
-var errNeverStopped = errors.New("Stop was never called")
-
-// stoppingMigrator is golang-migrate's graceful stop with the migration taken
-// out: Up blocks until Stop is called and then returns nil, exactly as a
-// stopped *migrate.Migrate does. The embedded migrations run far too fast to
-// interrupt on purpose, so the window a real Ctrl-C would land in is made here
-// instead — Up cancels the context itself, which is why the cancellation always
-// arrives while Up is in flight and never before or after it.
-type stoppingMigrator struct {
-	cancel  context.CancelFunc
-	stopped chan struct{}
-}
-
-func (m *stoppingMigrator) Up() error {
-	m.cancel()
-	select {
-	case <-m.stopped:
-		return nil
-	case <-time.After(stopWait):
-		return errNeverStopped
+	holder, err := pgx.Connect(t.Context(), dsn)
+	if err != nil {
+		t.Fatalf("connect the lock holder: %v", err)
 	}
-}
+	defer func() { _ = holder.Close(context.WithoutCancel(t.Context())) }()
+	if _, err := holder.Exec(t.Context(), "SELECT pg_advisory_lock($1)", lock.DefaultLockID); err != nil {
+		t.Fatalf("take the migration lock: %v", err)
+	}
 
-// Stop closes rather than signals: context.AfterFunc runs its function at most
-// once, so a second close would be a bug worth the panic.
-func (m *stoppingMigrator) Stop() { close(m.stopped) }
-
-func (m *stoppingMigrator) Close() (source error, database error) { return nil, nil }
-
-// The promise MigrateWithContext adds to golang-migrate is that a cancelled run is
-// reported as one. A gracefully stopped Up returns nil, so a run that was cut
-// short after applying part of the schema would otherwise be indistinguishable
-// from a clean one — and the caller would carry on against a half-migrated
-// database. Deleting either the AfterFunc or the ctx.Err() check after Up
-// fails this test.
-func TestMigrateUp_GracefulStopIsReportedAsCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
+	const budget = 2 * time.Second
+	ctx, cancel := context.WithTimeout(t.Context(), budget)
 	defer cancel()
-	m := &stoppingMigrator{cancel: cancel, stopped: make(chan struct{})}
+	start := time.Now()
+	err = db.MigrateWithContext(ctx, dsn)
 
-	err := migrateUp(ctx, func() (migrator, error) { return m, nil })
 	if err == nil {
-		t.Fatal("migrateUp() = nil, want the cancellation reported although Up returned nil")
+		t.Fatal("MigrateWithContext() = nil, want it to report the lock it never got")
 	}
-	if errors.Is(err, errNeverStopped) {
-		t.Fatalf("migrateUp() error = %v: the cancellation never reached the migrator", err)
+	if waited := time.Since(start); waited < budget/2 {
+		t.Errorf("MigrateWithContext() gave up after %v, want it to wait for the lock", waited)
 	}
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("migrateUp() error = %v, want it to wrap context.Canceled", err)
+	if !strings.Contains(err.Error(), "re-running") {
+		t.Errorf("MigrateWithContext() error = %q, want it to say that re-running is safe", err)
 	}
+	if tableExists(t, dsn, "units") {
+		t.Error("MigrateWithContext() applied a migration although it never held the lock")
+	}
+}
+
+// tableExists reports whether a table of that name is in the public schema.
+func tableExists(t *testing.T, dsn, name string) bool {
+	t.Helper()
+	pool := connect(t, dsn)
+	defer pool.Close()
+	var exists bool
+	if err := pool.QueryRow(t.Context(), "SELECT to_regclass($1) IS NOT NULL", "public."+name).Scan(&exists); err != nil {
+		t.Fatalf("look for %s: %v", name, err)
+	}
+	return exists
 }

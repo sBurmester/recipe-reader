@@ -2,19 +2,20 @@ package db_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
-	"net/url"
+	"os"
 	"slices"
 	"testing"
 
-	"github.com/golang-migrate/migrate/v4"
-	// Registers the file:// source fileMigrator reads ./migrations through:
-	// this package is external to db (testdb imports db, so an internal test
-	// would be an import cycle) and cannot reach the embedded copy that way.
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	// Registers the "pgx" driver name with database/sql, which goose speaks.
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/database"
 
 	"github.com/sBurmester/recipe-reader/internal/db"
 	"github.com/sBurmester/recipe-reader/internal/db/testdb"
@@ -54,7 +55,8 @@ func TestMigrations_UpDownUp(t *testing.T) {
 	var sequences int
 	if err := pool.QueryRow(ctx,
 		`SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-		 WHERE n.nspname = 'public' AND c.relkind = 'S'`).Scan(&sequences); err != nil {
+		 WHERE n.nspname = 'public' AND c.relkind = 'S'
+		   AND c.relname NOT LIKE 'goose\_db\_version%'`).Scan(&sequences); err != nil {
 		t.Fatal(err)
 	}
 	if sequences != 0 {
@@ -91,8 +93,8 @@ func TestMigrations_UpDownUp(t *testing.T) {
 func TestMigration0003_RenumbersThenEnforcesPosition(t *testing.T) {
 	ctx := context.Background()
 	dsn := testdb.NewDatabase(t, "migration_0003")
-	m := fileMigrator(t, dsn)
-	if err := m.Migrate(2); err != nil {
+	provider := fileProvider(t, dsn)
+	if _, err := provider.UpTo(ctx, 2); err != nil {
 		t.Fatalf("migrate to 2: %v", err)
 	}
 	pool := connect(t, dsn)
@@ -114,7 +116,7 @@ func TestMigration0003_RenumbersThenEnforcesPosition(t *testing.T) {
 		t.Fatalf("seed pre-0003 rows: %v", err)
 	}
 
-	if err := m.Migrate(3); err != nil {
+	if _, err := provider.UpTo(ctx, 3); err != nil {
 		t.Fatalf("migrate to 3 over colliding positions: %v", err)
 	}
 
@@ -138,7 +140,7 @@ func TestMigration0003_RenumbersThenEnforcesPosition(t *testing.T) {
 		t.Errorf("duplicate position after 0003: err = %v, want unique_violation (23505)", err)
 	}
 
-	if err := m.Migrate(2); err != nil {
+	if _, err := provider.DownTo(ctx, 2); err != nil {
 		t.Fatalf("migrate down to 2: %v", err)
 	}
 	if _, err := pool.Exec(ctx, "INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, position) VALUES (1, 2, 5, 0)"); err != nil {
@@ -146,23 +148,22 @@ func TestMigration0003_RenumbersThenEnforcesPosition(t *testing.T) {
 	}
 }
 
-// fileMigrator returns a migrator over ./migrations for dsn, closed when the
+// fileProvider returns a migrator over ./migrations for dsn, closed when the
 // test ends. It reads the files from disk rather than the embedded copy — the
-// same files — because stepping to an exact version needs migrate's own API,
+// same files — because stepping to an exact version needs goose's own API,
 // which db deliberately does not export.
-func fileMigrator(t *testing.T, dsn string) *migrate.Migrate {
+func fileProvider(t *testing.T, dsn string) *goose.Provider {
 	t.Helper()
-	u, err := url.Parse(dsn)
+	sqlDB, err := sql.Open("pgx", dsn)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("open: %v", err)
 	}
-	u.Scheme = "pgx5"
-	m, err := migrate.New("file://migrations", u.String())
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	provider, err := goose.NewProvider(database.DialectPostgres, sqlDB, os.DirFS("migrations"))
 	if err != nil {
-		t.Fatalf("migrate.New: %v", err)
+		t.Fatalf("goose.NewProvider: %v", err)
 	}
-	t.Cleanup(func() { _, _ = m.Close() })
-	return m
+	return provider
 }
 
 func connect(t *testing.T, dsn string) *pgxpool.Pool {
@@ -179,7 +180,7 @@ func tables(t *testing.T, pool *pgxpool.Pool) []string {
 	t.Helper()
 	rows, err := pool.Query(context.Background(),
 		`SELECT tablename FROM pg_tables
-		 WHERE schemaname = 'public' AND tablename <> 'schema_migrations' ORDER BY tablename`)
+		 WHERE schemaname = 'public' AND tablename <> 'goose_db_version' ORDER BY tablename`)
 	if err != nil {
 		t.Fatal(err)
 	}

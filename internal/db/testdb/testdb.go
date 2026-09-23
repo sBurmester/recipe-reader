@@ -147,12 +147,13 @@ func start() {
 //
 // The table list comes from the catalog rather than being written out, so a
 // table a later migration adds is covered without anyone remembering to add it
-// here. schema_migrations is left alone: it records the schema version, not
-// test data.
+// here. goose_db_version is left alone: it records the schema version, not
+// test data, and truncating it would tell the next migration run that the
+// container is empty.
 func reset(ctx context.Context, pool *pgxpool.Pool) error {
 	rows, err := pool.Query(ctx,
 		`SELECT quote_ident(tablename) FROM pg_tables
-		 WHERE schemaname = 'public' AND tablename <> 'schema_migrations'`)
+		 WHERE schemaname = 'public' AND tablename <> 'goose_db_version'`)
 	if err != nil {
 		return fmt.Errorf("list tables: %w", err)
 	}

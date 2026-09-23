@@ -21,8 +21,8 @@ import (
 func TestMigration0002_BackfillsThenEnforcesStatus(t *testing.T) {
 	ctx := context.Background()
 	dsn := testdb.NewDatabase(t, "migration_0002")
-	m := fileMigrator(t, dsn)
-	if err := m.Migrate(1); err != nil {
+	provider := fileProvider(t, dsn)
+	if _, err := provider.UpTo(ctx, 1); err != nil {
 		t.Fatalf("migrate to 1: %v", err)
 	}
 	pool := connect(t, dsn)
@@ -36,7 +36,7 @@ func TestMigration0002_BackfillsThenEnforcesStatus(t *testing.T) {
 		t.Fatalf("seed pre-0002 rows: %v", err)
 	}
 
-	if err := m.Migrate(2); err != nil {
+	if _, err := provider.UpTo(ctx, 2); err != nil {
 		t.Fatalf("migrate to 2 over out-of-domain rows: %v", err)
 	}
 
@@ -63,7 +63,7 @@ func TestMigration0002_BackfillsThenEnforcesStatus(t *testing.T) {
 	}
 
 	// The down migration has to apply too, or a rollback is stuck at 2.
-	if err := m.Migrate(1); err != nil {
+	if _, err := provider.DownTo(ctx, 1); err != nil {
 		t.Fatalf("migrate down to 1: %v", err)
 	}
 	if _, err := pool.Exec(ctx, "INSERT INTO recipes (name, source, status) VALUES ('x', 'src-down', 'banana')"); err != nil {

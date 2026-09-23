@@ -5,20 +5,21 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
+	"io/fs"
+	"log/slog"
 	"net/url"
-	"strings"
 	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	// Registers the "pgx5://" database URL scheme with golang-migrate. The
-	// driver's init() calls database.Register("pgx5", ...); without this
-	// blank import migrate.NewWithSourceInstance cannot resolve the scheme.
-	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/database"
+	"github.com/pressly/goose/v3/lock"
 )
 
 //go:embed migrations/*.sql
@@ -137,140 +138,149 @@ func Migrate(dsn string) error {
 	return MigrateWithContext(context.Background(), dsn)
 }
 
-// MigrateWithContext is Migrate, bounded by ctx. Cancelling it stops the migrator
-// between two migrations; the one in flight is always finished, because a
-// half-applied migration is worse than a slow Ctrl-C.
+// MigrateWithContext is Migrate, bounded by ctx. Cancelling it rolls back the
+// migration in flight and leaves every migration applied before it applied, so
+// a second run continues where this one stopped.
 //
-// golang-migrate has no context parameter, only the GracefulStop channel, so
-// the cancellation path is this file's own — see migrateUp, which holds it.
+// That promise is goose's rather than this file's: it runs each SQL migration
+// in its own transaction and holds a Postgres advisory lock for the length of
+// the run, so two instances starting at once queue up instead of racing. The
+// version before this one built the same guarantee by hand out of golang-
+// migrate's GracefulStop channel, a context.AfterFunc and two ctx.Err()
+// checks, and still could not tell a cancelled run from a completed one when
+// the cancellation arrived during the last migration.
 func MigrateWithContext(ctx context.Context, dsn string) error {
-	return migrateUp(ctx, func() (migrator, error) {
-		m, err := newMigrate(dsn)
-		if err != nil {
-			return nil, err
-		}
-		return gracefulMigrator{m}, nil
+	return withMigrator(ctx, dsn, func(provider *goose.Provider) error {
+		_, err := provider.Up(ctx)
+		return err
 	})
 }
 
-// migrator is the part of *migrate.Migrate that the cancellation path drives.
-// It exists so that path — the only thing this file adds to golang-migrate —
-// can be tested without a migration slow enough to interrupt.
-type migrator interface {
-	Up() error
-	// Stop asks the migrator to stop before it starts the next migration.
-	Stop()
-	Close() (source error, database error)
-}
-
-// gracefulMigrator adapts *migrate.Migrate to migrator. GracefulStop is
-// buffered with room for one (migrate.go:185) and read between migrations, so
-// the send never blocks and at most one ever happens.
-//
-// This one statement is deliberately the uncovered line of the cancellation
-// path. Reaching it from a test needs a migration slow enough to interrupt,
-// and golang-migrate reads and writes its isGracefulStop flag from two
-// goroutines without synchronization (migrate.go:71, :549, :726, :816), so a
-// test that drove the real migrator to a graceful stop would be liable to
-// report a race inside the dependency rather than a bug here. In production
-// that race is harmless — the buffered channel is the authoritative signal,
-// and a stale read costs at most one further migration before the stop takes.
-// migrate_test.go's fake stands in for this instead.
-type gracefulMigrator struct{ *migrate.Migrate }
-
-func (g gracefulMigrator) Stop() { g.GracefulStop <- true }
-
-// migrateUp runs the migrator open returns, bounded by ctx. The three guards
-// are the whole point: the first refuses to open anything under a context that
-// is already done, the AfterFunc turns a later cancellation into a stop between
-// two migrations, and the last one reports it — a stopped Up returns nil rather
-// than an error, so without it a cancelled, partly applied run would look like
-// a successful one.
-//
-// That last guard is deliberately blunt: a cancellation arriving while the
-// final migration runs, or after Up has already returned, reports a run that
-// in fact applied everything as a failure. golang-migrate keeps its
-// isGracefulStop flag unexported and offers no way to ask whether the stop
-// actually took, so the two cases cannot be told apart from here. Re-running
-// is the remedy — ErrNoChange makes the retry a success.
-//
-// open is a parameter rather than a package-level variable so a test can hand
-// in a fake migrator without the package growing mutable state to swap.
-func migrateUp(ctx context.Context, open func() (migrator, error)) error {
-	if err := ctx.Err(); err != nil {
-		return migrateCancelled(err)
-	}
-	m, err := open()
-	if err != nil {
-		return err
-	}
-	defer func() { _, _ = m.Close() }()
-
-	stop := context.AfterFunc(ctx, m.Stop)
-	defer stop()
-
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("db: migrate up: %w", err)
-	}
-	if err := ctx.Err(); err != nil {
-		return migrateCancelled(err)
-	}
-	return nil
-}
-
-// migrateCancelled words a cancellation for the operator who reads it and has to
-// decide what to do next. "context canceled" alone reads like damage, and it is
-// true at both places migrateUp reports it: before open nothing was applied,
-// and after Up only whole migrations were, because a graceful stop always lets
-// the one in flight finish.
-func migrateCancelled(err error) error {
-	return fmt.Errorf("db: migrate up: cancelled, nothing is half applied and re-running continues where it stopped: %w", err)
-}
-
 // MigrateDown reverts every applied migration against dsn, newest first,
-// leaving no application tables behind. It destroys every row in them.
+// leaving no application table behind. It destroys every row in them.
+// goose_db_version stays, holding only its zero row: that is how goose records
+// a database at no version, as opposed to one it has never seen.
 //
 // Nothing in the binary calls it. It exists so the down migrations run through
-// the same embedded source and the same URL handling as Migrate, which is what
+// the same embedded source and the same DSN handling as Migrate, which is what
 // a rollback of a deployed binary would have to use — the image carries no
-// migration files for the golang-migrate CLI to read. A down migration that has
-// never been run is not a rollback plan: until TestMigrations_UpDownUp ran this,
-// the only evidence that 0001 drops its tables in a workable order was reading
-// it.
+// migration files for a goose command line to read. A down migration that has
+// never been run is not a rollback plan: until TestMigrations_UpDownUp ran
+// this, the only evidence that 0001 drops its tables in a workable order was
+// reading it.
 func MigrateDown(dsn string) error {
-	m, err := newMigrate(dsn)
+	ctx := context.Background()
+	return withMigrator(ctx, dsn, func(provider *goose.Provider) error {
+		_, err := provider.DownTo(ctx, 0)
+		return err
+	})
+}
+
+// withMigrator opens a goose provider over the embedded migrations for dsn and
+// hands it to run.
+//
+// The guard on the way in is the one piece of the hand-written cancellation
+// path worth keeping: without it an already cancelled context would still cost
+// a connection and a lock attempt before failing.
+func withMigrator(ctx context.Context, dsn string, run func(*goose.Provider) error) (retErr error) {
+	if err := ctx.Err(); err != nil {
+		return cancelledMigration(err)
+	}
+	sqlDB, err := openSQL(dsn)
 	if err != nil {
 		return err
 	}
-	defer func() { _, _ = m.Close() }()
-	if err := m.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("db: migrate down: %w", err)
+	defer func() { retErr = errors.Join(retErr, sqlDB.Close()) }()
+
+	src, err := fs.Sub(migrationsFS, "migrations")
+	if err != nil {
+		return fmt.Errorf("db: migration source: %w", err)
+	}
+	// The engine before goose took an advisory lock of its own accord, inside
+	// its pgx driver. goose does it only when asked, and dropping the option
+	// would quietly lose the protection: two instances starting at once would
+	// apply the same migration side by side.
+	locker, err := lock.NewPostgresSessionLocker()
+	if err != nil {
+		return fmt.Errorf("db: migration lock: %w", err)
+	}
+	provider, err := goose.NewProvider(database.DialectPostgres, sqlDB, src,
+		goose.WithSessionLocker(locker),
+		// Migrating used to be silent, so a slow start said nothing about which
+		// migration it was in. goose is silent too unless asked, and through
+		// slog it obeys LOG_LEVEL and LOG_FORMAT like every other line.
+		goose.WithSlog(slog.New(statementsAtDebug{slog.Default().Handler()})),
+		goose.WithVerbose(true),
+	)
+	if err != nil {
+		return fmt.Errorf("db: migration init: %w", err)
+	}
+
+	if err := run(provider); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return cancelledMigration(err)
+		}
+		return fmt.Errorf("db: migrate: %w", err)
 	}
 	return nil
 }
 
-// newMigrate builds a migrator over the embedded migrations for dsn.
-func newMigrate(dsn string) (*migrate.Migrate, error) {
-	src, err := iofs.New(migrationsFS, "migrations")
-	if err != nil {
-		return nil, fmt.Errorf("db: migration source: %w", err)
+// statementsAtDebug passes goose's log lines through, except the one it writes
+// for every SQL statement, which it moves from Info to Debug.
+//
+// goose's verbose mode is all or nothing and logs everything at Info: one line
+// per migration and the run's outcome, which belong in a start-up log, but
+// also every statement with its full SQL, which does not — 0001 alone is a
+// dozen of them. At LOG_LEVEL=debug they are all still there.
+type statementsAtDebug struct{ slog.Handler }
+
+// gooseStatementMsg is the message goose logs each SQL statement under
+// (provider_run.go, runSQL).
+const gooseStatementMsg = "executing statement"
+
+func (h statementsAtDebug) Handle(ctx context.Context, r slog.Record) error {
+	if r.Message == gooseStatementMsg {
+		// Enabled was asked about Info before the record was built, so the
+		// Debug threshold has to be checked here.
+		if !h.Enabled(ctx, slog.LevelDebug) {
+			return nil
+		}
+		r.Level = slog.LevelDebug
 	}
-	m, err := migrate.NewWithSourceInstance("iofs", src, migrateURL(dsn))
-	if err != nil {
-		return nil, fmt.Errorf("db: migration init: %w", err)
-	}
-	return m, nil
+	return h.Handler.Handle(ctx, r)
 }
 
-// migrateURL rewrites a postgres:// / postgresql:// DSN to the pgx5:// scheme
-// that the golang-migrate pgx/v5 database driver registers itself under. The
-// driver rewrites the scheme back to postgres:// before it actually connects.
-func migrateURL(dsn string) string {
-	if rest, ok := strings.CutPrefix(dsn, "postgres://"); ok {
-		return "pgx5://" + rest
+func (h statementsAtDebug) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return statementsAtDebug{h.Handler.WithAttrs(attrs)}
+}
+
+func (h statementsAtDebug) WithGroup(name string) slog.Handler {
+	return statementsAtDebug{h.Handler.WithGroup(name)}
+}
+
+// openSQL opens a database/sql handle on dsn through pgx's stdlib adapter.
+//
+// goose speaks database/sql and the rest of this project speaks pgx, so
+// exactly one place translates between them, and this is it. The handle is
+// capped at a single connection because a migration run is a single connection
+// by construction — goose takes one *sql.Conn, holds its advisory lock on it
+// and applies every migration through it — and the cap says so rather than
+// leaving a pool idling behind the migrator. The caller closes it.
+func openSQL(dsn string) (*sql.DB, error) {
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("db: parse dsn: %w", err)
 	}
-	if rest, ok := strings.CutPrefix(dsn, "postgresql://"); ok {
-		return "pgx5://" + rest
-	}
-	return dsn
+	sqlDB := stdlib.OpenDB(*cfg)
+	sqlDB.SetMaxOpenConns(1)
+	return sqlDB, nil
+}
+
+// cancelledMigration says what an operator reading the line needs to decide
+// what to do next. "context canceled" on its own reads like damage; what in
+// fact happened is that the migration in flight was rolled back and every
+// earlier one stands, so running the command again finishes the job.
+func cancelledMigration(err error) error {
+	return fmt.Errorf("db: migrate: cancelled, the migration in flight was rolled back and "+
+		"re-running continues where it stopped: %w", err)
 }
