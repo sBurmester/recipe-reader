@@ -1101,6 +1101,8 @@ Die Konfiguration ist von der Frage unabhängig, wie Renovate läuft — sie gil
 
 > **Ergänzung (Nutzer, 2026-09-23).** Ein PR je Ökosystem: `groupName` `go modules`, `npm packages`, `docker images` (auch für die Pins — vorher bündelte Renovates Pin-Gruppe golang, node, alpine und postgres), `github actions`. Majors bleiben je Ökosystem ein eigener PR (`separateMajorMinor` aus `config:recommended`), Sicherheits-Fixes einzeln.
 
+> **Ergänzung (Nutzer, 2026-09-23).** Jedes Ökosystem soll seinen PR öffnen können, Sicherheits-Updates sofort. Die Limits aus `config:recommended` (`prHourlyLimit: 2`) und aus Step 1 (`prConcurrentLimit: 5`) hielten Gruppen als „Rate-Limited“ zurück; beide stehen jetzt auf `0` (unbegrenzt). Die Gruppierung begrenzt die Zahl ohnehin auf einen PR je Ökosystem plus Majors.
+
 **Files:**
 - Create: `renovate.json`
 

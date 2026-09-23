@@ -6,11 +6,12 @@
   ],
   "timezone": "Europe/Berlin",
   "schedule": ["before 6am on monday"],
-  "prConcurrentLimit": 5,
+  "prConcurrentLimit": 0,
+  "prHourlyLimit": 0,
   "labels": ["dependencies"],
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
-    "description": "Security fixes skip the weekly schedule: the app checks the OSV database on every run, several times a day, and opens a fix as soon as one exists.",
+    "description": "Security fixes skip the weekly schedule and come one by one, outside the ecosystem groups: the app checks the OSV database on every run, several times a day, and opens a fix as soon as one exists. No PR limit applies above, so none can hold one back.",
     "schedule": ["at any time"],
     "labels": ["dependencies", "security"]
   },

@@ -582,7 +582,8 @@ release stays a draft; fix the cause and finish it by hand with its tag
 
 [Renovate](https://docs.renovatebot.com/) keeps Go modules, GitHub Actions and Docker images up to
 date. It runs as the Renovate GitHub app and reads `renovate.json`: it opens pull requests on
-Monday mornings (before 6am, Europe/Berlin), at most five at a time. The title's scope and a
+Monday mornings (before 6am, Europe/Berlin), with no limit on how many open at once: grouping
+already caps them at one per ecosystem plus its majors, and a limit would only hold one back. The title's scope and a
 second label next to `dependencies` say what is updated: `(go)`/`go` for Go modules, `(web)`/`npm`
 for frontend packages, `(docker)`/`docker` for images, `(actions)`/`github-actions` for workflow
 actions — for example `fix(go): update go modules`. Each ecosystem
