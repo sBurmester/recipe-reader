@@ -557,6 +557,9 @@ with the frontend embedded and the tag stamped in, plus a `checksums.txt`. Insta
     sha256sum --check --ignore-missing checksums.txt
     install -m 0755 "$file" ~/.local/bin/recipe-reader && recipe-reader --version   # v0.1.0
 
+The binaries are not signed. On macOS, one downloaded through a browser is quarantined and refused
+on first start; `xattr -d com.apple.quarantine recipe-reader` lifts that (`gh` does not set it).
+
 The image is built from the same tag, has to pass `scripts/smoke-test-image.sh` before it is
 pushed, and lands in `ghcr.io/sburmester/recipe-reader` under the tag and `latest`. Both are the
 job of `release-artifacts.yml`, which `release-please.yml` calls once it has made the release; to

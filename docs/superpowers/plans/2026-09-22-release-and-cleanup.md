@@ -106,7 +106,7 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 
 **US5: Betreiber betreibt über Compose.**
 - [ ] `docker compose pull && docker compose up -d` startet ohne lokalen Build.
-- [ ] `docker compose up --build` baut weiterhin lokal, für die Entwicklung.
+- [x] `docker compose up --build` baut weiterhin lokal, für die Entwicklung.
 
 **US6: Entwickler hält die Abhängigkeiten aktuell, ohne sie zu suchen.**
 - [ ] Renovate läuft nach Zeitplan in diesem Repository und lässt sich von Hand anstoßen.
@@ -296,10 +296,10 @@ Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist.
   - [x] **Task 4:** `main` unterscheidet Bedienfehler von Laufzeitfehler (S)
   - [x] **Milestone-Review**
 - [ ] **M4: Release-Automatik**
-  - [ ] **Task 5:** `release-please` einrichten (M)
-  - [ ] **Task 6:** Binaries und Prüfsummen ans Release hängen (M)
-  - [ ] **Task 7:** Image in die GHCR, Compose darauf umstellen (M)
-  - [ ] **Milestone-Review**
+  - [x] **Task 5:** `release-please` einrichten (M)
+  - [x] **Task 6:** Binaries und Prüfsummen ans Release hängen (M)
+  - [x] **Task 7:** Image in die GHCR, Compose darauf umstellen (M)
+  - [x] **Milestone-Review**
 - [ ] **M5: Abhängigkeiten unter Aufsicht**
   - [ ] **Task 8:** `renovate.json` (S)
   - [ ] **Task 9:** Renovate als Workflow (M)
@@ -738,6 +738,8 @@ git commit -m "fix(cli): name a bad command line apart from a failed run" -m "Bo
 
 `release-please` liest die Conventional-Commits-Präfixe seit einem Startpunkt, hält einen Release-PR offen, der Version und Changelog vorschlägt, und legt beim Merge Tag und GitHub-Release an.
 
+> **Abweichung (2026-09-23, mit dem Nutzer entschieden).** Die Repository-Einstellung „Allow GitHub Actions to create and approve pull requests“ war aus; ohne sie kann `release-please` mit `GITHUB_TOKEN` keinen PR öffnen. Sie ist per `gh api` eingeschaltet (`can_approve_pull_request_reviews=true`, `default_workflow_permissions` bleibt `read`). Der Workflow ruft außerdem `release-artifacts.yml` als Job `artifacts` auf, siehe Task 6. Syntaxprüfung zusätzlich mit `actionlint`. Nebenbefund für M5: das Repository ist **öffentlich**, nicht privat, wie E9 annimmt.
+
 **Files:**
 - Create: `.github/workflows/release-please.yml`
 - Create: `release-please-config.json`
@@ -748,7 +750,7 @@ git commit -m "fix(cli): name a bad command line apart from a failed run" -m "Bo
 - Consumes: —
 - Produces: Tags der Form `v<major>.<minor>.<patch>` und GitHub-Releases; Task 6 und Task 7 hängen sich an das `release`-Ereignis.
 
-- [ ] **Step 1: Den Startpunkt bestimmen**
+- [x] **Step 1: Den Startpunkt bestimmen**
 
 ```bash
 git log --oneline -1 --format='%H %s' $(git rev-list -1 main --grep='(3/3)')
@@ -756,7 +758,7 @@ git log --oneline -1 --format='%H %s' $(git rev-list -1 main --grep='(3/3)')
 
 Der Merge-Commit von PR #33 ist der `bootstrap-sha`: alles davor gehört zur Vorgeschichte und soll nicht im ersten Changelog landen (E8, R1). Den vollen SHA notieren.
 
-- [ ] **Step 2: `release-please-config.json` anlegen**
+- [x] **Step 2: `release-please-config.json` anlegen**
 
 `<BOOTSTRAP_SHA>` durch den SHA aus Step 1 ersetzen:
 
@@ -789,7 +791,7 @@ Der Merge-Commit von PR #33 ist der `bootstrap-sha`: alles davor gehört zur Vor
 
 `bump-minor-pre-major` sorgt dafür, dass ein `feat:` unterhalb von 1.0.0 den Minor hebt — so entsteht aus dem Startwert `0.0.0` die erste Version `v0.1.0` (E2).
 
-- [ ] **Step 3: `.release-please-manifest.json` anlegen**
+- [x] **Step 3: `.release-please-manifest.json` anlegen**
 
 ```json
 {
@@ -797,7 +799,7 @@ Der Merge-Commit von PR #33 ist der `bootstrap-sha`: alles davor gehört zur Vor
 }
 ```
 
-- [ ] **Step 4: `.github/workflows/release-please.yml` anlegen**
+- [x] **Step 4: `.github/workflows/release-please.yml` anlegen**
 
 ```yaml
 name: Release Please
@@ -824,7 +826,7 @@ jobs:
           manifest-file: .release-please-manifest.json
 ```
 
-- [ ] **Step 5: Die Konfiguration prüfen, ohne sie laufen zu lassen**
+- [x] **Step 5: Die Konfiguration prüfen, ohne sie laufen zu lassen**
 
 ```bash
 python3 -c "import json;[json.load(open(f)) for f in ['release-please-config.json','.release-please-manifest.json']];print('json ok')"
@@ -833,11 +835,11 @@ python3 -c "import yaml;d=yaml.safe_load(open('.github/workflows/release-please.
 
 Erwartet: `json ok` und `['release-please']`. Die CI prüft diesen Task nicht (CI-Ausnahme aus #29, R5), also ist das hier die einzige Syntaxprüfung vor dem Merge.
 
-- [ ] **Step 6: README**
+- [x] **Step 6: README**
 
 Einen Abschnitt „Releases" ergänzen: dass die Version aus den Commit-Präfixen entsteht, dass ein offener Release-PR die nächste Version zeigt, dass sein Merge Tag und Release erzeugt, und dass die Zählung bei `v0.1.0` beginnt, weil `0.x` unter SemVer Breaking Changes in jedem Minor erlaubt.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add .github/workflows/release-please.yml release-please-config.json .release-please-manifest.json README.md
@@ -850,6 +852,8 @@ git commit -m "ci: let release-please propose versions and changelogs" -m "The r
 
 Das Release aus Task 5 trägt bisher nur den Changelog. Dieser Task hängt die Single-Binary für drei Plattformen und eine `checksums.txt` an.
 
+> **Abweichungen (2026-09-23).** (1) *Mit dem Nutzer entschieden:* Ein Release, das `release-please` mit `GITHUB_TOKEN` anlegt, löst in keinem anderen Workflow ein `release`-Ereignis aus — `on: release: published` wäre nie gelaufen. `release-artifacts.yml` ist deshalb ein wiederverwendbarer Workflow (`workflow_call` + `workflow_dispatch`, Input `tag`), den `release-please.yml` aufruft, wenn `release_created` gesetzt ist. E7 gilt weiter: zwei Dateien, Artefakte genau einmal. (2) `npm run build` schreibt nach `web/dist`, `go:embed` liest `internal/webui/dist` — die Binaries hätten die Platzhalterseite ausgeliefert. Der Workflow ruft `make frontend` und prüft `internal/webui/dist/index.html`. (3) Jeder Matrix-Job schrieb eine eigene `checksums.txt`; `merge-multiple` hätte nur die letzte behalten. Die Prüfsummen entstehen jetzt im `upload`-Job über alle Binaries. (4) `checkout` bekommt `ref: <tag>`, sonst baut ein manueller Lauf `main` unter dem Namen des Tags. (5) Der Tag geht über `env:` in die Skripte statt per `${{ }}` direkt hinein. (6) `actions/upload-artifact@v7` statt `@v5` (aktuelles Major). Lokal geprüft: `make frontend`, drei Cross-Builds, `checksums.txt` mit drei Zeilen, `--version` meldet den Tag, kein Build-Pfad in der Binary.
+
 **Files:**
 - Create: `.github/workflows/release-artifacts.yml`
 - Modify: `Makefile` (`-trimpath`)
@@ -859,7 +863,7 @@ Das Release aus Task 5 trägt bisher nur den Changelog. Dieser Task hängt die S
 - Consumes: das `release`-Ereignis aus Task 5; `var version` in `package main`, gespeist über `-ldflags "-X main.version=…"`
 - Produces: Release-Assets `recipe-reader_<tag>_<os>_<arch>` und `checksums.txt`
 
-- [ ] **Step 1: `-trimpath` ergänzen**
+- [x] **Step 1: `-trimpath` ergänzen**
 
 Beide Build-Aufrufe bauen heute ohne `-trimpath`, tragen also den absoluten Pfad des Build-Verzeichnisses in die Binary. Solange nur lokal gebaut wurde, war das folgenlos; eine veröffentlichte Binary soll ihn nicht enthalten.
 
@@ -875,7 +879,7 @@ In `Dockerfile`:
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=${VERSION}" -o /recipe-reader ./cmd/recipe-reader
 ```
 
-- [ ] **Step 2: Docker-Gate**
+- [x] **Step 2: Docker-Gate**
 
 ```bash
 docker build --build-arg VERSION=smoke -t recipe-reader:ci .
@@ -884,7 +888,7 @@ scripts/smoke-test-image.sh recipe-reader:ci smoke
 
 Erwartet: `smoke test passed: recipe-reader:ci (smoke)`. `-trimpath` darf die Versionsstempelung nicht stören — genau das prüft der Smoke-Test.
 
-- [ ] **Step 3: `.github/workflows/release-artifacts.yml` anlegen**
+- [x] **Step 3: `.github/workflows/release-artifacts.yml` anlegen**
 
 ```yaml
 name: Release artifacts
@@ -974,7 +978,7 @@ jobs:
             --repo "${{ github.repository }}"
 ```
 
-- [ ] **Step 4: Die Workflow-Syntax prüfen**
+- [x] **Step 4: Die Workflow-Syntax prüfen**
 
 ```bash
 python3 -c "import yaml;d=yaml.safe_load(open('.github/workflows/release-artifacts.yml'));print(list(d['jobs']))"
@@ -982,7 +986,7 @@ python3 -c "import yaml;d=yaml.safe_load(open('.github/workflows/release-artifac
 
 Erwartet: `['binaries', 'upload']`.
 
-- [ ] **Step 5: Commit-Gate und Commit**
+- [x] **Step 5: Commit-Gate und Commit**
 
 ```bash
 git add .github/workflows/release-artifacts.yml Makefile Dockerfile
@@ -995,6 +999,8 @@ git commit -m "ci: attach binaries and checksums to a release" -m "Three platfor
 
 Ein Betreiber soll das Image ziehen können, statt es zu bauen.
 
+> **Abweichungen (2026-09-23).** (1) GHCR nimmt nur Kleinbuchstaben, `github.repository` ist `sBurmester/…` — der Name wird mit `${GITHUB_REPOSITORY,,}` klein geschrieben. (2) Statt `docker/build-push-action` baut der Job mit `docker build`, prüft das Image mit `scripts/smoke-test-image.sh` (US4 verlangt den Smoke-Test) und pusht erst danach; eine Action weniger. (3) `latest` wird nur bei einem neuen Release bewegt, nicht bei einem manuellen Lauf für ein älteres Tag. (4) Step 3 braucht `run --rm --no-deps app --version` — der Entrypoint ist schon `recipe-reader`. Ergebnis: `local`. (5) README zusätzlich: Installation aus einem Release mit Prüfsummen-Check und der Gatekeeper-Hinweis für die unsignierte macOS-Binary.
+
 **Files:**
 - Modify: `.github/workflows/release-artifacts.yml` (+ Job `image`)
 - Modify: `docker-compose.yml` (`image:` beim `app`-Service)
@@ -1004,7 +1010,7 @@ Ein Betreiber soll das Image ziehen können, statt es zu bauen.
 - Consumes: das `release`-Ereignis; `Dockerfile` mit `VERSION`-Build-Arg
 - Produces: `ghcr.io/<owner>/<repo>:<tag>` und `:latest`
 
-- [ ] **Step 1: Den Image-Job ergänzen** (`.github/workflows/release-artifacts.yml`)
+- [x] **Step 1: Den Image-Job ergänzen** (`.github/workflows/release-artifacts.yml`)
 
 Als zusätzlichen Job, neben `binaries`:
 
@@ -1038,7 +1044,7 @@ Als zusätzlichen Job, neben `binaries`:
             ghcr.io/${{ github.repository }}:latest
 ```
 
-- [ ] **Step 2: Compose auf das Image umstellen** (`docker-compose.yml`)
+- [x] **Step 2: Compose auf das Image umstellen** (`docker-compose.yml`)
 
 Beim `app`-Service, über dem bestehenden `build:`:
 
@@ -1050,7 +1056,7 @@ Beim `app`-Service, über dem bestehenden `build:`:
     image: ghcr.io/sburmester/recipe-reader:${RECIPE_READER_VERSION:-latest}
 ```
 
-- [ ] **Step 3: Prüfen, dass der lokale Build weiterhin greift**
+- [x] **Step 3: Prüfen, dass der lokale Build weiterhin greift**
 
 ```bash
 VERSION=local docker compose -p recipe-reader-e2e build app
@@ -1059,11 +1065,11 @@ docker compose -p recipe-reader-e2e run --rm app recipe-reader --version
 
 Erwartet: `local`. Das belegt, dass `build:` neben `image:` bestehen bleibt und der lokale Weg unverändert funktioniert.
 
-- [ ] **Step 4: README**
+- [x] **Step 4: README**
 
 Im Betriebsabschnitt ergänzen: `docker compose pull && docker compose up -d` für ein veröffentlichtes Image, `RECIPE_READER_VERSION=v0.1.0` zum Festnageln einer Version, `docker compose up --build` für die Entwicklung. Dazu der Hinweis aus R3, dass das GHCR-Paket nach dem ersten Push privat ist und in den Repository-Einstellungen öffentlich gestellt werden kann.
 
-- [ ] **Step 5: Docker-Gate und Commit**
+- [x] **Step 5: Docker-Gate und Commit**
 
 ```bash
 docker build --build-arg VERSION=smoke -t recipe-reader:ci .
