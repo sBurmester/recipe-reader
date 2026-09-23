@@ -32,7 +32,11 @@ services:
       # not to publish it.
       - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-recipes}"]
+      # Over TCP, not the default Unix socket. On a fresh volume the image's
+      # entrypoint first runs a temporary server that listens on the socket
+      # only, initialises the database and restarts; a socket probe calls that
+      # ready, and the app — which connects over TCP — fails its first start.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-recipes}"]
       interval: 5s
       timeout: 5s
       retries: 5
