@@ -3,7 +3,7 @@ services:
     # The major version only: patch releases (18.x) share the on-disk format
     # and arrive with `docker compose pull`. A major version does not — see
     # "Upgrading from Postgres 17" in the README before changing this.
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-recipes}
       POSTGRES_USER: ${POSTGRES_USER:-recipes}
