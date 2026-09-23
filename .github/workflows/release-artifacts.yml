@@ -1,0 +1,97 @@
+name: Release artifacts
+
+# Hangs the binaries on a release. release-please.yml calls this once it has
+# created one, rather than this listening for the release event: a release
+# made with GITHUB_TOKEN fires no event that starts another workflow, so an
+# `on: release` trigger would never run. workflow_dispatch rebuilds and
+# re-uploads for a release that already exists.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to build and upload to"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build and upload to"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      # The tag, not the default branch: a manual run starts on main, and the
+      # binary it builds would carry the tag's name over main's code.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      # The frontend is embedded with go:embed from internal/webui/dist, and
+      # `make frontend` is what copies the build there — `npm run build` alone
+      # leaves it in web/dist, and the binary would serve the placeholder page.
+      - run: make frontend
+      - run: test -f internal/webui/dist/index.html
+
+      - name: Build
+        env:
+          TAG: ${{ inputs.tag }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          CGO_ENABLED=0 go build -trimpath \
+            -ldflags "-X main.version=${TAG}" \
+            -o "dist/recipe-reader_${TAG}_${GOOS}_${GOARCH}" ./cmd/recipe-reader
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+          if-no-files-found: error
+
+  upload:
+    needs: binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+
+      # One checksums.txt over all binaries, computed here: per-job files of the
+      # same name would overwrite each other when the artifacts are merged.
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          cd dist
+          sha256sum recipe-reader_* > checksums.txt
+          cat checksums.txt
+          gh release upload "$TAG" recipe-reader_* checksums.txt --clobber \
+            --repo "$GITHUB_REPOSITORY"

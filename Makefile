@@ -53,7 +53,7 @@ db-up:
 # startup now (webui.IsPlaceholder), for the build paths that bypass this
 # Makefile entirely.
 build: frontend
-	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bin/recipe-reader ./cmd/recipe-reader
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/recipe-reader ./cmd/recipe-reader
 
 # -race matches CI. Without it the race detector only ran after a push, while
 # the local gate (`make check`) skipped the one check most likely to catch a
