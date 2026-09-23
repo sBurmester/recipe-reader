@@ -538,7 +538,7 @@ Versions are not tagged by hand. [release-please](https://github.com/googleapis/
 reads the Conventional Commits prefixes on `main` — `fix:` raises the patch, `feat:` the minor, a
 `!` or a `BREAKING CHANGE:` footer the major — and keeps a release PR open that shows the next
 version and the `CHANGELOG.md` it would write. Read it before merging: a wrong prefix is a wrong
-version. Merging it creates the tag and the GitHub release.
+version. Merging it creates the tag and the GitHub release, as a draft until its assets are attached.
 
 Counting starts at `v0.1.0`, not `v1.0.0`. Under SemVer a `0.x` version may break in any minor, and
 this project still does; while it is below `1.0.0`, a breaking change raises the minor rather than
@@ -564,9 +564,14 @@ on first start; `xattr -d com.apple.quarantine recipe-reader` lifts that (`gh` d
 
 The image is built from the same tag, has to pass `scripts/smoke-test-image.sh` before it is
 pushed, and lands in `ghcr.io/sburmester/recipe-reader` under the tag and `latest`. Both are the
-job of `release-artifacts.yml`, which `release-please.yml` calls once it has made the release; to
-rebuild the assets of an existing release, run it by hand with that tag
-(`gh workflow run release-artifacts.yml -f tag=v0.1.0`). A manual run leaves `latest` alone.
+job of `release-artifacts.yml`, which `release-please.yml` calls once it has made the release.
+
+Releases in this repository are immutable: once published, a release takes no further assets and
+its tag cannot move. That is why release-please creates a draft and `release-artifacts.yml`
+publishes it only after the binaries are attached and the image is pushed. If a run fails, the
+release stays a draft; fix the cause and finish it by hand with its tag
+(`gh workflow run release-artifacts.yml -f tag=v0.2.0`). A manual run leaves `latest` alone.
+`v0.1.0` predates this and was published without binaries; its image is complete.
 
 ## Testing & linting
 
