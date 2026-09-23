@@ -134,6 +134,8 @@ Der offene Punkt beim Import war nie das Pipeline-Wiring, sondern die Gleichzeit
 
 ### Backlog (bewusst nicht in diesem Plan)
 
+> **Erledigt.** Der folgende Eintrag ist im Plan [2026-09-22-release-and-cleanup.md](2026-09-22-release-and-cleanup.md) umgesetzt (M4, Entscheidungen E1, E2, E6, E7): `release-please` vergibt die Version aus den Commit-Präfixen, die Zählung begann bei `v0.1.0`, jedes Release trägt Binaries für `linux/amd64`, `linux/arm64` und `darwin/arm64` mit `checksums.txt` und ein Image in der GHCR, und `docker-compose.yml` hat `image:` neben `build:`.
+
 - **Automatisches GitHub-Release je Versions-Tag** (vom Nutzer am 2026-09-21 notiert). Ein Tag nach Semantic Versioning löst ein Release aus, das zwei Artefakte trägt: die Single-Binary und ein Image, das sich per `docker-compose` einsetzen lässt. Noch nicht geschnitten; der Plan dafür muss vier Fragen beantworten, bevor Code entsteht:
   - **Woher kommt die Versionsnummer?** Entweder vergibt ein Werkzeug sie aus den Conventional-Commits-Präfixen, die dieses Repo ohnehin schreibt (`feat:`, `fix:`, `refactor!:`), oder ein von Hand geschobenes Tag löst das Release aus und die Automatik baut nur. Das erste nimmt Arbeit ab und bindet die Versionierung an die Commit-Disziplin; das zweite behält die Entscheidung beim Menschen. Beides ist vertretbar, aber es muss eines sein.
   - **Wo fängt die Zählung an?** Das Repository hat **kein einziges Tag**. `git describe --tags --always --dirty` — die Quelle, aus der `Makefile` und `Dockerfile` heute `-X main.version` speisen — liefert deshalb einen nackten SHA. Das erste Tag entscheidet zugleich, ob der Stand als `v0.x` geführt wird (Breaking Changes jederzeit erlaubt) oder als `v1.0.0` (dann verpflichtet SemVer).
