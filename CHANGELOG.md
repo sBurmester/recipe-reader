@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/sBurmester/recipe-reader/compare/v0.1.3...v0.1.4) (2026-09-23)
+
+
+### Bug Fixes
+
+* **go:** update module github.com/openai/openai-go to v3 ([8b162b3](https://github.com/sBurmester/recipe-reader/commit/8b162b3984cf8cd8fda3d54a739f8136c1d9c39f))
+
 ## [0.1.3](https://github.com/sBurmester/recipe-reader/compare/v0.1.2...v0.1.3) (2026-09-23)
 
 
