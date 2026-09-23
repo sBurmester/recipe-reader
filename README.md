@@ -573,6 +573,30 @@ release stays a draft; fix the cause and finish it by hand with its tag
 (`gh workflow run release-artifacts.yml -f tag=v0.2.0`). A manual run leaves `latest` alone.
 `v0.1.0` predates this and was published without binaries; its image is complete.
 
+## Dependencies
+
+[Renovate](https://docs.renovatebot.com/) keeps Go modules, GitHub Actions and Docker images up to
+date. It runs as the Renovate GitHub app and reads `renovate.json`: it opens pull requests on
+Monday mornings (before 6am, Europe/Berlin), labelled `dependencies`, at most five at a time. The
+*Dependency Dashboard* issue lists everything it knows about; ticking a box there opens that pull
+request at once instead of waiting for Monday. Its run logs are on
+[developer.mend.io](https://developer.mend.io), not in the Actions tab.
+
+Actions and base images are pinned to digests, with the readable version next to them
+(`actions/checkout@<sha> # v7`, `postgres:18-alpine@sha256:…`). A tag can be moved to other code;
+a digest cannot. The flip side is that a pinned image no longer picks up patch releases on the
+next build or `docker compose pull` — it changes when Renovate raises the digest. Postgres majors
+are left out on purpose; they need the upgrade described under
+[Upgrading from Postgres 17](#upgrading-from-postgres-17). The app's own image is not touched: it is
+published by the release workflow.
+
+Go module updates run `go mod tidy` and get CI like any other pull request. Action updates arrive
+grouped as one pull request, and that one gets **no CI**: CI skips a change that only touches
+`.github/workflows/`. Run it by hand before merging:
+
+    gh workflow run ci.yml --ref <renovate-branch>
+    gh run list --workflow=ci.yml --limit 1
+
 ## Testing & linting
 
     make check   # gofmt + go vet + golangci-lint + frontend typecheck/build
