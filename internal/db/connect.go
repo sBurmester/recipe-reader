@@ -209,7 +209,7 @@ func withMigrator(ctx context.Context, dsn string, run func(*goose.Provider) err
 		// Migrating used to be silent, so a slow start said nothing about which
 		// migration it was in. goose is silent too unless asked, and through
 		// slog it obeys LOG_LEVEL and LOG_FORMAT like every other line.
-		goose.WithSlog(slog.Default()),
+		goose.WithSlog(slog.New(statementsAtDebug{slog.Default().Handler()})),
 		goose.WithVerbose(true),
 	)
 	if err != nil {
@@ -223,6 +223,39 @@ func withMigrator(ctx context.Context, dsn string, run func(*goose.Provider) err
 		return fmt.Errorf("db: migrate: %w", err)
 	}
 	return nil
+}
+
+// statementsAtDebug passes goose's log lines through, except the one it writes
+// for every SQL statement, which it moves from Info to Debug.
+//
+// goose's verbose mode is all or nothing and logs everything at Info: one line
+// per migration and the run's outcome, which belong in a start-up log, but
+// also every statement with its full SQL, which does not — 0001 alone is a
+// dozen of them. At LOG_LEVEL=debug they are all still there.
+type statementsAtDebug struct{ slog.Handler }
+
+// gooseStatementMsg is the message goose logs each SQL statement under
+// (provider_run.go, runSQL).
+const gooseStatementMsg = "executing statement"
+
+func (h statementsAtDebug) Handle(ctx context.Context, r slog.Record) error {
+	if r.Message == gooseStatementMsg {
+		// Enabled was asked about Info before the record was built, so the
+		// Debug threshold has to be checked here.
+		if !h.Enabled(ctx, slog.LevelDebug) {
+			return nil
+		}
+		r.Level = slog.LevelDebug
+	}
+	return h.Handler.Handle(ctx, r)
+}
+
+func (h statementsAtDebug) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return statementsAtDebug{h.Handler.WithAttrs(attrs)}
+}
+
+func (h statementsAtDebug) WithGroup(name string) slog.Handler {
+	return statementsAtDebug{h.Handler.WithGroup(name)}
 }
 
 // openSQL opens a database/sql handle on dsn through pgx's stdlib adapter.
