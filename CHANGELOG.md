@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.3](https://github.com/sBurmester/recipe-reader/compare/v0.1.2...v0.1.3) (2026-09-23)
+
+
+### Bug Fixes
+
+* **docker:** wait for postgres over tcp, not its init socket ([#52](https://github.com/sBurmester/recipe-reader/issues/52)) ([fc47c4f](https://github.com/sBurmester/recipe-reader/commit/fc47c4fd5dc351937cdc1c8d25404e91bf745a95))
+* **go:** update go modules ([#56](https://github.com/sBurmester/recipe-reader/issues/56)) ([81f6c91](https://github.com/sBurmester/recipe-reader/commit/81f6c9113c1441b5cb5869f4ac3062eea8afb76c))
+
 ## [0.1.2](https://github.com/sBurmester/recipe-reader/compare/v0.1.1...v0.1.2) (2026-09-23)
 
 
