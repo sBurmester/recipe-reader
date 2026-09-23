@@ -30,6 +30,12 @@ and serves a searchable web UI. Single Go binary with the frontend embedded; Pos
 `POSTGRES_PASSWORD` has no default and compose refuses to start without it. Put the same password
 in your `.env` `DB_DSN` so the locally run binary can reach the container.
 
+The same `.env` configures the app container under `docker compose up`: every variable in it
+reaches the container. Two are overridden there because their `.env` values are for a binary on
+the host: `HTTP_ADDR` (the container binds `:8080`) and `DB_DSN`, which compose builds from the
+`POSTGRES_*` variables against the `db` service — set `CONTAINER_DB_DSN` to replace it. Without a
+`.env`, compose still starts and the app runs on its defaults.
+
 ## Commands
 
 The binary is a small [kong](https://github.com/alecthomas/kong) command tree. `serve` is the
@@ -421,8 +427,10 @@ reaches `db` by name over the compose network and never needed it published at a
 only so `make db-up` can serve a binary running on the host.
 
 `POSTGRES_USER` and `POSTGRES_DB` still default to `recipes`, and `DB_DSN` is built from all three
-so the app and the database cannot disagree. Set `DB_DSN` yourself to override it wholesale, which
-is also the answer for a password containing characters a URL would have to percent-encode.
+so the app and the database cannot disagree. Set `CONTAINER_DB_DSN` to override it wholesale, which
+is also the answer for a password containing characters a URL would have to percent-encode. It is
+not `DB_DSN` on purpose: that one, in `.env`, points a host-run binary at `localhost`, and inside
+the container `localhost` is the app itself.
 
 The image builds the frontend and the Go binary in separate stages and ships only the binary on
 Alpine — about 20 MB, running as a non-root user. Credentials come from the environment (see
