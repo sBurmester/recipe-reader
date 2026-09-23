@@ -109,10 +109,10 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - [x] `docker compose up --build` baut weiterhin lokal, für die Entwicklung.
 
 **US6: Entwickler hält die Abhängigkeiten aktuell, ohne sie zu suchen.**
-- [ ] Renovate läuft nach Zeitplan als GitHub-App und lässt sich über das „Dependency Dashboard“-Issue von Hand anstoßen.
-- [ ] Es öffnet PRs für Go-Module, GitHub Actions und Docker-Images.
+- [x] Renovate läuft nach Zeitplan als GitHub-App und lässt sich über das „Dependency Dashboard“-Issue von Hand anstoßen.
+- [x] Es öffnet PRs für Go-Module, GitHub Actions und Docker-Images.
 - [ ] Sicherheitslücken (OSV) werden mindestens täglich geprüft; ein Fix-PR wartet nicht auf den Wochenplan.
-- [ ] Jede Action und jedes Basisimage steht mit Digest im Repository, mit dem Tag als Kommentar.
+- [x] Jede Action und jedes Basisimage steht mit Digest im Repository, mit dem Tag als Kommentar.
 - [ ] Ein Go-Update-PR durchläuft die CI wie jeder andere Code-PR.
 
 **US7: Entwickler fügt eine Migration hinzu.**
@@ -258,8 +258,10 @@ Abnahmekriterien:
 
 Abnahmekriterien:
 - [ ] Die Akzeptanzkriterien von US6 sind abgehakt.
-- [ ] `grep -rn 'uses: .*@v[0-9]' .github/workflows/` findet nichts mehr.
-- [ ] Jedes `FROM` im `Dockerfile` und jedes `image:` in `docker-compose.yml`, das nicht aus der GHCR dieses Projekts stammt, trägt einen Digest.
+- [x] `grep -rn 'uses: .*@v[0-9]' .github/workflows/` findet nichts mehr.
+- [x] Jedes `FROM` im `Dockerfile` und jedes `image:` in `docker-compose.yml`, das nicht aus der GHCR dieses Projekts stammt, trägt einen Digest.
+
+> **Stand (2026-09-23).** Offen bis zum ersten regulären Lauf: *„Ein Go-Update-PR durchläuft die CI“* (die Gruppe `go modules` war rate-limited, die Limits hebt #53 auf) und *„Sicherheitslücken … mindestens täglich“* (konfiguriert, noch ohne Anlass). Damit ist auch das Abnahmekriterium „Akzeptanzkriterien von US6“ noch offen.
 
 #### M6: Migrationen unter goose
 
@@ -304,10 +306,10 @@ Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist.
   - [x] **Task 7:** Image in die GHCR, Compose darauf umstellen (M)
   - [x] **Milestone-Review**
 - [ ] **M5: Abhängigkeiten unter Aufsicht**
-  - [ ] **Task 8:** `renovate.json` (S)
-  - [ ] **Task 9:** Renovate als GitHub-App (S)
-  - [ ] **Task 10:** Renovate pinnt Actions und Images (M)
-  - [ ] **Milestone-Review**
+  - [x] **Task 8:** `renovate.json` (S)
+  - [x] **Task 9:** Renovate als GitHub-App (S)
+  - [x] **Task 10:** Renovate pinnt Actions und Images (M)
+  - [x] **Milestone-Review**
 - [ ] **M6: Migrationen unter goose**
   - [ ] **Task 11:** goose ersetzt golang-migrate (L)
   - [ ] **Task 12:** Die Anleitung beschreibt das goose-Format (S)
@@ -1110,7 +1112,7 @@ Die Konfiguration ist von der Frage unabhängig, wie Renovate läuft — sie gil
 - Consumes: —
 - Produces: `renovate.json` im Wurzelverzeichnis, die Datei, die die App aus Task 9 liest.
 
-- [ ] **Step 1: `renovate.json` anlegen**
+- [x] **Step 1: `renovate.json` anlegen**
 
 ```json
 {
@@ -1148,7 +1150,7 @@ Die Konfiguration ist von der Frage unabhängig, wie Renovate läuft — sie gil
 }
 ```
 
-- [ ] **Step 2: Die Datei prüfen**
+- [x] **Step 2: Die Datei prüfen**
 
 ```bash
 python3 -c "import json;json.load(open('renovate.json'));print('json ok')"
@@ -1157,7 +1159,7 @@ npx --yes --package renovate -- renovate-config-validator renovate.json
 
 Erwartet: `json ok`, und der Validator meldet die Konfiguration als gültig. Der zweite Befehl lädt Renovate einmalig über `npx` — er gehört nicht ins Repository und wird nur hier ausgeführt. Meldet er einen unbekannten Schlüssel, ist das ein Befund: anhalten und melden, statt den Schlüssel zu raten.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add renovate.json
@@ -1177,18 +1179,18 @@ git commit -m "ci: configure renovate" -m "Go modules, GitHub Actions and Docker
 - Consumes: `renovate.json` (Task 8)
 - Produces: einen wöchentlichen Lauf der App und das Issue „Dependency Dashboard“, über das sich ein Update von Hand anstoßen lässt
 
-- [ ] **Step 1: README**
+- [x] **Step 1: README**
 
 Einen Abschnitt „Dependencies" ergänzen: dass Renovate als GitHub-App läuft und `renovate.json` liest, wöchentlich (montags vor 6 Uhr, Europe/Berlin) PRs öffnet und über das „Dependency Dashboard“-Issue sofort angestoßen werden kann; dass Actions und Basisimages auf Digest gepinnt sind und der Tag daneben steht; dass Postgres-Majors ausgenommen sind; und — wegen R8 — dass ein PR, der nur Workflows anfasst, keine CI bekommt und deshalb vor dem Merge von Hand über `gh workflow run ci.yml --ref <branch>` gegen die CI geschickt wird.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add README.md
 git commit -m "docs: describe how dependencies are kept up to date"
 ```
 
-- [ ] **Step 3: Installation durch den Nutzer** (nicht vom Agent ausführbar)
+- [x] **Step 3: Installation durch den Nutzer** (nicht vom Agent ausführbar)
 
 1. https://github.com/apps/renovate → *Install* → *Only select repositories* → `recipe-reader`.
 2. Beim Mend Developer Portal (developer.mend.io) mit dem GitHub-Account anmelden; kein eigenes Konto.
@@ -1206,6 +1208,8 @@ Zwei Dinge macht Renovate **nicht**, und die bleiben Handarbeit: die Kommentare 
 
 Dieser Task läuft **nach** M4, damit auch `release-please.yml` und `release-artifacts.yml` erfasst werden (E11), und er setzt voraus, dass die Installation aus **Task 9, Step 3** erledigt ist: ohne die App öffnet Renovate keine PRs, und dieser Task hat nichts zu tun. Ist sie nicht installiert, hier anhalten und den Nutzer erinnern, statt ersatzweise von Hand zu pinnen.
 
+> **Durchführung (2026-09-23).** Die App lief zuerst im *Silent Mode* (siehe Task 8); danach Dashboard #47. Die Pin-PRs wurden über das Dashboard angestoßen: #49 (Actions, SHA + `# vN`, drei SHAs gegen ihre Tags geprüft, CI von Hand über `gh workflow run ci.yml --ref renovate/github-actions` grün) und #48 (Images, Docker-Gate lokal grün). Nach der Umstellung auf Gruppen je Ökosystem schloss Renovate #48 und legte denselben Inhalt als #51 (`chore(docker): pin dependencies`) neu an; dessen `docker`-Job scheiterte einmal an einem Timing-Problem im Smoke-Test (`pg_isready` über den Unix-Socket meldete Postgres während der Init-Phase bereit) — behoben in #52 für Skript **und** Compose-Healthcheck — und war im zweiten Lauf grün. Step 4: Das `Dockerfile` hatte, anders als angenommen, keine solchen Kommentare; berichtigt sind der `db`-Kommentar in `docker-compose.yml` und der README-Abschnitt „Postgres version“, der außerdem nicht mehr behauptet, die Tests liefen gegen das deployte Image: `testdb.go` und `smoke-test-image.sh` nutzen `postgres:18-alpine` ungepinnt, was Renovate nicht erkennt. Step 6: `grep` ohne Treffer, jedes `FROM` und `postgres` mit Digest, das eigene Image ohne.
+
 **Files:**
 - Modify (durch Renovates PRs): `.github/workflows/*.yml`, `Dockerfile`, `docker-compose.yml`
 - Modify (von Hand, Step 4): `Dockerfile`, `docker-compose.yml` — nur die Kommentare
@@ -1214,7 +1218,7 @@ Dieser Task läuft **nach** M4, damit auch `release-please.yml` und `release-art
 - Consumes: `renovate.json` (Task 8), die installierte App (Task 9)
 - Produces: —
 
-- [ ] **Step 1: Renovate anstoßen**
+- [x] **Step 1: Renovate anstoßen**
 
 ```bash
 gh issue list --search 'Dependency Dashboard in:title' --json number,title
@@ -1222,7 +1226,7 @@ gh issue list --search 'Dependency Dashboard in:title' --json number,title
 
 Erwartet: das Issue „Dependency Dashboard“ — der Beleg, dass die App installiert ist und `renovate.json` gelesen hat. Die Pin-PRs fallen unter den Zeitplan (montags vor 6 Uhr); im Dashboard stehen sie dann unter „Awaiting Schedule“. Die Checkboxen dort erzeugen den PR sofort — der Nutzer oder der Agent hakt sie im Issue an (`gh issue edit` am Body oder im Browser). Fehlt das Issue nach einigen Minuten, die Logs im Mend-Portal lesen lassen und melden.
 
-- [ ] **Step 2: Die PRs lesen, bevor sie gemergt werden**
+- [x] **Step 2: Die PRs lesen, bevor sie gemergt werden**
 
 ```bash
 gh pr list --label dependencies --json number,title,files --jq '.[] | "\(.number)\t\(.title)"'
@@ -1234,7 +1238,7 @@ Erwartet: mindestens ein PR, der die Actions auf Digests umstellt (durch `groupN
 - Die `FROM`-Zeilen tragen `@sha256:…`.
 - Das `image:` des `app`-Service ist **nicht** angefasst: es ist das eigene Release-Image und trägt ein Versions-Tag (Task 7, die `enabled: false`-Regel aus Task 8).
 
-- [ ] **Step 3: Den Actions-PR der CI vorlegen und mergen**
+- [x] **Step 3: Den Actions-PR der CI vorlegen und mergen**
 
 Ein PR, der nur `.github/workflows/**` anfasst, bekommt wegen der CI-Ausnahme aus #29 keine Prüfung (R8). Deshalb von Hand:
 
@@ -1245,13 +1249,13 @@ gh run list --workflow=ci.yml --limit 1
 
 Erst wenn dieser Lauf grün ist, den PR mergen. Die übrigen PRs (Dockerfile, Compose) fassen Code-relevante Dateien an und bekommen ihre CI von selbst.
 
-- [ ] **Step 4: Die Kommentare berichtigen**
+- [x] **Step 4: Die Kommentare berichtigen**
 
 Renovate pinnt, aber es liest keine Prosa. Über den `FROM`-Zeilen im `Dockerfile` und über `postgres:` in `docker-compose.yml` steht, dass Patch-Releases von selbst ankommen — beim nächsten Build beziehungsweise mit `docker compose pull`. Das gilt nach dem Pinnen nicht mehr (R9).
 
 Die Kommentare so berichtigen, dass sie sagen, was jetzt stimmt: Der Digest friert das Image ein, Renovate hebt ihn wöchentlich, und wer schneller will, stößt das Update im „Dependency Dashboard“ an. Der Hinweis auf den Major-Wechsel von Postgres bleibt wortgleich stehen — er gilt unverändert.
 
-- [ ] **Step 5: Docker-Gate**
+- [x] **Step 5: Docker-Gate**
 
 ```bash
 docker build --build-arg VERSION=smoke -t recipe-reader:ci .
@@ -1260,7 +1264,7 @@ scripts/smoke-test-image.sh recipe-reader:ci smoke
 
 Erwartet: `smoke test passed: recipe-reader:ci (smoke)`. Ein Digest, der nicht auf das Image zeigt, das er soll, lässt den Build sofort scheitern — deshalb ist das Gate hier die eigentliche Prüfung der gemergten PRs.
 
-- [ ] **Step 6: Prüfen, dass nichts übrig ist**
+- [x] **Step 6: Prüfen, dass nichts übrig ist**
 
 ```bash
 grep -rn 'uses: .*@v[0-9]' .github/workflows/ ; echo "exit=$?"
@@ -1270,7 +1274,7 @@ grep -n 'image:' docker-compose.yml
 
 Erwartet: `exit=1` aus dem `grep` (kein Treffer), jedes `FROM` mit `@sha256:`, und in Compose der gepinnte Postgres neben dem ungepinnten eigenen Image. Findet der erste Befehl etwas, hat Renovate eine Stelle nicht erfasst — die Fundstelle melden, nicht von Hand nachziehen: dann stimmt die Konfiguration nicht, und von Hand gepinnt würde derselbe Fehler beim nächsten Update wiederkehren.
 
-- [ ] **Step 7: Commit-Gate und Commit**
+- [x] **Step 7: Commit-Gate und Commit**
 
 Nur die Kommentare aus Step 4 sind noch uncommittet; das Pinnen selbst steckt in Renovates gemergten PRs.
 
