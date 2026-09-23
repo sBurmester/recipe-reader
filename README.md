@@ -772,6 +772,9 @@ for the full architectural rationale — persistence strategy, extraction strate
 stack, each chosen explicitly and recorded there, along with the per-task breakdown in
 `docs/superpowers/plans/2026-09-05-recipe-reader-tasks/`.
 
+[`AGENTS.md`](AGENTS.md) collects the working rules and the decisions that hold today — from the
+plans, the review panel and this README — in one place, for coding agents and anyone contributing.
+
 ## Instagram integration caveat
 
 The saved-posts and collection fetching in `internal/instagram/saved.go` uses Instagram's
