@@ -542,7 +542,9 @@ version. Merging it creates the tag and the GitHub release.
 
 Counting starts at `v0.1.0`, not `v1.0.0`. Under SemVer a `0.x` version may break in any minor, and
 this project still does; while it is below `1.0.0`, a breaking change raises the minor rather than
-the major. `docs:`, `test:` and `chore:` commits are left out of the changelog.
+the major. The start is `initial-version` in `release-please-config.json`: with no release tag yet,
+release-please ignores the version in its manifest and would otherwise begin at `1.0.0`. `docs:`,
+`test:` and `chore:` commits are left out of the changelog.
 
 The workflow opens its PR and creates the release with the workflow's own token, which needs
 *Settings → Actions → General → Allow GitHub Actions to create and approve pull requests*. A PR

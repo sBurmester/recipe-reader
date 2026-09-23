@@ -791,6 +791,8 @@ Der Merge-Commit von PR #33 ist der `bootstrap-sha`: alles davor gehört zur Vor
 
 `bump-minor-pre-major` sorgt dafür, dass ein `feat:` unterhalb von 1.0.0 den Minor hebt — so entsteht aus dem Startwert `0.0.0` die erste Version `v0.1.0` (E2).
 
+> **Korrektur (2026-09-23).** Das stimmte nicht: ohne ein vorhandenes Release-Tag ignoriert `release-please` den Wert im Manifest und nimmt `initial-version`, Default `1.0.0` — der erste Release-PR (#40) hieß `release 1.0.0`. `"initial-version": "0.1.0"` in `release-please-config.json` setzt den Startpunkt; `bump-minor-pre-major` wirkt erst ab dem zweiten Release.
+
 - [x] **Step 3: `.release-please-manifest.json` anlegen**
 
 ```json
