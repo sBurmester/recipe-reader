@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // importLockKey identifies the import lock among all advisory locks in this
@@ -35,7 +36,17 @@ type ImportLock struct {
 
 // TryAcquire implements pipeline.ImportLock.
 func (l ImportLock) TryAcquire(ctx context.Context) (func(), bool, error) {
-	conn, err := pgx.Connect(ctx, l.DSN)
+	// Parsed as a pool config because DSN is the pool's: pgx.ParseConfig would
+	// pass pool_max_conns and the other pool settings on to Postgres as runtime
+	// parameters, and Postgres refuses the connection over them. It also gives
+	// this connection the pool's connect_timeout default.
+	cfg, err := pgxpool.ParseConfig(l.DSN)
+	if err != nil {
+		return nil, false, fmt.Errorf("db: parse dsn for the import lock: %w", err)
+	}
+	applyPoolDefaults(cfg, l.DSN)
+
+	conn, err := pgx.ConnectConfig(ctx, cfg.ConnConfig)
 	if err != nil {
 		return nil, false, fmt.Errorf("db: connect for the import lock: %w", err)
 	}

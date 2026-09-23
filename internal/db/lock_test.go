@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"context"
+	"net/url"
 	"testing"
 
 	"github.com/sBurmester/recipe-reader/internal/db"
@@ -68,4 +69,29 @@ func TestImportLock_HoldsNoPoolConnection(t *testing.T) {
 	if got := pool.Stat().AcquiredConns(); got != 0 {
 		t.Errorf("pool has %d connection(s) checked out while the lock is held, want 0", got)
 	}
+}
+
+// The lock is handed the pool's DSN, and the README documents putting the
+// pool's settings into it. pgx.Connect does not know pool_max_conns and friends
+// and sends them to Postgres as runtime parameters, which Postgres refuses — so
+// a lock that parsed the DSN the way a single connection does would fail every
+// import on a documented configuration.
+func TestImportLock_AcceptsPoolSettingsInTheDSN(t *testing.T) {
+	u, err := url.Parse(testdb.NewDatabase(t, "import_lock_pool_dsn"))
+	if err != nil {
+		t.Fatalf("url.Parse() error = %v", err)
+	}
+	q := u.Query()
+	q.Set("pool_max_conns", "4")
+	q.Set("pool_min_conns", "1")
+	u.RawQuery = q.Encode()
+
+	release, ok, err := (db.ImportLock{DSN: u.String()}).TryAcquire(t.Context())
+	if err != nil {
+		t.Fatalf("TryAcquire() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("TryAcquire() ok = false, want the lock to be free")
+	}
+	release()
 }
