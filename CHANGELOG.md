@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/sBurmester/recipe-reader/compare/v0.1.4...v0.2.0) (2026-09-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **db:** migrate with goose instead of golang-migrate (6/6) ([#62](https://github.com/sBurmester/recipe-reader/issues/62))
+
+### Refactoring
+
+* **db:** migrate with goose instead of golang-migrate (6/6) ([#62](https://github.com/sBurmester/recipe-reader/issues/62)) ([419fd08](https://github.com/sBurmester/recipe-reader/commit/419fd087cf0f6b585195b19e3aef837fda5d472c))
+
 ## [0.1.4](https://github.com/sBurmester/recipe-reader/compare/v0.1.3...v0.1.4) (2026-09-23)
 
 
