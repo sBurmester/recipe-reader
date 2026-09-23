@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/sBurmester/recipe-reader/compare/v0.1.1...v0.1.2) (2026-09-23)
+
+
+### CI
+
+* keep dependencies updated with renovate (5/6) ([#45](https://github.com/sBurmester/recipe-reader/issues/45)) ([9b7f32d](https://github.com/sBurmester/recipe-reader/commit/9b7f32dbbd70b6d001e48c8dc98c667f95558912))
+
 ## [0.1.1](https://github.com/sBurmester/recipe-reader/compare/v0.1.0...v0.1.1) (2026-09-23)
 
 
