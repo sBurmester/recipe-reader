@@ -329,6 +329,8 @@ across processes, and repeated logins are what gets an account flagged. A server
 refusal as a run it did not make: it keeps reporting the last real tally rather than overwriting it
 with zeros. The lock is session-scoped, so Postgres frees it when the
 holder's connection ends, including when the process is killed; a lock file would be left behind.
+That connection is opened for the lock alone, outside the pool, so a shutdown never waits for an
+import it has given up on — and a running import uses one connection beyond `pool_max_conns`.
 
 When Instagram throttles a run, the error is recognised as a rate limit rather than an ordinary 4xx:
 the posts already collected are still imported, and the worker then stands down for 30 minutes.
