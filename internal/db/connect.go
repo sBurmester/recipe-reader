@@ -198,7 +198,7 @@ func (g gracefulMigrator) Stop() { g.GracefulStop <- true }
 // in a fake migrator without the package growing mutable state to swap.
 func migrateUp(ctx context.Context, open func() (migrator, error)) error {
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("db: migrate up: %w", err)
+		return migrateCancelled(err)
 	}
 	m, err := open()
 	if err != nil {
@@ -213,9 +213,18 @@ func migrateUp(ctx context.Context, open func() (migrator, error)) error {
 		return fmt.Errorf("db: migrate up: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("db: migrate up: %w", err)
+		return migrateCancelled(err)
 	}
 	return nil
+}
+
+// migrateCancelled words a cancellation for the operator who reads it and has to
+// decide what to do next. "context canceled" alone reads like damage, and it is
+// true at both places migrateUp reports it: before open nothing was applied,
+// and after Up only whole migrations were, because a graceful stop always lets
+// the one in flight finish.
+func migrateCancelled(err error) error {
+	return fmt.Errorf("db: migrate up: cancelled, nothing is half applied and re-running continues where it stopped: %w", err)
 }
 
 // MigrateDown reverts every applied migration against dsn, newest first,

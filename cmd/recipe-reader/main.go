@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -64,13 +65,19 @@ const description = "Imports recipes from Instagram saved posts, extracts struct
 	"required on a non-loopback HTTP_ADDR), INSTAGRAM_PASSWORD, LLM_API_KEY, and ANTHROPIC_API_KEY " +
 	"(fallback for LLM_API_KEY with the anthropic provider)."
 
-// main runs the command line. Every failure — a command line kong rejects or a
-// command that fails — is logged as one line and exits 1. kong's own
-// FatalIfErrorf would exit 80 for a usage error, and a container HEALTHCHECK
-// understands only 0 and 1.
+// main runs the command line. Every failure exits 1 — kong's own FatalIfErrorf
+// would exit 80 for a usage error, and a container HEALTHCHECK understands only
+// 0 and 1 — but the two kinds of failure are named apart. A command line this
+// binary could not read is fixed by reading --help; a run that went wrong is
+// not, and an operator scanning the log should not have to open the error
+// attribute to tell which one they are looking at.
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		slog.Error("fatal", "error", err)
+		if _, ok := errors.AsType[*kong.ParseError](err); ok {
+			slog.Error("invalid command line", "error", err)
+		} else {
+			slog.Error("fatal", "error", err)
+		}
 		os.Exit(1)
 	}
 }

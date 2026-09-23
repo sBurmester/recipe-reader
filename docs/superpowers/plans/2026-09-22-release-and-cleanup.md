@@ -95,8 +95,8 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - [x] Die zusammengesetzten Werte unter `environment:` (`DB_DSN`) gewinnen gegen `.env` — für `DB_DSN` erst seit M2, siehe die Abweichung in Task 2.
 
 **US3: Betreiber liest eine Fehlermeldung.**
-- [ ] Ein abgebrochener `migrate`-Lauf sagt, dass bereits angewandte Migrationen angewandt bleiben und ein erneuter Lauf gefahrlos fortsetzt.
-- [ ] Eine abgelehnte Kommandozeile wird als Bedienfehler gemeldet, ein gescheiterter Lauf als Fehler; beide enden weiterhin mit 1.
+- [x] Ein abgebrochener `migrate`-Lauf sagt, dass bereits angewandte Migrationen angewandt bleiben und ein erneuter Lauf gefahrlos fortsetzt.
+- [x] Eine abgelehnte Kommandozeile wird als Bedienfehler gemeldet, ein gescheiterter Lauf als Fehler; beide enden weiterhin mit 1.
 
 **US4: Betreiber installiert eine Version.**
 - [ ] Ein Merge des Release-PRs erzeugt Tag und GitHub-Release mit Changelog.
@@ -242,8 +242,8 @@ Abnahmekriterien:
 #### M3: Eindeutige Fehlermeldungen
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US3 sind abgehakt.
-- [ ] Beide Meldungen sind durch einen Test abgesichert, der ohne die Änderung fehlschlägt.
+- [x] Die Akzeptanzkriterien von US3 sind abgehakt.
+- [x] Beide Meldungen sind durch einen Test abgesichert, der ohne die Änderung fehlschlägt.
 
 #### M4: Release-Automatik
 
@@ -291,10 +291,10 @@ Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist.
 - [x] **M2: Konfiguration erreicht den Container**
   - [x] **Task 2:** `env_file` für den `app`-Service (S)
   - [x] **Milestone-Review**
-- [ ] **M3: Eindeutige Fehlermeldungen**
-  - [ ] **Task 3:** Der Abbruch einer Migration sagt, dass Wiederholen gefahrlos ist (S)
-  - [ ] **Task 4:** `main` unterscheidet Bedienfehler von Laufzeitfehler (S)
-  - [ ] **Milestone-Review**
+- [x] **M3: Eindeutige Fehlermeldungen**
+  - [x] **Task 3:** Der Abbruch einer Migration sagt, dass Wiederholen gefahrlos ist (S)
+  - [x] **Task 4:** `main` unterscheidet Bedienfehler von Laufzeitfehler (S)
+  - [x] **Milestone-Review**
 - [ ] **M4: Release-Automatik**
   - [ ] **Task 5:** `release-please` einrichten (M)
   - [ ] **Task 6:** Binaries und Prüfsummen ans Release hängen (M)
@@ -584,6 +584,8 @@ git commit -m "fix(compose): pass .env into the app container" -m "Compose read 
 
 `MigrateWithContext` meldet einen Abbruch als `db: migrate up: context canceled`. Das sagt nicht, was angewandt wurde, und legt nahe, es sei etwas kaputt. Tatsächlich ist der Zustand immer konsistent: golang-migrate bricht zwischen zwei Migrationen ab, die laufende wird immer zu Ende gebracht, und ein erneuter Lauf setzt fort.
 
+> **Abweichung (2026-09-23).** Step 1 hängt die Prüfung „vor der schließenden Klammer“ an — dort ist `err` aber schon durch `pool, err := pgxpool.New(…)` überschrieben und `nil`, `err.Error()` würde paniken. Die Prüfung steht deshalb direkt nach der `errors.Is`-Prüfung. Der Wortlaut aus Step 3 steht einmal, in `migrateCancelled`, das beide `ctx.Err()`-Zweige aufrufen.
+
 **Files:**
 - Modify: `internal/db/connect.go` (die beiden `ctx.Err()`-Zweige in `migrateUp`)
 - Modify: `internal/db/db_test.go` (Zusicherung auf die Meldung)
@@ -592,7 +594,7 @@ git commit -m "fix(compose): pass .env into the app container" -m "Compose read 
 - Consumes: —
 - Produces: unveränderte Signaturen; nur der Text der Fehlermeldung ändert sich.
 
-- [ ] **Step 1: Failing Test schreiben** (an den bestehenden `TestMigrateWithContext_CancelledContextAppliesNothing` in `internal/db/db_test.go` anhängen, vor dessen schließender Klammer)
+- [x] **Step 1: Failing Test schreiben** (an den bestehenden `TestMigrateWithContext_CancelledContextAppliesNothing` in `internal/db/db_test.go` anhängen, vor dessen schließender Klammer)
 
 ```go
 	// The operator reads this line and has to decide what to do next. "context
@@ -605,12 +607,12 @@ git commit -m "fix(compose): pass .env into the app container" -m "Compose read 
 
 Die Imports von `db_test.go` um `strings` ergänzen, falls es fehlt.
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test -count=1 -run TestMigrateWithContext ./internal/db/`
 Expected: FAIL, `want it to say that re-running is safe`
 
-- [ ] **Step 3: Die Meldung ändern** (`internal/db/connect.go`)
+- [x] **Step 3: Die Meldung ändern** (`internal/db/connect.go`)
 
 Beide `ctx.Err()`-Zweige in `migrateUp` — der vor `open()` und der nach `Up()` — geben heute `fmt.Errorf("db: migrate up: %w", err)` zurück. Beide ersetzen durch:
 
@@ -622,12 +624,12 @@ Der Satz gilt für beide Stellen: vor `open()` wurde nichts angewandt, nach `Up(
 
 **Dieser Wortlaut hält bis M6 und wird dort ein letztes Mal nachgeschärft** (R13): unter goose wird die laufende Migration nicht zu Ende gebracht, sondern zurückgerollt. Der Schluss bleibt derselbe — nichts ist halb angewandt, ein zweiter Lauf setzt fort —, nur die Begründung wechselt. Task 11 aus M6 ändert deshalb den Satz und nicht das Wort `re-running`, auf das der Test hier prüft. Wer Task 3 reviewt, soll das nicht als Fehler melden.
 
-- [ ] **Step 4: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 4: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go test -count=1 -race ./internal/db/`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/db
@@ -640,6 +642,8 @@ git commit -m "fix(db): say what a cancelled migration left behind" -m "\"contex
 
 `main` loggt jeden Fehler als `slog.Error("fatal", "error", err)`. Ein Tippfehler in der Kommandozeile sieht damit aus wie ein Absturz im Betrieb, obwohl das eine durch Lesen von `--help` behoben wird und das andere nicht. kong liefert Parse-Fehler als `*kong.ParseError`, die Unterscheidung ist also vorhanden und wird nur nicht genutzt.
 
+> **Befund (2026-09-23).** Step 5 wie erwartet: `invalid command line` in beiden Formaten, im Default-Format. Zusätzlich geprüft: auch Konfigurationsfehler aus der Umgebung (`API_TOKEN` fehlt bei nicht-loopback `HTTP_ADDR`, `EXTRACTION_MODE=bogus`) kommen von kong als `*kong.ParseError` und werden als `invalid command line` gemeldet. Die README sagt das ausdrücklich.
+
 **Files:**
 - Modify: `cmd/recipe-reader/main.go` (`main`)
 - Modify: `cmd/recipe-reader/main_test.go` (Tabelle von `TestMain_ExitStatus`)
@@ -648,7 +652,7 @@ git commit -m "fix(db): say what a cancelled migration left behind" -m "\"contex
 - Consumes: `run(args []string, opts ...kong.Option) error`
 - Produces: unverändertes Exit-Verhalten (0/1); nur die Logzeile unterscheidet sich.
 
-- [ ] **Step 1: Die Tabelle um die erwartete Logzeile erweitern** (`cmd/recipe-reader/main_test.go`)
+- [x] **Step 1: Die Tabelle um die erwartete Logzeile erweitern** (`cmd/recipe-reader/main_test.go`)
 
 `TestMain_ExitStatus` fängt die Ausgabe des Kindprozesses bereits in `out` ab und prüft sie nur nicht. Das Tabellenfeld ergänzen:
 
@@ -675,12 +679,12 @@ und nach der bestehenden Prüfung des Exit-Codes anfügen:
 		}
 ```
 
-- [ ] **Step 2: Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 2: Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test -count=1 -run TestMain_ExitStatus ./cmd/recipe-reader/`
 Expected: FAIL, `want it to contain "invalid command line"` — heute loggt auch der Parse-Fehler `fatal`.
 
-- [ ] **Step 3: `main` umbauen** (`cmd/recipe-reader/main.go`)
+- [x] **Step 3: `main` umbauen** (`cmd/recipe-reader/main.go`)
 
 ```go
 // main runs the command line. Every failure exits 1 — kong's own FatalIfErrorf
@@ -703,12 +707,12 @@ func main() {
 
 Die Imports um `errors` ergänzen; `kong` und `slog` sind bereits da.
 
-- [ ] **Step 4: Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 4: Tests laufen lassen, sie müssen grün sein**
 
 Run: `go test -count=1 -race ./cmd/recipe-reader/`
 Expected: PASS
 
-- [ ] **Step 5: Von Hand nachsehen**
+- [x] **Step 5: Von Hand nachsehen**
 
 ```bash
 go run ./cmd/recipe-reader --does-not-exist 2>&1 | tail -2
@@ -717,11 +721,11 @@ LOG_FORMAT=json go run ./cmd/recipe-reader --does-not-exist 2>&1 | tail -2
 
 Erwartet: `invalid command line` in beiden Formaten. Der zweite Aufruf belegt zugleich, dass die Unterscheidung auch für einen Log-Collector sichtbar ist — allerdings noch im Default-Format, weil ein Parse-Fehler vor `logging.Configure` auftritt (Entscheidung D4 des Vorgängerplans). Das Ergebnis in den Bericht aufnehmen; weicht es davon ab, anhalten und melden.
 
-- [ ] **Step 6: Den Backlog-Eintrag im Vorgängerplan kürzen**
+- [x] **Step 6: Den Backlog-Eintrag im Vorgängerplan kürzen**
 
 In `docs/superpowers/plans/2026-09-21-cli-backlog.md` im Eintrag „Fehlermeldungen eindeutiger machen" die beiden erledigten Unterpunkte (die Migrationsmeldung und `main`s Sammelzeile) streichen und über dem Eintrag vermerken, dass sie in diesem Plan behoben sind. Der dritte Unterpunkt — kongs Kommandopfad-Präfix — bleibt stehen, weil er ein Nutzerurteil braucht.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add cmd docs/superpowers/plans/2026-09-21-cli-backlog.md
