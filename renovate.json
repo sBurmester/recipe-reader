@@ -16,19 +16,31 @@
   },
   "packageRules": [
     {
-      "description": "go mod tidy after a module update, so go.sum matches what the PR changed instead of failing CI on the first run.",
+      "description": "go mod tidy after a module update, so go.sum matches what the PR changed instead of failing CI on the first run. Scope and label say at a glance that this is a Go module.",
       "matchManagers": ["gomod"],
-      "postUpdateOptions": ["gomodTidy"]
+      "postUpdateOptions": ["gomodTidy"],
+      "semanticCommitScope": "go",
+      "addLabels": ["go"]
+    },
+    {
+      "description": "Frontend packages, named as such in the title and the labels.",
+      "matchManagers": ["npm"],
+      "semanticCommitScope": "web",
+      "addLabels": ["npm"]
     },
     {
       "description": "Base images by digest, like the actions. The tag stays in front of the digest, so the file still says which version it means.",
       "matchManagers": ["dockerfile", "docker-compose"],
-      "pinDigests": true
+      "pinDigests": true,
+      "semanticCommitScope": "docker",
+      "addLabels": ["docker"]
     },
     {
       "description": "Action updates arrive as one pull request. CI skips a change that touches only .github/workflows (see #29), so these are read and run by hand — one pull request a week is reviewable, a dozen is not.",
       "matchManagers": ["github-actions"],
-      "groupName": "github actions"
+      "groupName": "github actions",
+      "semanticCommitScope": "actions",
+      "addLabels": ["github-actions"]
     },
     {
       "description": "A Postgres major version changes the on-disk format and needs the upgrade procedure in the README; Renovate raises patches and digests only.",
