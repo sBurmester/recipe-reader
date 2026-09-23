@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/sBurmester/recipe-reader/compare/v0.1.0...v0.1.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* **ci:** publish a release only after its assets are attached ([#42](https://github.com/sBurmester/recipe-reader/issues/42)) ([ae55cd6](https://github.com/sBurmester/recipe-reader/commit/ae55cd6a88b49df1978a12b516a317548940da9d))
+
 ## 0.1.0 (2026-09-23)
 
 
