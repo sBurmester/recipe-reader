@@ -111,7 +111,7 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 **US6: Entwickler hält die Abhängigkeiten aktuell, ohne sie zu suchen.**
 - [x] Renovate läuft nach Zeitplan als GitHub-App und lässt sich über das „Dependency Dashboard“-Issue von Hand anstoßen.
 - [x] Es öffnet PRs für Go-Module, GitHub Actions und Docker-Images.
-- [ ] Sicherheitslücken (OSV) werden mindestens täglich geprüft; ein Fix-PR wartet nicht auf den Wochenplan.
+- [x] Sicherheitslücken (OSV) werden mindestens täglich geprüft; ein Fix-PR wartet nicht auf den Wochenplan. *(Abgenommen über die Konfiguration, siehe die Abnahme unter M5.)*
 - [x] Jede Action und jedes Basisimage steht mit Digest im Repository, mit dem Tag als Kommentar.
 - [x] Ein Go-Update-PR durchläuft die CI wie jeder andere Code-PR.
 
@@ -167,7 +167,7 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - [ ] Commit-Gate grün; Docker-Gate grün für die Tasks, die das Image betreffen.
 - [ ] Die vier Backlog-Einträge im Plan vom 2026-09-21 sind als erledigt markiert oder verweisen auf diesen Plan.
 - [x] `v0.1.0` existiert als Tag, als GitHub-Release mit Changelog und als Image in der GHCR.
-- [ ] Renovate läuft und hat mindestens einen PR geöffnet; jede Action und jedes Basisimage ist auf Digest gepinnt.
+- [x] Renovate läuft und hat mindestens einen PR geöffnet; jede Action und jedes Basisimage ist auf Digest gepinnt.
 - [ ] `go.mod` nennt `github.com/pressly/goose/v3` und **nicht** mehr `github.com/golang-migrate/migrate/v4`; `grep -rn golang-migrate --include='*.go' .` findet nichts mehr.
 - [ ] README aktualisiert: Installation aus einem Release, Betrieb über das veröffentlichte Image, Hinweis auf `env_file`, Abschnitt zu Renovate und den gepinnten Digests, das goose-Dateiformat unter „Changing the database schema“, `goose_db_version` im Restore-Abschnitt und der Hinweis, wie eine ältere Entwicklungsdatenbank wieder brauchbar wird.
 
@@ -257,13 +257,15 @@ Abnahmekriterien:
 #### M5: Abhängigkeiten unter Aufsicht
 
 Abnahmekriterien:
-- [ ] Die Akzeptanzkriterien von US6 sind abgehakt.
+- [x] Die Akzeptanzkriterien von US6 sind abgehakt.
 - [x] `grep -rn 'uses: .*@v[0-9]' .github/workflows/` findet nichts mehr.
 - [x] Jedes `FROM` im `Dockerfile` und jedes `image:` in `docker-compose.yml`, das nicht aus der GHCR dieses Projekts stammt, trägt einen Digest.
 
 > **Stand (2026-09-23).** Offen bis zum ersten regulären Lauf: *„Ein Go-Update-PR durchläuft die CI“* (die Gruppe `go modules` war rate-limited, die Limits hebt #53 auf) und *„Sicherheitslücken … mindestens täglich“* (konfiguriert, noch ohne Anlass). Damit ist auch das Abnahmekriterium „Akzeptanzkriterien von US6“ noch offen.
 
 > **Nachtrag (2026-09-23).** Der Go-Update-PR ist belegt: #56 `fix(go): update go modules` (Labels `dependencies`, `go`; anthropic-sdk-go 1.75.0, golang-migrate 4.20.1, pgx 5.11.0, `go.mod` + `go.sum`) lief durch backend, frontend und docker, alles grün. Offen bleibt allein der erste Sicherheits-PR — er entsteht erst, wenn OSV eine Lücke in einer Abhängigkeit meldet. Außerdem belegt: der Release-PR #55 (`v0.1.3`) enthält nur den `fix:` aus #52; die `ci:`/`docs:`/`chore:`-Commits #49–#54 erscheinen nicht und lösten kein Release aus.
+
+> **Abnahme (2026-09-23, vom Nutzer entschieden).** Das OSV-Kriterium gilt als erfüllt, obwohl noch kein Sicherheits-PR existiert: es gab keinen Anlass für einen. `renovate.json` setzt `osvVulnerabilityAlerts: true` und `vulnerabilityAlerts.schedule: ["at any time"]`, ohne PR-Limit. `govulncheck` auf `main` (`16d79d0`) meldet allein GO-2026-5932 (`golang.org/x/crypto/openpgp`, vom Code nicht aufgerufen) — ohne Fix-Version (`Fixed in: N/A`), also richtigerweise ohne PR; `npm audit` meldet 0 Lücken. Die übrigen Kriterien sind auf `main` nachgeprüft: kein `uses: …@v<n>` in `.github/workflows/`, jedes fremde `FROM`/`image:` mit Digest, PRs für Go (#56, #59), Actions (#49, #58) und Docker (#51).
 
 #### M6: Migrationen unter goose
 
@@ -302,12 +304,12 @@ Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist.
   - [x] **Task 3:** Der Abbruch einer Migration sagt, dass Wiederholen gefahrlos ist (S)
   - [x] **Task 4:** `main` unterscheidet Bedienfehler von Laufzeitfehler (S)
   - [x] **Milestone-Review**
-- [ ] **M4: Release-Automatik**
+- [x] **M4: Release-Automatik**
   - [x] **Task 5:** `release-please` einrichten (M)
   - [x] **Task 6:** Binaries und Prüfsummen ans Release hängen (M)
   - [x] **Task 7:** Image in die GHCR, Compose darauf umstellen (M)
   - [x] **Milestone-Review**
-- [ ] **M5: Abhängigkeiten unter Aufsicht**
+- [x] **M5: Abhängigkeiten unter Aufsicht**
   - [x] **Task 8:** `renovate.json` (S)
   - [x] **Task 9:** Renovate als GitHub-App (S)
   - [x] **Task 10:** Renovate pinnt Actions und Images (M)
