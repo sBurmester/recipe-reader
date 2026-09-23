@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -110,6 +111,12 @@ func TestMigrateWithContext_CancelledContextAppliesNothing(t *testing.T) {
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("MigrateWithContext() error = %v, want it to wrap context.Canceled", err)
+	}
+	// The operator reads this line and has to decide what to do next. "context
+	// canceled" alone reads like damage; the truth is that nothing is half
+	// applied and a second run finishes the job.
+	if !strings.Contains(err.Error(), "re-running") {
+		t.Errorf("MigrateWithContext() error = %q, want it to say that re-running is safe", err)
 	}
 
 	pool, err := pgxpool.New(context.Background(), dsn)
