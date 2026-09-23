@@ -4,9 +4,9 @@
 
 **Goal:** Die vier Einträge im Backlog von `docs/superpowers/plans/2026-09-21-cli-backlog.md` abarbeiten — der Shutdown von `serve` bekommt seine obere Schranke zurück, `.env.example` erreicht den Container, zwei irreführende Fehlermeldungen werden eindeutig, und ein Tag nach Semantic Versioning erzeugt automatisch ein GitHub-Release mit Single-Binary und Container-Image — danach die Abhängigkeiten unter Aufsicht stellen: Renovate aktualisiert Go-Module, GitHub Actions und Docker-Images, letztere beide auf Digest gepinnt — und zuletzt die Migrations-Engine von `golang-migrate` auf `pressly/goose` umstellen.
 
-**Architecture:** Drei kleine Korrekturen am bestehenden Code gehen voraus, die Release-Automatik folgt — so trägt das erste Release `v0.1.0` einen Stand, den man veröffentlichen will, und sein Changelog die drei Korrekturen. Der Advisory-Lock wandert von einer geliehenen Pool-Verbindung auf eine eigene `pgx.Connect`-Verbindung, damit `pool.Close()` nicht mehr auf ihn wartet. Die Release-Automatik besteht aus zwei getrennten Workflows: `release-please` schlägt Version und Changelog vor und legt beim Merge Tag und Release an, ein zweiter Workflow hängt beim `published`-Ereignis die Artefakte an. Renovate kommt danach, weil es die Workflows pinnen soll, die die Release-Automatik erst anlegt; es läuft selbst als Workflow in diesem Repository, nicht als fremd gehostete App. Ganz zuletzt wird `golang-migrate` durch `pressly/goose` ersetzt: goose nimmt einen `context.Context` entgegen, legt jede Migration in eine eigene Transaktion und bringt den Advisory-Lock mit, sodass der handgeschriebene Abbruchpfad in `internal/db/connect.go` ersatzlos entfällt. Die sechs `*.up.sql`/`*.down.sql`-Dateien werden zu drei annotierten Dateien. Eine Übernahme bestehender `schema_migrations`-Tabellen gibt es nicht: die Software war nie im Einsatz, also existiert keine solche Datenbank außerhalb der Entwicklung.
+**Architecture:** Drei kleine Korrekturen am bestehenden Code gehen voraus, die Release-Automatik folgt — so trägt das erste Release `v0.1.0` einen Stand, den man veröffentlichen will, und sein Changelog die drei Korrekturen. Der Advisory-Lock wandert von einer geliehenen Pool-Verbindung auf eine eigene `pgx.Connect`-Verbindung, damit `pool.Close()` nicht mehr auf ihn wartet. Die Release-Automatik besteht aus zwei getrennten Workflows: `release-please` schlägt Version und Changelog vor und legt beim Merge Tag und Release an, ein zweiter Workflow hängt beim `published`-Ereignis die Artefakte an. Renovate kommt danach, weil es die Workflows pinnen soll, die die Release-Automatik erst anlegt; es läuft als Mend-Renovate-GitHub-App (E9, geändert am 2026-09-23). Ganz zuletzt wird `golang-migrate` durch `pressly/goose` ersetzt: goose nimmt einen `context.Context` entgegen, legt jede Migration in eine eigene Transaktion und bringt den Advisory-Lock mit, sodass der handgeschriebene Abbruchpfad in `internal/db/connect.go` ersatzlos entfällt. Die sechs `*.up.sql`/`*.down.sql`-Dateien werden zu drei annotierten Dateien. Eine Übernahme bestehender `schema_migrations`-Tabellen gibt es nicht: die Software war nie im Einsatz, also existiert keine solche Datenbank außerhalb der Entwicklung.
 
-**Tech Stack:** Go 1.27.1, pgx/v5, `github.com/alecthomas/kong` v1.16.1, Docker Compose 5.5.1, GitHub Actions (`googleapis/release-please-action@v5`, `docker/login-action@v4`, `docker/build-push-action@v7`, `renovatebot/github-action@v46`), GitHub Container Registry, `github.com/pressly/goose/v3` v3.28.0 (ersetzt `github.com/golang-migrate/migrate/v4` v4.19.1) über `github.com/jackc/pgx/v5/stdlib`. **Genau ein Abhängigkeitstausch, sonst keine neue Go-Abhängigkeit.**
+**Tech Stack:** Go 1.27.1, pgx/v5, `github.com/alecthomas/kong` v1.16.1, Docker Compose 5.5.1, GitHub Actions (`googleapis/release-please-action@v5`, `docker/login-action@v4`, `docker/build-push-action@v7`, Mend-Renovate-GitHub-App), GitHub Container Registry, `github.com/pressly/goose/v3` v3.28.0 (ersetzt `github.com/golang-migrate/migrate/v4` v4.19.1) über `github.com/jackc/pgx/v5/stdlib`. **Genau ein Abhängigkeitstausch, sonst keine neue Go-Abhängigkeit.**
 
 ## Global Constraints
 
@@ -109,7 +109,7 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - [x] `docker compose up --build` baut weiterhin lokal, für die Entwicklung.
 
 **US6: Entwickler hält die Abhängigkeiten aktuell, ohne sie zu suchen.**
-- [ ] Renovate läuft nach Zeitplan in diesem Repository und lässt sich von Hand anstoßen.
+- [ ] Renovate läuft nach Zeitplan als GitHub-App und lässt sich über das „Dependency Dashboard“-Issue von Hand anstoßen.
 - [ ] Es öffnet PRs für Go-Module, GitHub Actions und Docker-Images.
 - [ ] Jede Action und jedes Basisimage steht mit Digest im Repository, mit dem Tag als Kommentar.
 - [ ] Ein Go-Update-PR durchläuft die CI wie jeder andere Code-PR.
@@ -131,7 +131,7 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 | E6 | `docker-compose.yml` bekommt **`image:` und behält `build:`** | Betreiber ziehen das veröffentlichte Image (`docker compose pull`), Entwickler bauen lokal (`docker compose up --build`). Compose nimmt bei beiden Schlüsseln das lokal vorhandene Image und baut sonst — beide Arbeitsweisen bestehen nebeneinander, ohne dass eine die andere ausschließt. |
 | E7 | Zwei Workflows statt einem: `release-please.yml` und `release-artifacts.yml` | `release-please` läuft bei jedem Push auf `main` und hält einen PR offen; das Bauen der Artefakte soll genau einmal laufen, wenn das Release existiert. Ein Workflow müsste beides in einem Lauf unterscheiden. |
 | E8 | Das Changelog beginnt bei einem **`bootstrap-sha`**, nicht bei der ersten Zeile der Historie | Ohne Grenze schreibt `release-please` die gesamte Projekthistorie in das erste Changelog. Siehe R1. |
-| E9 | Renovate läuft **selbst gehostet als Workflow**, nicht als Mend-App (Nutzer, 2026-09-22) | Das Repository ist privat; eine fremd gehostete App bräuchte Lesezugriff darauf. Als Workflow bleibt alles versioniert und im Repo, und der Zeitplan liegt beim Betreiber. Preis: ein Personal Access Token als Secret, siehe R7. |
+| E9 | Renovate läuft als **Mend-Renovate-GitHub-App**, nicht selbst gehostet als Workflow (Nutzer, 2026-09-23; ersetzt die Entscheidung vom 2026-09-22) | Die ursprüngliche Begründung für den Workflow — das Repository sei privat und eine fremde App bräuchte Lesezugriff — trifft nicht zu: das Repository ist öffentlich. Die App braucht kein Personal Access Token, das angelegt und erneuert werden muss, und ihre PRs lösen die CI aus. Die Konfiguration bleibt versioniert in `renovate.json`, der Zeitplan steht dort (`schedule`). Preis: eine Abhängigkeit von Mends Dienst; die Logs der Läufe liegen im Mend-Portal (developer.mend.io), nicht in GitHub Actions. Die Installation macht der Nutzer (Task 9). |
 | E10 | Das Pinnen macht **Renovate selbst**, nicht ein Task von Hand (Nutzer, 2026-09-22) | Genau dafür stehen `helpers:pinGitHubActionDigests` und `pinDigests` in `renovate.json`. Digests von Hand aufzulösen würde denselben Mechanismus ein zweites Mal bauen — und die Handarbeit wäre schon beim nächsten Update überholt. Task 10 stößt Renovate an, liest seine PRs und merged sie; überprüfbar ist das Ergebnis, nicht der Weg dorthin. |
 | E11 | M5 kommt **nach** M4 | Gepinnt werden soll auch, was M4 anlegt: `release-please.yml` und `release-artifacts.yml` bringen fünf weitere Actions mit. Andersherum müsste M4 an das Pinning denken, und M5 müsste nachbessern. |
 | E12 | `pressly/goose` **ersetzt** `golang-migrate` (Nutzer, 2026-09-22) | goose nimmt überall einen `context.Context`, legt jede SQL-Migration in eine eigene Transaktion und bringt den Advisory-Lock als Option mit. Damit entfallen `migrator`, `gracefulMigrator`, das `context.AfterFunc` und die `ctx.Err()`-Prüfung nach `Up()` ersatzlos — rund 70 Zeilen Gerüst plus der Kommentar, der zwei bekannte Schwächen davon einräumt. Der Preis ist ein Modultausch, kein Zuwachs: golang-migrate geht, goose kommt. |
@@ -152,9 +152,9 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 | R4 | `env_file` schleust unerwartete Variablen in den Container | `.env` ist die Datei des Betreibers, und alles darin ist für genau diesen Dienst gedacht. Die zusammengesetzten `environment:`-Werte gewinnen weiterhin, was Task 2 prüft. |
 | R5 | Der Workflow-Task wird von der CI nicht geprüft (CI-Ausnahme aus #29) | Die Workflows werden über `workflow_dispatch` bzw. einen echten Release-Lauf geprüft, nicht über CI. Task 7 endet mit einem echten `v0.1.0`. |
 | R6 | `pgx.Connect` ohne die Pool-Defaults bekommt kein `connect_timeout` | Der DSN, den `ImportLock` bekommt, ist derselbe wie der des Pools; enthält er `connect_timeout`, gilt es auch hier. Der Aufruf steht ohnehin unter dem Kontext des Laufs. |
-| R7 | Renovate braucht ein Token, das der Nutzer anlegen muss | Der `GITHUB_TOKEN` eines Workflows darf keine PRs öffnen, die andere Workflows auslösen. Task 9 endet mit einer ausdrücklichen Übergabe: welcher Token-Typ, welche Rechte, welcher Secret-Name. Ohne ihn läuft der Workflow, findet aber nichts zu tun — er scheitert nicht still. |
+| R7 | ~~Renovate braucht ein Token, das der Nutzer anlegen muss~~ | Entfallen mit E9 in der Fassung vom 2026-09-23: die GitHub-App bringt ihre eigene Berechtigung mit. An seine Stelle tritt die Installation der App durch den Nutzer (Task 9); ohne sie öffnet Renovate nichts, und Task 10 hält an. |
 | R8 | Renovate-PRs, die **nur** Workflows anfassen, laufen wegen der CI-Ausnahme ohne CI | Genau die Änderungen, die man geprüft haben will, sind ungeprüft. Gegenmaßnahme: Renovate fasst Action-Updates zu einem PR zusammen (`groupName`), der von Hand über `workflow_dispatch` der CI vorgelegt wird, bevor er gemergt wird. Der Hinweis steht in der README. |
-| R9 | Ein gepinntes Basisimage friert Sicherheitsupdates ein, wenn Renovate ausfällt | Heute zieht `golang:1.27-alpine` Patches beim nächsten Build von selbst — gepinnt nicht mehr. Der Zeitplan (wöchentlich) und `workflow_dispatch` sind die Gegenmaßnahme; die Kommentare im `Dockerfile`, die das alte Verhalten beschreiben, werden in Task 10 berichtigt, damit niemand sich auf etwas verlässt, das nicht mehr gilt. |
+| R9 | Ein gepinntes Basisimage friert Sicherheitsupdates ein, wenn Renovate ausfällt | Heute zieht `golang:1.27-alpine` Patches beim nächsten Build von selbst — gepinnt nicht mehr. Der Zeitplan (wöchentlich) und das „Dependency Dashboard“, über das sich ein wartendes Update sofort anstoßen lässt, sind die Gegenmaßnahme; die Kommentare im `Dockerfile`, die das alte Verhalten beschreiben, werden in Task 10 berichtigt, damit niemand sich auf etwas verlässt, das nicht mehr gilt. |
 | R10 | sqlc liest dieselben Migrationsdateien; die goose-Annotationen könnten den generierten Code ändern | Am 2026-09-22 gegen die im Modul gepinnte sqlc v1.31.1 geprüft: `internal/migrations/migrations.go:26` bricht das Einlesen bei `-- +goose down` ab (Kleinschreibung, `strings.ToLower` davor), `IsDown` streicht `*.down.sql`. Beide Formate werden also unterstützt. Task 11 belegt es trotzdem: `make sqlc-generate` und `git diff --exit-code internal/db/sqlc` — die CI prüft dieselbe Drift. |
 | R11 | `testdb.reset` truncatet jede Tabelle außer `schema_migrations` — also künftig auch `goose_db_version` | Konkret benannt in Task 11, Steps 7 und 8: die Ausnahmeliste in `internal/db/migrations_test.go:182` und in `internal/db/testdb/testdb.go:155` muss auf `goose_db_version` umgestellt werden. Bliebe sie stehen, leerte der erste Test die Versionstabelle des geteilten Containers. |
 | R12 | Eine Datenbank, die ein Build vor M6 angelegt hat, startet nicht mehr | goose findet kein `goose_db_version`, hält die Datenbank für leer, wendet `0001` erneut an und scheitert an `CREATE TABLE units`. Das ist gewollt (E15) und betrifft nur Entwicklungsdatenbanken — die Tests legen über `testdb` immer frische an. Die README nennt beide Auswege, Neuanlegen und das Bookkeeping von Hand; die Abschluss-Verifikation führt einen davon aus. |
@@ -304,7 +304,7 @@ Jeder Milestone-Branch zweigt von `main` ab, nachdem der vorige PR gemerged ist.
   - [x] **Milestone-Review**
 - [ ] **M5: Abhängigkeiten unter Aufsicht**
   - [ ] **Task 8:** `renovate.json` (S)
-  - [ ] **Task 9:** Renovate als Workflow (M)
+  - [ ] **Task 9:** Renovate als GitHub-App (S)
   - [ ] **Task 10:** Renovate pinnt Actions und Images (M)
   - [ ] **Milestone-Review**
 - [ ] **M6: Migrationen unter goose**
@@ -1088,14 +1088,16 @@ git commit -m "ci: publish the image to ghcr and let compose pull it" -m "compos
 
 ### Task 8: `renovate.json`
 
-Die Konfiguration ist von der Frage unabhängig, wie Renovate läuft — sie gilt für die selbst gehostete Variante (E9) genauso wie für die App. Deshalb ein eigener Task: er lässt sich lesen und beurteilen, ohne dass ein Token existiert.
+Die Konfiguration ist von der Frage unabhängig, wie Renovate läuft — sie gilt für die App (E9) genauso wie für eine selbst gehostete Variante. Deshalb ein eigener Task: er lässt sich lesen und beurteilen, bevor die App installiert ist. Liegt `renovate.json` auf `main`, bevor die App installiert wird, überspringt Renovate seinen Onboarding-PR.
+
+> **Abweichung (2026-09-23).** Zusätzlich zur Datei unten eine Regel, die Postgres-Majors ausschließt (`matchPackageNames: ["postgres"]`, `matchUpdateTypes: ["major"]`, `enabled: false`): ein Wechsel von 18 auf 19 ändert das Datenformat auf der Platte und braucht die Upgrade-Anleitung der README, keinen Renovate-PR. `renovate-config-validator`: „Config validated successfully“.
 
 **Files:**
 - Create: `renovate.json`
 
 **Interfaces:**
 - Consumes: —
-- Produces: `renovate.json` im Wurzelverzeichnis, die Datei, die Task 9 dem Lauf mitgibt.
+- Produces: `renovate.json` im Wurzelverzeichnis, die Datei, die die App aus Task 9 liest.
 
 - [ ] **Step 1: `renovate.json` anlegen**
 
@@ -1153,90 +1155,35 @@ git commit -m "ci: configure renovate" -m "Go modules, GitHub Actions and Docker
 
 ---
 
-### Task 9: Renovate als Workflow
+### Task 9: Renovate als GitHub-App
 
-Renovate läuft in diesem Repository statt als fremd gehostete App (E9). Der Workflow braucht ein Token, das der Nutzer anlegt — der Task endet mit dieser Übergabe, nicht mit einem grünen Lauf.
+> **Neu gefasst am 2026-09-23** (E9 geändert): statt eines Workflows mit Personal Access Token läuft Renovate als Mend-GitHub-App. Der frühere Task — `.github/workflows/renovate.yml`, `renovatebot/github-action`, das Secret `RENOVATE_TOKEN` — entfällt ersatzlos.
 
 **Files:**
-- Create: `.github/workflows/renovate.yml`
 - Modify: `README.md` (Abschnitt „Dependencies")
 
 **Interfaces:**
 - Consumes: `renovate.json` (Task 8)
-- Produces: einen wöchentlichen Lauf und einen von Hand auslösbaren über `workflow_dispatch`
+- Produces: einen wöchentlichen Lauf der App und das Issue „Dependency Dashboard“, über das sich ein Update von Hand anstoßen lässt
 
-- [ ] **Step 1: `.github/workflows/renovate.yml` anlegen**
+- [ ] **Step 1: README**
 
-```yaml
-name: Renovate
+Einen Abschnitt „Dependencies" ergänzen: dass Renovate als GitHub-App läuft und `renovate.json` liest, wöchentlich (montags vor 6 Uhr, Europe/Berlin) PRs öffnet und über das „Dependency Dashboard“-Issue sofort angestoßen werden kann; dass Actions und Basisimages auf Digest gepinnt sind und der Tag daneben steht; dass Postgres-Majors ausgenommen sind; und — wegen R8 — dass ein PR, der nur Workflows anfasst, keine CI bekommt und deshalb vor dem Merge von Hand über `gh workflow run ci.yml --ref <branch>` gegen die CI geschickt wird.
 
-# Self-hosted rather than the Mend app: this repository is private, and running
-# the bot here keeps its schedule and its configuration in the repository
-# instead of granting an outside service read access to the code.
-on:
-  schedule:
-    # Mondays, early. Renovate's own schedule in renovate.json decides what it
-    # opens; this only decides how often it looks.
-    - cron: "0 4 * * 1"
-  workflow_dispatch:
-    inputs:
-      logLevel:
-        description: "Renovate log level"
-        required: false
-        default: "info"
-        type: choice
-        options: [info, debug]
-
-permissions:
-  contents: read
-
-jobs:
-  renovate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: renovatebot/github-action@v46
-        with:
-          configurationFile: renovate.json
-          # A PAT, not the workflow's GITHUB_TOKEN: a pull request opened with
-          # GITHUB_TOKEN does not trigger other workflows, so CI would never run
-          # on a Renovate pull request — the one place its result matters.
-          token: ${{ secrets.RENOVATE_TOKEN }}
-        env:
-          RENOVATE_REPOSITORIES: ${{ github.repository }}
-          LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
-```
-
-- [ ] **Step 2: Die Workflow-Syntax prüfen**
+- [ ] **Step 2: Commit**
 
 ```bash
-python3 -c "import yaml;d=yaml.safe_load(open('.github/workflows/renovate.yml'));print(list(d['jobs']), list(d[True] if True in d else d['on']))"
+git add README.md
+git commit -m "docs: describe how dependencies are kept up to date"
 ```
 
-Erwartet: `['renovate'] ['schedule', 'workflow_dispatch']`. Die CI prüft diesen Task nicht (CI-Ausnahme, R8), das hier ist die einzige Syntaxprüfung vor dem Merge.
+- [ ] **Step 3: Installation durch den Nutzer** (nicht vom Agent ausführbar)
 
-- [ ] **Step 3: README**
+1. https://github.com/apps/renovate → *Install* → *Only select repositories* → `recipe-reader`.
+2. Beim Mend Developer Portal (developer.mend.io) mit dem GitHub-Account anmelden; kein eigenes Konto.
+3. Öffnet Renovate trotzdem einen Onboarding-PR „Configure Renovate“, weil die App vor dem Merge von Task 8 installiert wurde: schließen, nicht mergen — die Konfiguration ist die aus Task 8.
 
-Einen Abschnitt „Dependencies" ergänzen: dass Renovate wöchentlich läuft und über den Actions-Tab von Hand angestoßen werden kann, dass Actions und Basisimages auf Digest gepinnt sind und der Tag als Kommentar daneben steht, und — wegen R8 — dass ein PR, der nur Workflows anfasst, keine CI bekommt und deshalb vor dem Merge von Hand über `workflow_dispatch` gegen die CI geschickt wird.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add .github/workflows/renovate.yml README.md
-git commit -m "ci: run renovate from this repository" -m "Self-hosted rather than the Mend app: the repository is private, and this keeps the schedule and the configuration versioned here. It needs a PAT because a pull request opened with GITHUB_TOKEN triggers no other workflow, and CI on a dependency update is the whole point."
-```
-
-- [ ] **Step 5: Übergabe an den Nutzer** (nicht vom Subagent ausführbar)
-
-Der Workflow läuft erst, wenn das Secret existiert. Dem Nutzer genau das vorlegen, statt es zu umgehen:
-
-- Ein Fine-grained Personal Access Token für **dieses** Repository mit den Berechtigungen **Contents: Read and write**, **Pull requests: Read and write** und **Workflows: Read and write** (letzteres, weil Renovate die Workflow-Dateien beim Pinnen ändert).
-- Als Repository-Secret unter dem Namen `RENOVATE_TOKEN` hinterlegen.
-- Danach den Workflow einmal über den Actions-Tab (`Run workflow`) anstoßen.
-
-Ohne das Secret läuft der Workflow durch, findet aber nichts zu tun; er scheitert nicht still (R7). Diese Übergabe gehört in den Bericht **und** in die Milestone-Abnahme, damit sie nicht in der Chat-Antwort verlorengeht.
+Geprüft wird die Installation in Task 10, Step 1: das Issue „Dependency Dashboard“ existiert.
 
 ---
 
@@ -1246,24 +1193,23 @@ Ein Tag ist verschiebbar: `actions/checkout@v7` kann morgen auf anderen Code zei
 
 Zwei Dinge macht Renovate **nicht**, und die bleiben Handarbeit: die Kommentare berichtigen, die das alte Verhalten beschreiben, und dafür sorgen, dass das eigene Release-Image ungepinnt bleibt.
 
-Dieser Task läuft **nach** M4, damit auch `release-please.yml` und `release-artifacts.yml` erfasst werden (E11), und er setzt voraus, dass die Übergabe aus **Task 9, Step 5** erledigt ist: ohne `RENOVATE_TOKEN` öffnet Renovate keine PRs, und dieser Task hat nichts zu tun. Ist das Secret nicht gesetzt, hier anhalten und den Nutzer erinnern, statt ersatzweise von Hand zu pinnen.
+Dieser Task läuft **nach** M4, damit auch `release-please.yml` und `release-artifacts.yml` erfasst werden (E11), und er setzt voraus, dass die Installation aus **Task 9, Step 3** erledigt ist: ohne die App öffnet Renovate keine PRs, und dieser Task hat nichts zu tun. Ist sie nicht installiert, hier anhalten und den Nutzer erinnern, statt ersatzweise von Hand zu pinnen.
 
 **Files:**
 - Modify (durch Renovates PRs): `.github/workflows/*.yml`, `Dockerfile`, `docker-compose.yml`
 - Modify (von Hand, Step 4): `Dockerfile`, `docker-compose.yml` — nur die Kommentare
 
 **Interfaces:**
-- Consumes: `renovate.json` (Task 8), der laufende Workflow und das Secret (Task 9)
+- Consumes: `renovate.json` (Task 8), die installierte App (Task 9)
 - Produces: —
 
 - [ ] **Step 1: Renovate anstoßen**
 
 ```bash
-gh workflow run renovate.yml
-sleep 30 && gh run list --workflow=renovate.yml --limit 1
+gh issue list --search 'Dependency Dashboard in:title' --json number,title
 ```
 
-Erwartet: ein Lauf, der grün endet. Endet er rot, die Logs lesen (`gh run view --log-failed`) und melden — ein fehlendes oder zu schwach berechtigtes Token zeigt sich hier und nicht später.
+Erwartet: das Issue „Dependency Dashboard“ — der Beleg, dass die App installiert ist und `renovate.json` gelesen hat. Die Pin-PRs fallen unter den Zeitplan (montags vor 6 Uhr); im Dashboard stehen sie dann unter „Awaiting Schedule“. Die Checkboxen dort erzeugen den PR sofort — der Nutzer oder der Agent hakt sie im Issue an (`gh issue edit` am Body oder im Browser). Fehlt das Issue nach einigen Minuten, die Logs im Mend-Portal lesen lassen und melden.
 
 - [ ] **Step 2: Die PRs lesen, bevor sie gemergt werden**
 
@@ -1292,7 +1238,7 @@ Erst wenn dieser Lauf grün ist, den PR mergen. Die übrigen PRs (Dockerfile, Co
 
 Renovate pinnt, aber es liest keine Prosa. Über den `FROM`-Zeilen im `Dockerfile` und über `postgres:` in `docker-compose.yml` steht, dass Patch-Releases von selbst ankommen — beim nächsten Build beziehungsweise mit `docker compose pull`. Das gilt nach dem Pinnen nicht mehr (R9).
 
-Die Kommentare so berichtigen, dass sie sagen, was jetzt stimmt: Der Digest friert das Image ein, Renovate hebt ihn wöchentlich, und wer schneller will, stößt `renovate.yml` von Hand an. Der Hinweis auf den Major-Wechsel von Postgres bleibt wortgleich stehen — er gilt unverändert.
+Die Kommentare so berichtigen, dass sie sagen, was jetzt stimmt: Der Digest friert das Image ein, Renovate hebt ihn wöchentlich, und wer schneller will, stößt das Update im „Dependency Dashboard“ an. Der Hinweis auf den Major-Wechsel von Postgres bleibt wortgleich stehen — er gilt unverändert.
 
 - [ ] **Step 5: Docker-Gate**
 
@@ -1319,7 +1265,7 @@ Nur die Kommentare aus Step 4 sind noch uncommittet; das Pinnen selbst steckt in
 
 ```bash
 git add Dockerfile docker-compose.yml
-git commit -m "docs: say what a pinned base image means" -m "The comments promised that patch releases arrive on their own — with the digests Renovate just pinned, they do not. Renovate raises them weekly, and renovate.yml can be run by hand when that is too slow."
+git commit -m "docs: say what a pinned base image means" -m "The comments promised that patch releases arrive on their own — with the digests Renovate just pinned, they do not. Renovate raises them weekly, and the Dependency Dashboard triggers one at once when that is too slow."
 ```
 
 ---
@@ -2064,11 +2010,11 @@ Erwartet: `pull` lädt das Image, der Stack wird `healthy`, und `--version` meld
 - [ ] **Step 8: Renovate im Betrieb nachsehen**
 
 ```bash
-gh run list --workflow=renovate.yml --limit 3
+gh issue list --search 'Dependency Dashboard in:title' --json number,title
 gh pr list --label dependencies --state all --limit 10 --json number,title,state --jq '.[] | "\(.number)\t\(.state)\t\(.title)"'
 ```
 
-Erwartet: mindestens ein grüner Lauf und mindestens ein PR, der geöffnet und gemergt wurde — der Beleg, dass Renovate nicht nur konfiguriert ist, sondern arbeitet. Findet sich kein einziger PR, ist entweder nichts zu aktualisieren (dann sagen die Logs des Laufs das) oder das Token fehlt (R7); beides ist zu unterscheiden und zu melden, nicht als Erfolg zu verbuchen.
+Erwartet: das Dashboard-Issue und mindestens ein PR, der geöffnet und gemergt wurde — der Beleg, dass Renovate nicht nur konfiguriert ist, sondern arbeitet. Findet sich kein einziger PR, ist entweder nichts zu aktualisieren (dann sagt das Dashboard das) oder die App ist nicht installiert (Task 9); beides ist zu unterscheiden und zu melden, nicht als Erfolg zu verbuchen.
 
 - [ ] **Step 9: Die Entwicklungsdatenbank auf das neue Bookkeeping bringen**
 
@@ -2128,7 +2074,7 @@ git commit -m "docs: mark M6 done in the release plan"
 | Offene Frage „Wo fängt die Zählung an?" | E2 — `v0.1.0` |
 | Offene Frage „Welche Plattformen?" | Task 6 — `linux/amd64`, `linux/arm64`, `darwin/arm64`, mit Prüfsummen |
 | Offene Frage „Was heißt *package* für Compose?" | E6 und Task 7 — GHCR-Image neben dem lokalen Build |
-| Renovate für Go, Actions und Docker (Nutzer, 2026-09-22) | Task 8 (Konfiguration), Task 9 (Betrieb als Workflow, E9) |
+| Renovate für Go, Actions und Docker (Nutzer, 2026-09-22) | Task 8 (Konfiguration), Task 9 (Betrieb als GitHub-App, E9) |
 | Actions und Docker-Abhängigkeiten auf Digest pinnen (Nutzer, 2026-09-22) | Task 8 (`helpers:pinGitHubActionDigests`, `pinDigests`), Task 10 — Renovate pinnt, der Task prüft (E10) |
 | Migration von `golang-migrate` auf `pressly/goose` (Nutzer, 2026-09-22) | Task 11 (Dateiformat E14, Engine E12/E16/E17/E18), Task 12 (Anleitung) |
 | Offene Frage „Was wird aus dem handgeschriebenen Abbruchpfad?" | Task 11 — `migrator`, `gracefulMigrator`, `migrateUp` und das `context.AfterFunc` entfallen ersatzlos; goose nimmt den Kontext selbst |
