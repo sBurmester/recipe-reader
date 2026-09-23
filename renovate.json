@@ -1,0 +1,39 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "timezone": "Europe/Berlin",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "go mod tidy after a module update, so go.sum matches what the PR changed instead of failing CI on the first run.",
+      "matchManagers": ["gomod"],
+      "postUpdateOptions": ["gomodTidy"]
+    },
+    {
+      "description": "Base images by digest, like the actions. The tag stays in front of the digest, so the file still says which version it means.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "pinDigests": true
+    },
+    {
+      "description": "Action updates arrive as one pull request. CI skips a change that touches only .github/workflows (see #29), so these are read and run by hand — one pull request a week is reviewable, a dozen is not.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    },
+    {
+      "description": "A Postgres major version changes the on-disk format and needs the upgrade procedure in the README; Renovate raises patches and digests only.",
+      "matchPackageNames": ["postgres"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "This project's own image is published by its release workflow, not updated by Renovate.",
+      "matchPackageNames": ["ghcr.io/sburmester/recipe-reader"],
+      "enabled": false
+    }
+  ]
+}
