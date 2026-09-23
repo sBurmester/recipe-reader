@@ -38,6 +38,11 @@ services:
       retries: 5
 
   app:
+    # Operators pull a published image; developers build locally with
+    # `docker compose up --build`. With both keys compose uses the image it
+    # finds and builds only when asked, so neither way shuts the other out.
+    # RECIPE_READER_VERSION pins a release; the default follows the newest.
+    image: ghcr.io/sburmester/recipe-reader:${RECIPE_READER_VERSION:-latest}
     build:
       context: .
       args:
