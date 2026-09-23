@@ -42,9 +42,12 @@ fail() {
 }
 
 docker network create "$net" >/dev/null
+# pg_isready over TCP: the image's first-start init server listens on the Unix
+# socket only, so a socket probe reports ready before the server the app
+# reaches over the network is up — see the db healthcheck in docker-compose.yml.
 docker run -d --name "$db" --network "$net" \
 	-e POSTGRES_DB=recipes -e POSTGRES_USER=recipes -e POSTGRES_PASSWORD=recipes \
-	--health-cmd "pg_isready -U recipes" --health-interval 1s --health-retries 60 \
+	--health-cmd "pg_isready -h 127.0.0.1 -U recipes" --health-interval 1s --health-retries 60 \
 	postgres:18-alpine >/dev/null
 
 for _ in $(seq 1 60); do
