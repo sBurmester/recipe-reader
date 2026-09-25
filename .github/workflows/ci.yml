@@ -14,6 +14,11 @@ name: CI
 # from the Actions tab after a non-trivial edit, or put the edit on a branch
 # that also touches code.
 #
+# .release-please-manifest.json is ignored so that release PRs start no run.
+# They change only it and CHANGELOG.md, on top of code CI already tested on
+# main. release-please opens them with GITHUB_TOKEN, and since June 2026 every
+# pull_request run such a PR starts waits for a maintainer to approve it.
+#
 # The two lists are duplicated because GitHub Actions does not expand YAML
 # anchors; keep them in step.
 on:
@@ -24,11 +29,13 @@ on:
       - "**.md"
       - "docs/**"
       - ".github/workflows/**"
+      - ".release-please-manifest.json"
   pull_request:
     paths-ignore:
       - "**.md"
       - "docs/**"
       - ".github/workflows/**"
+      - ".release-please-manifest.json"
 
 # Least privilege: no job here writes to the repository.
 permissions:

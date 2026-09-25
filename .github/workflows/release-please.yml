@@ -6,9 +6,12 @@ name: Release Please
 #
 # The PR and the release are made with GITHUB_TOKEN, which needs the repository
 # setting "Allow GitHub Actions to create and approve pull requests". It also
-# means neither of them triggers another workflow: a release made this way
-# fires no `release` event anywhere else, which is why the artifacts job below
-# calls release-artifacts.yml directly instead of that workflow listening.
+# means the release triggers no other workflow: a release made this way fires
+# no `release` event anywhere else, which is why the artifacts job below calls
+# release-artifacts.yml directly instead of that workflow listening. The PR is
+# different since June 2026: its pull_request runs start, but wait for a
+# maintainer's approval. ci.yml ignores the files a release PR changes, so it
+# starts none.
 on:
   push:
     branches: [main]
