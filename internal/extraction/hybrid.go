@@ -3,6 +3,7 @@ package extraction
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 )
 
@@ -32,6 +33,8 @@ func NewHybridExtractor(rules, llm Extractor, threshold float64) *HybridExtracto
 // LLM having read the caption and found no recipe, which is a better-informed
 // answer than a rules pass that scraped a couple of lines out of a gym selfie.
 // Returning the rules result there is precisely how junk rows got imported.
+//
+// A cancelled ctx is the other exception: see the check below.
 func (h *HybridExtractor) Extract(ctx context.Context, caption string) (*ExtractedRecipe, error) {
 	result, err := h.Rules.Extract(ctx, caption)
 	if err != nil {
@@ -45,6 +48,15 @@ func (h *HybridExtractor) Extract(ctx context.Context, caption string) (*Extract
 		return nil, err
 	}
 	if err != nil {
+		// A cancelled run is not an LLM failure, and the fallback below is not
+		// for it. The caller's own context is what is checked, not the error: the
+		// LLM's timeout is a context error too, and that one is a hiccup the
+		// fallback exists for, while the caller still wants a result. Once the
+		// caller has gone, a weaker result is only something the pipeline would
+		// try to store on a context that is already done.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("extraction: %w", ctxErr)
+		}
 		// Say so, and mark the result. This was the worst of the three silent
 		// sites: the fallback is invisible in both directions, because the
 		// import tally reports success while quality degrades — so an expired

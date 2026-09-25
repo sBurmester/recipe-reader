@@ -283,7 +283,10 @@ Each of these was decided on purpose. Don't reverse one without the user's appro
   abandoned import (E3). A worker that gets refused keeps reporting the last real tally.
 - `serve` shutdown: HTTP drain plus import wait, with a 10s budget. After that an import is
   abandoned with a log line. `server.Run` works on its own cancellable context and waits for its
-  goroutines even on a failed start.
+  goroutines even on a failed start. A cancelled context reaches an LLM call at once, whatever
+  `LLM_TIMEOUT` is: `Extract` derives its timeout from the caller's context and both SDKs wait on
+  it (`TestLLMExtractor_ParentCancellationEndsARealCallAtOnce`). An abandoned import therefore
+  does not run on for a timeout; the old backlog entry saying so was measured and withdrawn.
 - Tally fields are `seen`, `imported`, `skipped`, `no_recipe`, `failed` and `degraded`.
   `no_recipe` is separate from `skipped` and `failed`. `degraded` overlaps `imported` (the LLM
   failed and the rules result was used).
@@ -314,6 +317,11 @@ Each of these was decided on purpose. Don't reverse one without the user's appro
   (the old `NO_RECIPE_FOUND`). In hybrid mode, an LLM `ErrNoRecipe` is final and never falls back
   to the rules result. An LLM *failure* does fall back, and the result is marked `Degraded` and
   logged (E1, E8/T-15).
+- **A cancelled caller is not an LLM failure.** Hybrid returns the caller's context error instead
+  of falling back, and the pipeline ends the run on it: the interrupted post is counted nowhere
+  (not `failed`, not `seen`) and is seen again by the next run. The check is on the caller's own
+  context, not on the error, because the LLM's timeout is a context error too and stays a
+  fallback (`TestHybridExtractor_LLMTimeoutStillFallsBackWhileTheCallerIsAlive`).
 - **Prompt injection:** the caption is attacker-controlled. It is wrapped in a `<caption>` span
   declared as data, with any `<caption>`/`</caption>` in it neutralised, and the confidence field
   is named as part of that data. `ToolChoice` is pinned to `record_recipe` and the schema is
@@ -425,8 +433,6 @@ These are blocked on access, not on work. Don't try to finish them from the repo
 
 Backlog, deliberately not scheduled:
 
-- An abandoned import ends only after its `LLM_TIMEOUT`. Fixing the cause means threading
-  cancellation into the extraction path.
 - kong's command-path prefix in error messages needs a judgement from the user.
 - A multi-arch image (`linux/arm64`), and signing or provenance for release artifacts.
 - The redundant `idx_recipe_ingredients_recipe_id` index.

@@ -3,6 +3,8 @@ package extraction
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -52,6 +54,51 @@ func TestNewLLMExtractor_Timeout(t *testing.T) {
 			}
 			if e.timeout != tc.want {
 				t.Errorf("timeout = %v, want %v", e.timeout, tc.want)
+			}
+		})
+	}
+}
+
+// A cancelled parent context has to end a real SDK call at once, whatever the
+// extractor's own timeout is. The backlog once claimed that an abandoned import
+// ran on for up to LLM_TIMEOUT because cancellation "was not threaded into the
+// extraction path"; it is: Extract derives its timeout from the caller's
+// context, and both SDKs build their requests and wait out their retry backoff
+// on it. This runs each SDK against a server that accepts the request and never
+// answers, with a one-hour timeout, so only the cancellation can be what ends it.
+func TestLLMExtractor_ParentCancellationEndsARealCallAtOnce(t *testing.T) {
+	release := make(chan struct{})
+	stall := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	// Cleanups run last in, first out: the handler is let go before Close waits
+	// for it, or a failing run would hang here instead of failing.
+	t.Cleanup(stall.Close)
+	t.Cleanup(func() { close(release) })
+
+	for _, provider := range []LLMProvider{ProviderAnthropic, ProviderOpenAI} {
+		t.Run(string(provider), func(t *testing.T) {
+			e, err := NewLLMExtractor(LLMConfig{
+				Provider: provider, APIKey: "sk-test", Model: "test-model",
+				BaseURL: stall.URL, Timeout: time.Hour,
+			})
+			if err != nil {
+				t.Fatalf("NewLLMExtractor() error = %v", err)
+			}
+
+			ctx, cancel := context.WithCancel(t.Context())
+			time.AfterFunc(50*time.Millisecond, cancel)
+
+			start := time.Now()
+			_, err = e.Extract(ctx, "caption")
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("Extract() error = %v, want it to wrap context.Canceled", err)
+			}
+			if elapsed := time.Since(start); elapsed > 5*time.Second {
+				t.Errorf("Extract() returned after %v, want the cancellation to end it at once", elapsed)
 			}
 		})
 	}

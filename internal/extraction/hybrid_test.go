@@ -3,6 +3,7 @@ package extraction
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -154,5 +155,51 @@ func TestHybridExtractor_FallsBackThroughOpenAICompatibleProvider(t *testing.T) 
 	}
 	if result.Degraded {
 		t.Error("Degraded = true for a successful LLM extraction")
+	}
+}
+
+// cancellingExtractor cancels the context it was given and then reports what an
+// SDK reports for it, which is how a shutdown looks from inside an LLM call.
+type cancellingExtractor struct{ cancel context.CancelFunc }
+
+func (c cancellingExtractor) Extract(ctx context.Context, _ string) (*ExtractedRecipe, error) {
+	c.cancel()
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// A cancelled run is not an LLM hiccup. The fallback exists so that a failing
+// provider never fails an import, but when the caller itself has been cancelled
+// the weaker rules result is not wanted either: it used to come back as a
+// success marked Degraded, and the pipeline then tried to store it on a context
+// that was already done and counted the post as failed.
+func TestHybridExtractor_CancellationIsNotAnLLMFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	rules := &stubExtractor{result: &ExtractedRecipe{Name: "A", Confidence: 0.3}}
+	h := NewHybridExtractor(rules, cancellingExtractor{cancel: cancel}, 0.6)
+
+	result, err := h.Extract(ctx, "caption")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Extract() error = %v, want it to wrap context.Canceled", err)
+	}
+	if result != nil {
+		t.Errorf("Extract() = %+v, want no result for a cancelled run", result)
+	}
+}
+
+// The counterpart, so the fix cannot over-correct: the LLM's own timeout is
+// also a context error, but the caller's context is still alive, and that stays
+// what the fallback is for.
+func TestHybridExtractor_LLMTimeoutStillFallsBackWhileTheCallerIsAlive(t *testing.T) {
+	rules := &stubExtractor{result: &ExtractedRecipe{Name: "A", Confidence: 0.3}}
+	llm := &stubExtractor{err: fmt.Errorf("llm extract: %w", context.DeadlineExceeded)}
+	h := NewHybridExtractor(rules, llm, 0.6)
+
+	result, err := h.Extract(t.Context(), "caption")
+	if err != nil {
+		t.Fatalf("Extract() error = %v, want the rules result", err)
+	}
+	if result.Name != "A" || !result.Degraded {
+		t.Errorf("Extract() = %+v, want the rules result marked Degraded", result)
 	}
 }
