@@ -184,9 +184,9 @@ Ein PR enthält die Task-Commits seines Milestones, die Korrekturen aus dem Mile
 ### Aufgabenliste
 
 - [x] **Vorbereitung:** Diesen Plan und das Abhaken der Task-Dateien vom 2026-09-25 über einen eigenen `docs:`-PR auf `main` bringen, damit jeder Milestone-Branch ihn schon enthält
-- [ ] **M1: Abbruch statt Fallback**
+- [x] **M1: Abbruch statt Fallback**
   - [x] **Task 1:** Ein Abbruch ist kein LLM-Ausfall und kein fehlgeschlagener Post (M)
-  - [ ] **Milestone-Review**
+  - [x] **Milestone-Review**
 - [ ] **M2: Ein Index weniger**
   - [ ] **Task 2:** Migration `0004` (S)
   - [ ] **Milestone-Review**
