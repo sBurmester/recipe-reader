@@ -188,9 +188,9 @@ Ein PR enthält die Task-Commits seines Milestones, die Korrekturen aus dem Mile
 - [x] **M1: Abbruch statt Fallback**
   - [x] **Task 1:** Ein Abbruch ist kein LLM-Ausfall und kein fehlgeschlagener Post (M)
   - [x] **Milestone-Review**
-- [ ] **M2: Ein Index weniger**
+- [x] **M2: Ein Index weniger**
   - [x] **Task 2:** Migration `0004` (S)
-  - [ ] **Milestone-Review**
+  - [x] **Milestone-Review**
 - [ ] **M3: arm64-Image**
   - [ ] **Task 3:** Image je Architektur, Manifest-Liste, CI auf beiden (M)
   - [ ] **Milestone-Review**
