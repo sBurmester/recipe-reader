@@ -343,8 +343,8 @@ Each of these was decided on purpose. Don't reverse one without the user's appro
 - **A new migration is one file**, `internal/db/migrations/000N_<name>.sql`, with `-- +goose Up`
   and `-- +goose Down` and **no `BEGIN;`/`COMMIT;`**, because goose wraps each migration in a
   transaction. Use `-- +goose NO TRANSACTION` only for statements like `CREATE INDEX CONCURRENTLY`.
-  **A comment must not contain a `+goose` annotation, even mid-sentence:** goose reads such a line
-  as a directive and refuses the file.
+  **No comment may contain `+goose`:** goose takes every such line for an annotation, obeys a
+  valid one (a commented-out example still applies) and refuses the file over anything else.
   Never renumber or edit an applied migration.
 - A migration change means: the migration plus the query edits, then `make sqlc-generate`, then
   one commit with everything including the regenerated `internal/db/sqlc/`. sqlc reads the same

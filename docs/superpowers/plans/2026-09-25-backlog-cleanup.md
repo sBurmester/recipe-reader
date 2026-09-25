@@ -50,7 +50,7 @@
 | 2 | kongs Kommandopfad-Präfix (`serve: config: API_TOKEN …`) braucht ein Nutzerurteil | Das Präfix `serve:` setzt kong fest ein (`context.go:232`: Fehler eines Validators bekommen den Pfad des Knotens vorangestellt), es gibt keine Option dafür. `config:` ist unser eigenes und steht an fünf Stellen in `config.go`. Nur Fehler aus `Validate()`-Methoden tragen das Präfix; ein Enum-Fehler wie `--log-level` trägt keines. Kein Test hängt an der Form. | **Entscheidung O1**, M5 |
 | 3 | Multi-Arch-Image (`linux/arm64`) | Alle Basis-Images (`node`, `golang`, `alpine` im Dockerfile, `postgres` im Smoke-Test und in Compose) sind Multi-Arch-Indizes mit `linux/arm64`, und die gepinnten Digests sind die Index-Digests: **das Dockerfile braucht keine Änderung.** Die arm64-Binaries gibt es schon. Native ARM-Runner (`ubuntu-24.04-arm`) sind für öffentliche Repositories kostenlos; das Repository ist öffentlich. | M3 |
 | 4 | Signatur und Provenance der Release-Artefakte | **Teilweise schon da.** Das Release ist unveränderlich, und GitHub attestiert solche Releases von selbst: `gh release verify v0.2.0` meldet ✓ und listet alle vier Assets mit Digest, `gh release verify-asset` bestätigt die Binary. **Es fehlt** die *Build-Provenance* (welcher Workflow, welcher Commit hat das gebaut): `gh attestation verify` liefert für Binary **und** Image HTTP 404. Das README sagt außerdem noch „The binaries are not signed", was so nicht mehr stimmt. Attestations sind Sigstore-signiert, ein eigener Schlüssel oder `cosign` ist nicht nötig. | M4 |
-| 5 | Migrationen mit goose' No-Transaction-Modus | Auslöserbasiert: nötig erst, wenn eine Migration `CREATE INDEX CONCURRENTLY` braucht. Keine tut es. Beim Prüfen von M2 fiel ein echter Stolperstein auf: **goose liest jede Kommentarzeile, die die Annotation enthält, als Direktive, auch mitten im Satz, und lehnt die Datei ab.** | Kein Task; M2 entscheidet den ersten Kandidaten und hält die Warnung fest |
+| 5 | Migrationen mit goose' No-Transaction-Modus | Auslöserbasiert: nötig erst, wenn eine Migration `CREATE INDEX CONCURRENTLY` braucht. Keine tut es. Beim Prüfen von M2 fiel ein echter Stolperstein auf: **goose liest jede Kommentarzeile, die `+goose` enthält, als Annotation: eine gültige befolgt es stillschweigend, auch als auskommentiertes Beispiel; an jeder anderen, etwa mitten im Satz, lehnt es die Datei ab.** | Kein Task; M2 entscheidet den ersten Kandidaten und hält die Warnung fest |
 | 6 | Der Index `idx_recipe_ingredients_recipe_id` ist redundant | Bestätigt. `0003` legt `UNIQUE (recipe_id, position)` an, dessen Index mit `recipe_id` beginnt; die zwei Lesezugriffe in `recipes.sql` filtern auf `recipe_id` und sortieren nach `position`, das Ersetzen der Zutaten löscht über `recipe_id`. | M2 |
 
 ### Ziele (Outcomes)
@@ -108,7 +108,7 @@ Am 2026-09-25 entschieden; keine der Fragen ist damit mehr offen.
 | R4 | Ein Rerun (`workflow_dispatch`) überschreibt die suffixierten Tags | Gewollt und harmlos: gleicher Tag, neu gebautes Image desselben Commits. `latest` bewegt ein Rerun nicht (bestehende Regel). |
 | R5 | Ein Rerun attestiert die Binaries erneut | Für einen Entwurf, dessen Lauf scheiterte, richtig: `gh release upload --clobber` ersetzt die Assets, und die Attestation gilt für die Bytes, die dann im Release liegen. Ein veröffentlichtes Release kann ohnehin keine Assets mehr aufnehmen. |
 | R6 | Die zwei Tags `<tag>-amd64`/`<tag>-arm64` bleiben in der Registry stehen | E2. Im README erwähnt, damit niemand sie für Überbleibsel hält und löscht. |
-| R7 | goose lehnt eine Migration ab, weil ein Kommentar die Annotation enthält | In M2 gefunden und dokumentiert (README, `AGENTS.md`). `TestMigrations_UpDownUp` und der `0004`-Test lesen die Datei durch goose und scheitern sofort. |
+| R7 | Ein Kommentar enthält `+goose`, und goose liest die Zeile als Annotation | In M2 gefunden und dokumentiert (README, `AGENTS.md`): `+goose` gehört in keinen Kommentar. Ist die Zeile keine gültige Annotation, lehnt goose die Datei ab; `TestMigrations_UpDownUp` und der `0004`-Test lesen sie durch goose und scheitern dann sofort. Ist sie gültig (ein auskommentiertes Beispiel), befolgt goose sie stillschweigend und fährt die Migration dann etwa ohne Transaktion; das fängt kein Test verlässlich, nur die Regel. |
 | R8 | Ein falsches PR-Präfix erzeugt die falsche Version | O2 ist entschieden (`feat(ci)`, E10); der Release-PR wird vor dem Merge gelesen und zeigt die vorgeschlagene Version. M1 ist ein `fix`, M2 ein `perf` (kein Release), M3 und M4 sind `feat`: mit M3 wird aus `0.2.1` ein `0.3.0`, mit M4 ein `0.4.0`, wenn dazwischen ein Release entsteht. |
 
 ### Definition of Done
@@ -672,8 +672,9 @@ const redundantIndex = "idx_recipe_ingredients_recipe_id"
 // recipe_id, so it serves every lookup by recipe_id the single-column one did.
 // What has to hold is that the drop leaves no lookup without an index, so this
 // checks the plan rather than trusting the argument. Sequential scans are
-// switched off for it, because the table is empty and the planner would
-// otherwise pick one whatever indexes exist.
+// switched off for it so the check does not depend on statistics: the empty,
+// never-analysed table gets a guessed size and the index today, but once an
+// ANALYZE records it as empty, a sequential scan beats any index there is.
 func TestMigration0004_DropsTheRedundantIndexWithoutLosingTheLookup(t *testing.T) {
 	ctx := t.Context()
 	dsn := testdb.NewDatabase(t, "migration_0004")
@@ -755,14 +756,15 @@ Expected: **FAIL** mit `idx_recipe_ingredients_recipe_id still exists after 0004
 -- leads with recipe_id. It therefore serves every lookup by recipe_id that
 -- idx_recipe_ingredients_recipe_id served — the two reads in recipes.sql, the
 -- delete that replaces a recipe's ingredients, and the ON DELETE CASCADE from
--- recipes — and serves the ORDER BY position on top of it. The single-column
--- index only stayed to be maintained on every write for nothing.
+-- recipes. The single-column index only stayed to be maintained on every write
+-- for nothing.
 --
 -- A plain DROP INDEX rather than DROP INDEX CONCURRENTLY: the table is one
 -- person's recipe lines, the lock is over in milliseconds, and CONCURRENTLY
 -- would need goose's no-transaction mode to buy nothing here. (Comments must
--- not spell that annotation out: goose reads any comment line containing it as
--- a directive, mid-sentence or not, and refuses the file.)
+-- not spell that annotation out: goose takes any comment line holding its
+-- prefix for one. Alone on a line, as an example, it would take this file out
+-- of its transaction; mid-sentence, it makes goose refuse the file.)
 DROP INDEX IF EXISTS idx_recipe_ingredients_recipe_id;
 
 -- +goose Down
@@ -786,8 +788,10 @@ Expected: `sqlc: no drift`. Die CI prüft dieselbe Drift.
 `README.md`, Abschnitt „Changing the database schema": hinter den Satz, der mit `file instead.` endet, anhängen:
 
 ```
-   Keep the annotations out of comments as well: goose reads any comment line that contains one as a
-   directive, mid-sentence or not, and refuses the whole file.
+   Keep `+goose` out of comments altogether: goose takes every comment line that
+   contains it for an annotation. A valid one is obeyed silently, so a commented-out
+   `-- +goose NO TRANSACTION` still takes the file out of its transaction; anything else, a mention
+   mid-sentence included, makes goose refuse the whole file.
 ```
 
 `AGENTS.md`, Abschnitt „Persistence and migrations", zwei Änderungen. Alt:
@@ -815,8 +819,8 @@ Neu (die Warnung gilt ab jetzt für jede Migration; warum `0004` ohne den No-Tra
 
 ```
   transaction. Use `-- +goose NO TRANSACTION` only for statements like `CREATE INDEX CONCURRENTLY`.
-  **A comment must not contain a `+goose` annotation, even mid-sentence:** goose reads such a line
-  as a directive and refuses the file.
+  **No comment may contain `+goose`:** goose takes every such line for an annotation, obeys a
+  valid one (a commented-out example still applies) and refuses the file over anything else.
   Never renumber or edit an applied migration.
 ```
 
@@ -835,7 +839,7 @@ Den Eintrag im Abschnitt „Open work and backlog" streichen:
 `docs/superpowers/plans/2026-09-22-release-and-cleanup.md`, Backlog, vor den Eintrag „Migrationen mit `-- +goose NO TRANSACTION`" einfügen:
 
 ```
-> **Geprüft, kein Task (2026-09-25).** Der Eintrag ist auslöserbasiert und bleibt es: nötig wird der No-Transaction-Modus erst mit einer Migration, die `CREATE INDEX CONCURRENTLY` braucht. Der einzige Kandidat, das Entfernen des redundanten Index in `0004` (Plan [2026-09-25-backlog-cleanup.md](2026-09-25-backlog-cleanup.md), E8), braucht ihn nicht; ein einfaches `DROP INDEX` genügt bei dieser Tabellengröße. Dabei fiel auf, dass goose eine Kommentarzeile mit der Annotation als Direktive liest und die Datei ablehnt; das steht jetzt im README und in `AGENTS.md`.
+> **Geprüft, kein Task (2026-09-25).** Der Eintrag ist auslöserbasiert und bleibt es: nötig wird der No-Transaction-Modus erst mit einer Migration, die `CREATE INDEX CONCURRENTLY` braucht. Der einzige Kandidat, das Entfernen des redundanten Index in `0004` (Plan [2026-09-25-backlog-cleanup.md](2026-09-25-backlog-cleanup.md), E8), braucht ihn nicht; ein einfaches `DROP INDEX` genügt bei dieser Tabellengröße. Dabei fiel auf, dass goose jede Kommentarzeile, die `+goose` enthält, als Annotation liest: eine gültige befolgt es stillschweigend (auch ein auskommentiertes Beispiel wirkt), an jeder anderen lehnt es die Datei ab; das steht jetzt im README und in `AGENTS.md`.
 ```
 
 - [x] **Step 8: Commit-Gate und Commit**

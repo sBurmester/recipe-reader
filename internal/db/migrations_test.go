@@ -157,8 +157,9 @@ const redundantIndex = "idx_recipe_ingredients_recipe_id"
 // recipe_id, so it serves every lookup by recipe_id the single-column one did.
 // What has to hold is that the drop leaves no lookup without an index, so this
 // checks the plan rather than trusting the argument. Sequential scans are
-// switched off for it, because the table is empty and the planner would
-// otherwise pick one whatever indexes exist.
+// switched off for it so the check does not depend on statistics: the empty,
+// never-analysed table gets a guessed size and the index today, but once an
+// ANALYZE records it as empty, a sequential scan beats any index there is.
 func TestMigration0004_DropsTheRedundantIndexWithoutLosingTheLookup(t *testing.T) {
 	ctx := t.Context()
 	dsn := testdb.NewDatabase(t, "migration_0004")
