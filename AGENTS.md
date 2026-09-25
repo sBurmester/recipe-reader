@@ -343,6 +343,8 @@ Each of these was decided on purpose. Don't reverse one without the user's appro
 - **A new migration is one file**, `internal/db/migrations/000N_<name>.sql`, with `-- +goose Up`
   and `-- +goose Down` and **no `BEGIN;`/`COMMIT;`**, because goose wraps each migration in a
   transaction. Use `-- +goose NO TRANSACTION` only for statements like `CREATE INDEX CONCURRENTLY`.
+  **A comment must not contain a `+goose` annotation, even mid-sentence:** goose reads such a line
+  as a directive and refuses the file.
   Never renumber or edit an applied migration.
 - A migration change means: the migration plus the query edits, then `make sqlc-generate`, then
   one commit with everything including the regenerated `internal/db/sqlc/`. sqlc reads the same
@@ -358,8 +360,6 @@ Each of these was decided on purpose. Don't reverse one without the user's appro
   with `DO UPDATE` kept for the race. Lookups run **inside the recipe transaction** (T-08, T-60).
 - **A recipe may list the same ingredient twice.** `(recipe_id, position)` is unique, and
   `(recipe_id, ingredient_id)` is not (T-55, migration `0003`).
-  `idx_recipe_ingredients_recipe_id` is now redundant, and dropping it is left to a later
-  migration.
 - Search escapes `%`, `_` and `\` **in SQL**, in both `SearchRecipes` and `CountRecipes`, so the
   page and `total` agree (T-31). Count and page are two statements, not one snapshot. That was
   accepted (T-62).
@@ -427,7 +427,6 @@ Backlog, deliberately not scheduled:
 
 - kong's command-path prefix in error messages needs a judgement from the user.
 - A multi-arch image (`linux/arm64`), and signing or provenance for release artifacts.
-- The redundant `idx_recipe_ingredients_recipe_id` index.
 
 ## Where the full reasoning lives
 

@@ -1204,6 +1204,7 @@ re-opens a settled one or assumes a live one is settled:
       *Noted, not done:* the new unique index leads with `recipe_id`, which
       makes `idx_recipe_ingredients_recipe_id` redundant. Dropping it is a
       later migration's call.
+      *Done later:* migration `0004` drops it (backlog plan of 2026-09-25, M2).
 - [x] **T-56 · 2.4 · S** — Cache the resolved collection id — `integration` I9 — `PipelineFetcher.FetchNewPosts` (`internal/instagram/fetcher_adapter.go`) still calls `ResolveCollectionID` on every run, which is one extra private-API request per import against an endpoint T-12 now backs off from.
       **DONE, with a wider invalidation than I9 asked for — because of T-43.**
       The id is cached on `PipelineFetcher`. I9 said to re-resolve "only if a

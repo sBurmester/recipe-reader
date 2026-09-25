@@ -179,6 +179,9 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 - **Kongs Kommandopfad-Präfix** (`serve: config: API_TOKEN …`): dass der Inhalt gleich bleibt, ist geprüft, ob das Präfix einem Betreiber hilft oder im Weg steht, nie. Braucht ein Nutzerurteil, keinen Task.
 - **Multi-Arch-Image.** Das Release baut `linux/amd64`. Ein `linux/arm64`-Image bräuchte QEMU oder einen ARM-Runner.
 - **Signatur und Provenance** der Release-Artefakte.
+
+> **Geprüft, kein Task (2026-09-25).** Der Eintrag ist auslöserbasiert und bleibt es: nötig wird der No-Transaction-Modus erst mit einer Migration, die `CREATE INDEX CONCURRENTLY` braucht. Der einzige Kandidat, das Entfernen des redundanten Index in `0004` (Plan [2026-09-25-backlog-cleanup.md](2026-09-25-backlog-cleanup.md), E8), braucht ihn nicht; ein einfaches `DROP INDEX` genügt bei dieser Tabellengröße. Dabei fiel auf, dass goose eine Kommentarzeile mit der Annotation als Direktive liest und die Datei ablehnt; das steht jetzt im README und in `AGENTS.md`.
+
 - **Migrationen mit `-- +goose NO TRANSACTION`.** goose kann eine Migration auf Wunsch ohne Transaktion fahren, was `CREATE INDEX CONCURRENTLY` erst möglich macht. Keine der heutigen Migrationen braucht es; die erste, die einen Index auf einer großen Tabelle anlegen will, schon.
 
 ---

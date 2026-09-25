@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -146,6 +147,83 @@ func TestMigration0003_RenumbersThenEnforcesPosition(t *testing.T) {
 	if _, err := pool.Exec(ctx, "INSERT INTO recipe_ingredients (recipe_id, ingredient_id, amount, position) VALUES (1, 2, 5, 0)"); err != nil {
 		t.Errorf("insert after down migration: %v, want the constraint gone", err)
 	}
+}
+
+// redundantIndex is what migration 0004 drops.
+const redundantIndex = "idx_recipe_ingredients_recipe_id"
+
+// Migration 0004 drops idx_recipe_ingredients_recipe_id, which 0003's
+// UNIQUE (recipe_id, position) made redundant: the constraint's index leads with
+// recipe_id, so it serves every lookup by recipe_id the single-column one did.
+// What has to hold is that the drop leaves no lookup without an index, so this
+// checks the plan rather than trusting the argument. Sequential scans are
+// switched off for it, because the table is empty and the planner would
+// otherwise pick one whatever indexes exist.
+func TestMigration0004_DropsTheRedundantIndexWithoutLosingTheLookup(t *testing.T) {
+	ctx := t.Context()
+	dsn := testdb.NewDatabase(t, "migration_0004")
+	provider := fileProvider(t, dsn)
+	if _, err := provider.UpTo(ctx, 3); err != nil {
+		t.Fatalf("migrate to 3: %v", err)
+	}
+	pool := connect(t, dsn)
+	defer pool.Close()
+
+	if !indexExists(t, pool, redundantIndex) {
+		t.Fatalf("%s is missing at version 3, so there is nothing for 0004 to drop", redundantIndex)
+	}
+
+	if _, err := provider.UpTo(ctx, 4); err != nil {
+		t.Fatalf("migrate to 4: %v", err)
+	}
+	if indexExists(t, pool, redundantIndex) {
+		t.Errorf("%s still exists after 0004", redundantIndex)
+	}
+	if plan := lookupPlan(t, pool); !strings.Contains(plan, "recipe_ingredients_recipe_id_position_key") {
+		t.Errorf("the lookup by recipe_id no longer uses the constraint's index:\n%s", plan)
+	}
+
+	if _, err := provider.DownTo(ctx, 3); err != nil {
+		t.Fatalf("migrate down to 3: %v", err)
+	}
+	if !indexExists(t, pool, redundantIndex) {
+		t.Errorf("%s was not restored by the down migration", redundantIndex)
+	}
+}
+
+// indexExists reports whether the public schema has an index called name.
+func indexExists(t *testing.T, pool *pgxpool.Pool, name string) bool {
+	t.Helper()
+	var present bool
+	if err := pool.QueryRow(t.Context(),
+		"SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = $1)", name).Scan(&present); err != nil {
+		t.Fatal(err)
+	}
+	return present
+}
+
+// lookupPlan is the plan for the read recipes.sql makes for one recipe's
+// ingredients, with sequential scans off so it names the index it would use.
+func lookupPlan(t *testing.T, pool *pgxpool.Pool) string {
+	t.Helper()
+	ctx := t.Context()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, "SET LOCAL enable_seqscan = off"); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := tx.Query(ctx, "EXPLAIN SELECT amount FROM recipe_ingredients WHERE recipe_id = 1 ORDER BY position, id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // fileProvider returns a migrator over ./migrations for dsn, closed when the
