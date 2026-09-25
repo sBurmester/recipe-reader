@@ -33,7 +33,7 @@
 - **Migrationen:** Eine Datei `internal/db/migrations/000N_<name>.sql` mit `-- +goose Up` und `-- +goose Down`, ohne `BEGIN;`/`COMMIT;`. Nach einer Migration: `make sqlc-generate`, und `git diff --exit-code internal/db/sqlc` bleibt leer.
 - **Tests:** Jeder Test für einen Fix wird **gezeigt rot**, bevor der Fix ihn grün macht. DB-Tests rufen kein `t.Parallel()`. Coverage wird nicht gegated.
 - **Kommentare** erklären das *Warum*, nicht das *Was*, im Ton des Repos; Zeilen bis ~100 Spalten. Code, Kommentare, README und Commit-Messages sind englisch, dieser Plan ist deutsch.
-- **Dokumentation im selben Change wie der Code:** `README.md`, `AGENTS.md` und der Backlog-Eintrag, den der Milestone schließt.
+- **Dokumentation im selben Change wie der Code:** `README.md`, `AGENTS.md` und der Backlog-Eintrag, den der Milestone schließt. **Aus `AGENTS.md` wird gelöscht, was der Milestone behebt**, ohne Vermerk, dass es behoben ist (O3). Hinein kommt nur, was danach gilt.
 - **Fortschritt:** Erledigte Steps und Tasks werden **in dieser Datei** abgehakt (`[x]`); jeder Milestone-PR endet mit einem Commit `docs: mark M<n> done in the backlog plan`.
 
 ---
@@ -90,12 +90,13 @@
 
 ### Entscheidungen des Nutzers
 
-Am 2026-09-25 entschieden; beide Fragen sind damit nicht mehr offen.
+Am 2026-09-25 entschieden; keine der Fragen ist damit mehr offen.
 
 | # | Frage | Entscheidung |
 | --- | --- | --- |
 | **O1** | Wie sollen Validierungsfehler aussehen? Heute: `serve: config: IMPORT_INTERVAL must be positive, got 0s` | **Beibehalten** und im README festhalten (nur Doku). Nicht gewählt: kongs Präfix entfernen (fragile String-Nachbearbeitung in `main`), nur unser `config:` streichen. |
 | **O2** | Präfix der PRs von M3 und M4 | **`feat(ci)`**: Minor-Release, der neue Lieferumfang erscheint im Changelog und lässt sich mit dem entstehenden Release-PR prüfen. |
+| **O3** | Was geschieht in `AGENTS.md` mit dem, was behoben ist? | **Löschen, ohne Vermerk.** `AGENTS.md` sagt, was heute gilt; den Verlauf halten Commit, Plan und die Kommentare im Code. Die Regel steht jetzt am Anfang von `AGENTS.md`. Auf M1 nachträglich angewandt: die dort ergänzten Absätze zum Shutdown und zum Abbruch entfielen wieder. Mit angewandt auf ältere Verlaufsvermerke: `--health-check` ohne Alias entfernt, „the old `NO_RECIPE_FOUND`", „replaced golang-migrate", keine Übernahme alter `schema_migrations`-Tabellen, „The panel remediation did this for every test". |
 
 ### Risiken
 
@@ -116,7 +117,7 @@ Am 2026-09-25 entschieden; beide Fragen sind damit nicht mehr offen.
 - [ ] Commit-Gate grün für jeden Commit mit Go-Änderung (M1, M2).
 - [ ] `actionlint` sauber für jeden Commit mit Workflow-Änderung (M3, M4).
 - [ ] Ein echtes Release nach M3 trägt ein Image mit beiden Plattformen; ein echtes Release nach M4 besteht alle Prüfbefehle aus Task 4, Step 13.
-- [ ] Der Abschnitt „Backlog, deliberately not scheduled" in `AGENTS.md` ist leer, oder er nennt nur, was dieser Plan ausdrücklich offen ließ.
+- [ ] Der Unterabschnitt „Backlog, deliberately not scheduled" in `AGENTS.md` ist entfernt, und `AGENTS.md` vermerkt nirgends, was dieser Plan behoben hat (O3).
 - [ ] Jeder geschlossene Eintrag im Release-Plan vom 2026-09-22 trägt einen `> **Erledigt.**`-Absatz mit Verweis auf diesen Plan.
 
 ### Was nach diesem Plan bleibt
@@ -165,7 +166,7 @@ docs/reviews/2026-09-11-working-plan.md                    # M2: T-55-Notiz
 | **M2:** Ein Index weniger | Task 2 | Migration `0004`; der Eintrag zum No-Transaction-Modus begründet geschlossen | nein |
 | **M3:** arm64-Image | Task 3 | Das Image trägt beide Plattformen | ja |
 | **M4:** Provenance | Task 4 | Binaries und Image sind mit `gh attestation verify` prüfbar | ja |
-| **M5:** kong-Präfix | Task 5 | Die Entscheidung O1 (Präfix bleibt) ist im README und in `AGENTS.md` festgehalten | nein (nur Doku) |
+| **M5:** kong-Präfix | Task 5 | Die Entscheidung O1 (Präfix bleibt) ist im README festgehalten; `AGENTS.md` führt die offene Frage nicht mehr | nein (nur Doku) |
 
 Reihenfolge: M1 → M2 → M3 → M4 → M5. M1, M2 und M5 sind voneinander unabhängig; M4 setzt M3 voraus (das Manifest, das M4 attestiert, entsteht in M3).
 
@@ -610,35 +611,6 @@ Expected: PASS. Die Suite von `server` ist dabei, weil sie den Worker und den Ab
 
 - [x] **Step 12: `AGENTS.md` berichtigen**
 
-Im Abschnitt „Import and Instagram" an den Absatz zum Shutdown anhängen. Alt:
-
-```
-- `serve` shutdown: HTTP drain plus import wait, with a 10s budget. After that an import is
-  abandoned with a log line. `server.Run` works on its own cancellable context and waits for its
-  goroutines even on a failed start.
-```
-
-Neu:
-
-```
-- `serve` shutdown: HTTP drain plus import wait, with a 10s budget. After that an import is
-  abandoned with a log line. `server.Run` works on its own cancellable context and waits for its
-  goroutines even on a failed start. A cancelled context reaches an LLM call at once, whatever
-  `LLM_TIMEOUT` is: `Extract` derives its timeout from the caller's context and both SDKs wait on
-  it (`TestLLMExtractor_ParentCancellationEndsARealCallAtOnce`). An abandoned import therefore
-  does not run on for a timeout; the old backlog entry saying so was measured and withdrawn.
-```
-
-Im Abschnitt „Extraction" hinter den Absatz, der mit `(E1, E8/T-15).` endet, ein neuer Absatz:
-
-```
-- **A cancelled caller is not an LLM failure.** Hybrid returns the caller's context error instead
-  of falling back, and the pipeline ends the run on it: the interrupted post is counted nowhere
-  (not `failed`, not `seen`) and is seen again by the next run. The check is on the caller's own
-  context, not on the error, because the LLM's timeout is a context error too and stays a
-  fallback (`TestHybridExtractor_LLMTimeoutStillFallsBackWhileTheCallerIsAlive`).
-```
-
 Im Abschnitt „Open work and backlog" den Eintrag streichen. Alt:
 
 ```
@@ -647,6 +619,8 @@ Im Abschnitt „Open work and backlog" den Eintrag streichen. Alt:
 ```
 
 Neu: (Zeilen entfernt.)
+
+Sonst nichts (O3). Zuerst waren hier zwei Absätze ergänzt worden, einer am Shutdown („A cancelled context reaches an LLM call at once …") und einer in der Extraktion („A cancelled caller is not an LLM failure …"). Sie beschrieben den Fix und sind wieder entfallen. Was sie sagten, steht im Kommentar vor der Prüfung in `hybrid.go`, im Doc-Kommentar von `interrupted` in `pipeline.go` und in den Tests.
 
 - [x] **Step 13: Den Backlog-Eintrag im Release-Plan schließen**
 
@@ -824,12 +798,10 @@ Expected: `sqlc: no drift`. Die CI prüft dieselbe Drift.
   migration.
 ```
 
-Neu:
+Neu (O3: der behobene Satz entfällt ohne Ersatz):
 
 ```
   `(recipe_id, ingredient_id)` is not (T-55, migration `0003`).
-  `idx_recipe_ingredients_recipe_id` was redundant from then on and is dropped by migration `0004`;
-  `TestMigration0004_…` checks the plan of the lookup rather than the argument.
 ```
 
 Alt:
@@ -839,13 +811,12 @@ Alt:
   Never renumber or edit an applied migration.
 ```
 
-Neu:
+Neu (die Warnung gilt ab jetzt für jede Migration; warum `0004` ohne den No-Transaction-Modus auskommt, steht im Kommentar der Migration und unter E8):
 
 ```
   transaction. Use `-- +goose NO TRANSACTION` only for statements like `CREATE INDEX CONCURRENTLY`.
-  No migration needs it yet: `0004` drops an index with a plain `DROP INDEX`, because on this
-  table's size the lock is milliseconds. **A comment must not contain a `+goose` annotation, even
-  mid-sentence:** goose reads such a line as a directive and refuses the file.
+  **A comment must not contain a `+goose` annotation, even mid-sentence:** goose reads such a line
+  as a directive and refuses the file.
   Never renumber or edit an applied migration.
 ```
 
@@ -1337,7 +1308,7 @@ Den Rest-Eintrag im Backlog streichen. Alt:
 - Signing or provenance for release artifacts.
 ```
 
-Neu: (Zeile entfernt; damit ist die Liste leer, siehe die Abschluss-Verifikation.)
+Neu: (Zeile entfernt. Übrig bleibt der Eintrag zum kong-Präfix, den M5 streicht.)
 
 `docs/superpowers/plans/2026-09-22-release-and-cleanup.md`, Backlog, vor den Eintrag „Signatur und Provenance" einfügen:
 
@@ -1370,7 +1341,7 @@ Scheitert der Lauf (R1): das Release bleibt Entwurf, nichts Öffentliches ist ka
 
 ### Task 5: Die Entscheidung zum kong-Präfix umsetzen
 
-Entschieden ist **O1**: das Präfix bleibt (Nutzer, 2026-09-25). Der Task ist deshalb reine Dokumentation: er hält die Form der Meldung im README fest, ersetzt in `AGENTS.md` die offene Frage durch die Entscheidung und schließt den Backlog-Eintrag. Am Code ändert sich nichts.
+Entschieden ist **O1**: das Präfix bleibt (Nutzer, 2026-09-25). Der Task ist deshalb reine Dokumentation: er hält die Form der Meldung im README fest und streicht in `AGENTS.md` die offene Frage und den Backlog-Eintrag (O3: die Entscheidung wird dort nicht nachgetragen). Am Code ändert sich nichts.
 
 **Files:** `README.md`, `AGENTS.md`, `docs/superpowers/plans/2026-09-22-release-and-cleanup.md`
 
@@ -1398,31 +1369,24 @@ command's settings were checked; `config:` marks the check that refused the valu
 value that kong itself refuses, such as `--log-level banana`, carries no such prefix.
 ```
 
-- [ ] **Step 3: `AGENTS.md` entscheiden**
+- [ ] **Step 3: `AGENTS.md` bereinigen**
 
-Den offenen Punkt im Abschnitt „CLI and configuration" ersetzen. Alt:
+Im Abschnitt „CLI and configuration" die offene Frage streichen, ohne Ersatz (O3; die Form der Meldung steht nach Step 2 im README):
 
 ```
 - Open question, left to the user: whether kong's command-path prefix in error messages
   (`serve: config: API_TOKEN …`) helps operators.
 ```
 
-Neu:
+Im Abschnitt „Open work and backlog" den letzten Backlog-Eintrag streichen und mit ihm den Unterabschnitt, der dann leer ist. Alt:
 
 ```
-- kong's command-path prefix in error messages (`serve: config: API_TOKEN …`) stays. kong sets the
-  `serve:` itself for every error from a `Validate()` method, with no option to turn it off, and it
-  says which command's settings were checked even when `serve` was the default; `config:` is ours.
-  Removing kong's part would mean rewriting the message in `main` or moving validation off the
-  selected command's path (E7/E13 of the kong plan), neither of which is worth a cosmetic gain.
-  Decided by the user on 2026-09-25.
-```
+Backlog, deliberately not scheduled:
 
-Den Eintrag im Abschnitt „Open work and backlog" streichen:
-
-```
 - kong's command-path prefix in error messages needs a judgement from the user.
 ```
+
+Neu: (Zeilen entfernt. Der Abschnitt nennt danach nur noch T-43 und T-24.)
 
 - [ ] **Step 4: Den Backlog-Eintrag im Release-Plan schließen**
 
@@ -1436,7 +1400,7 @@ Den Eintrag im Abschnitt „Open work and backlog" streichen:
 
 ```bash
 git add README.md AGENTS.md docs
-git commit -m "docs: record the decision on kong's error prefix" -m "The prefix stays: kong sets the command path itself for every Validate() error and offers no switch, and it names the selected command even when serve was the default. The README now describes the shape of a rejected setting, and AGENTS.md records the decision in place of the open question."
+git commit -m "docs: record the decision on kong's error prefix" -m "The prefix stays: kong sets the command path itself for every Validate() error and offers no switch, and it names the selected command even when serve was the default. The README now describes the shape of a rejected setting, and AGENTS.md drops the open question and the last backlog entry."
 ```
 
 ---
@@ -1446,7 +1410,10 @@ git commit -m "docs: record the decision on kong's error prefix" -m "The prefix 
 - [ ] **Step 1: Der Backlog ist leer, wo er leer sein soll**
 
 Run: `sed -n '/^## Open work and backlog/,$p' AGENTS.md`
-Expected: T-43 und T-24 unter „blocked on access"; der Unterabschnitt „Backlog, deliberately not scheduled" ist leer oder entfernt. Keine Zeile nennt mehr den Abbruch, das kong-Präfix, das Multi-Arch-Image, Signatur/Provenance oder den redundanten Index.
+Expected: T-43 und T-24 unter „blocked on access"; der Unterabschnitt „Backlog, deliberately not scheduled" ist entfernt. Keine Zeile nennt mehr den Abbruch, das kong-Präfix, das Multi-Arch-Image, Signatur/Provenance oder den redundanten Index.
+
+Run: `grep -nE 'withdrawn|now redundant|dropped by migration|Open question, left|Decided by the user' AGENTS.md`
+Expected: keine Treffer. `AGENTS.md` vermerkt nicht, was dieser Plan behoben hat (O3).
 
 - [ ] **Step 2: Keine Zeile behauptet mehr „amd64 only" oder „not signed"**
 
