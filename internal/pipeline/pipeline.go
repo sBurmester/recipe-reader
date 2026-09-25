@@ -119,7 +119,8 @@ type Pipeline struct {
 }
 
 // Run fetches posts and imports the new ones. A failure on any single post
-// is counted in ImportResult.Failed and does not abort the run.
+// is counted in ImportResult.Failed and does not abort the run; a cancellation
+// does, and the post it cut off is counted nowhere (see interrupted).
 //
 // A fetch that fails part-way still hands back what it collected, and those
 // posts are imported before the error is returned. That matters most for a

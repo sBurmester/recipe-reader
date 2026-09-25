@@ -216,7 +216,9 @@ func TestPipeline_ExtractionFailureCountsAsFailedNotFatal(t *testing.T) {
 // reports what an SDK reports for it: a shutdown arriving mid-call.
 type cancellingExtractor struct{ cancel context.CancelFunc }
 
-func (c cancellingExtractor) Extract(ctx context.Context, _ string) (*extraction.ExtractedRecipe, error) {
+func (c cancellingExtractor) Extract(
+	ctx context.Context, _ string,
+) (*extraction.ExtractedRecipe, error) {
 	c.cancel()
 	return nil, ctx.Err()
 }

@@ -65,7 +65,10 @@ func TestNewLLMExtractor_Timeout(t *testing.T) {
 // extraction path"; it is: Extract derives its timeout from the caller's
 // context, and both SDKs build their requests and wait out their retry backoff
 // on it. This runs each SDK against a server that accepts the request and never
-// answers, with a one-hour timeout, so only the cancellation can be what ends it.
+// answers, so only the cancellation can end it within the 50ms it is given. The
+// extractor's timeout is a backstop at 5s, not an hour: if the cancellation ever
+// stopped reaching the call, the test would fail on the deadline error after 5s
+// instead of hanging until go test's own timeout.
 func TestLLMExtractor_ParentCancellationEndsARealCallAtOnce(t *testing.T) {
 	release := make(chan struct{})
 	stall := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -83,7 +86,7 @@ func TestLLMExtractor_ParentCancellationEndsARealCallAtOnce(t *testing.T) {
 		t.Run(string(provider), func(t *testing.T) {
 			e, err := NewLLMExtractor(LLMConfig{
 				Provider: provider, APIKey: "sk-test", Model: "test-model",
-				BaseURL: stall.URL, Timeout: time.Hour,
+				BaseURL: stall.URL, Timeout: 5 * time.Second,
 			})
 			if err != nil {
 				t.Fatalf("NewLLMExtractor() error = %v", err)
@@ -97,7 +100,7 @@ func TestLLMExtractor_ParentCancellationEndsARealCallAtOnce(t *testing.T) {
 			if !errors.Is(err, context.Canceled) {
 				t.Errorf("Extract() error = %v, want it to wrap context.Canceled", err)
 			}
-			if elapsed := time.Since(start); elapsed > 5*time.Second {
+			if elapsed := time.Since(start); elapsed > 2*time.Second {
 				t.Errorf("Extract() returned after %v, want the cancellation to end it at once", elapsed)
 			}
 		})
