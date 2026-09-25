@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/sBurmester/recipe-reader/compare/v0.2.0...v0.2.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **pipeline:** count a cancelled import post as cancelled, not failed (1/5) ([#66](https://github.com/sBurmester/recipe-reader/issues/66)) ([ad4461c](https://github.com/sBurmester/recipe-reader/commit/ad4461cbd57c54d522541f72932e1aa999194133))
+
 ## [0.2.0](https://github.com/sBurmester/recipe-reader/compare/v0.1.4...v0.2.0) (2026-09-23)
 
 
