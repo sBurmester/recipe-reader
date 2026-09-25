@@ -107,7 +107,7 @@ func (c Config) LLMExtractorConfig() (provider, apiKey, model, baseURL string, o
 
 ---
 
-- [ ] **Step 1: Add the OpenAI SDK dependency**
+- [x] **Step 1: Add the OpenAI SDK dependency**
 
 ```bash
 go get github.com/openai/openai-go
@@ -115,7 +115,7 @@ go get github.com/openai/openai-go
 
 Rationale: the project already depends on official vendor SDKs (`anthropic-sdk-go`). `openai-go` handles auth, retries, typed errors, and `option.WithBaseURL` for every OpenAI-compatible host. A hand-rolled `net/http` client against `/chat/completions` is an acceptable alternative if avoiding the dependency matters — the request/response shape used here (one forced function call) is small and stable — but prefer the SDK for parity with the Anthropic path.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Extend `llm_test.go` to prove `parseToolInput` is provider-neutral (it already is — this just pins it), and add `llm_provider_test.go` for the two transports. No live API: each provider client is pointed at an `httptest.Server` returning a canned response in that provider's wire format.
 
@@ -249,12 +249,12 @@ func TestHybridExtractor_FallsBackThroughOpenAICompatibleProvider(t *testing.T) 
 }
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `go test ./internal/extraction/... -run 'LLMExtractor|HybridExtractor_FallsBackThrough|NewLLMExtractor' -v`
 Expected: FAIL — `LLMConfig` / `ProviderOpenAI` / new `NewLLMExtractor` signature undefined.
 
-- [ ] **Step 4: Implement `llm_provider.go`**
+- [x] **Step 4: Implement `llm_provider.go`**
 
 ```go
 // internal/extraction/llm_provider.go
@@ -409,7 +409,7 @@ var _ = json.Valid
 
 > **SDK surface caveat (same approach as Task 8 Step 5):** the exact `openai-go` type names for a *forced* function call (`ChatCompletionToolChoiceOptionUnionParam` / `ChatCompletionNamedToolChoiceParam` / `ChatCompletionToolParam.Function`) and for reading `resp.Choices[0].Message.ToolCalls[0].Function.Arguments` are the best-effort shape from the SDK's documented Chat Completions examples. If `go build ./...` fails on any of those lines, run `go doc github.com/openai/openai-go ChatCompletionNewParams` / `go doc github.com/openai/openai-go ChatCompletionToolChoiceOptionUnionParam` against the installed version and adjust the literal. The Anthropic half is unchanged from the shipped Task 8 code and compiles as-is. Drop the `json.Valid` guard line if `llm_provider.go` ends up importing `encoding/json` for a real reason.
 
-- [ ] **Step 5: Rewrite `llm.go` to delegate**
+- [x] **Step 5: Rewrite `llm.go` to delegate**
 
 `llm.go` keeps `defaultLLMModel`, `systemPrompt`, `recordRecipeTool`, and `parseToolInput` **unchanged**. Replace the `LLMExtractor` struct, its constructor, and `Extract`:
 
@@ -443,7 +443,7 @@ func (e *LLMExtractor) Extract(ctx context.Context, caption string) (*ExtractedR
 
 Delete the now-unused `anthropic` / `option` imports from `llm.go` (they moved to `llm_provider.go`). Update `llm_test.go`'s existing `TestParseToolInput` / `TestParseToolInput_NoRecipeFound` only if they referenced the old constructor — they call `parseToolInput` directly, so they should still pass untouched.
 
-- [ ] **Step 6: Wire it through config and `main.go` (amends Task 2 & Task 18)**
+- [x] **Step 6: Wire it through config and `main.go` (amends Task 2 & Task 18)**
 
 Add the four fields and `LLMExtractorConfig()` from the **Interfaces** section to `internal/config/config.go`. In Task 18's `run()`, replace the LLM construction block:
 
@@ -467,18 +467,18 @@ extractor := extraction.NewHybridExtractor(rules, llm, cfg.ExtractionThreshold)
 
 This preserves the Global Constraints rule: no API key configured (for any provider) ⇒ `llm` stays `nil` ⇒ hybrid behaves as rules-only. A misconfigured provider now fails fast at startup instead of silently disabling the LLM.
 
-- [ ] **Step 7: Run the full extraction suite**
+- [x] **Step 7: Run the full extraction suite**
 
 Run: `go test ./internal/extraction/... ./internal/config/... -v`
 Expected: PASS — `units`, `rules`, `llm` parsing, both provider round-trips, hybrid (including the new OpenAI-compatible fallback), and config resolution.
 
-- [ ] **Step 8: Update docs**
+- [x] **Step 8: Update docs**
 
 - `.env.example`: add `LLM_PROVIDER=anthropic`, `LLM_API_KEY=`, `LLM_MODEL=`, `LLM_BASE_URL=` with a comment that `LLM_PROVIDER=openai` + `LLM_BASE_URL` targets Groq / Together / OpenRouter / Ollama / vLLM / LM Studio, and that `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` still work as the anthropic-provider fallback.
 - `README.md`: in the setup/extraction notes, state that the LLM fallback works with Anthropic or any OpenAI-compatible endpoint, selected by `LLM_PROVIDER`.
 - Plan Global Constraints "Extraction" bullet: change "fall back to an LLM call (Anthropic API)" → "fall back to an LLM call (Anthropic, or any OpenAI-compatible endpoint — see Task 25)".
 
-- [ ] **Step 9: Pre-commit gate & commit**
+- [x] **Step 9: Pre-commit gate & commit**
 
 Run: `gofmt -w . && go vet ./... && golangci-lint run ./... && govulncheck ./... && go test ./...`
 
