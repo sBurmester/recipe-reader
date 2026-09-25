@@ -189,7 +189,7 @@ Ein PR enthält die Task-Commits seines Milestones, die Korrekturen aus dem Mile
   - [x] **Task 1:** Ein Abbruch ist kein LLM-Ausfall und kein fehlgeschlagener Post (M)
   - [x] **Milestone-Review**
 - [ ] **M2: Ein Index weniger**
-  - [ ] **Task 2:** Migration `0004` (S)
+  - [x] **Task 2:** Migration `0004` (S)
   - [ ] **Milestone-Review**
 - [ ] **M3: arm64-Image**
   - [ ] **Task 3:** Image je Architektur, Manifest-Liste, CI auf beiden (M)
@@ -655,13 +655,13 @@ git commit -m "fix(pipeline): count a cancelled import post as cancelled, not fa
 - Consumes: `testdb.NewDatabase(t, name) string`, `fileProvider(t, dsn) *goose.Provider`, `connect(t, dsn) *pgxpool.Pool` (alle in `migrations_test.go`)
 - Produces: die Migration; die Helfer `indexExists(t, pool, name) bool` und `lookupPlan(t, pool) string` (nur für diesen Test)
 
-- [ ] **Step 1: Branch anlegen**
+- [x] **Step 1: Branch anlegen**
 
 ```bash
 git switch main && git pull --ff-only && git switch -c perf/drop-redundant-ingredients-index
 ```
 
-- [ ] **Step 2: Den Test schreiben** (an `internal/db/migrations_test.go` vor `fileProvider` einfügen; den Import `"strings"` nach `"slices"` ergänzen)
+- [x] **Step 2: Den Test schreiben** (an `internal/db/migrations_test.go` vor `fileProvider` einfügen; den Import `"strings"` nach `"slices"` ergänzen)
 
 ```go
 // redundantIndex is what migration 0004 drops.
@@ -742,12 +742,12 @@ func lookupPlan(t *testing.T, pool *pgxpool.Pool) string {
 }
 ```
 
-- [ ] **Step 3: Den Test laufen lassen, er muss fehlschlagen**
+- [x] **Step 3: Den Test laufen lassen, er muss fehlschlagen**
 
 Run: `go test -count=1 -run TestMigration0004 -v ./internal/db/`
 Expected: **FAIL** mit `idx_recipe_ingredients_recipe_id still exists after 0004`. (goose meldet für `UpTo(4)` ohne Datei keinen Fehler, deshalb scheitert die Prüfung erst dort.)
 
-- [ ] **Step 4: Die Migration anlegen** (`internal/db/migrations/0004_drop_redundant_recipe_ingredients_index.sql`)
+- [x] **Step 4: Die Migration anlegen** (`internal/db/migrations/0004_drop_redundant_recipe_ingredients_index.sql`)
 
 ```sql
 -- +goose Up
@@ -771,17 +771,17 @@ CREATE INDEX idx_recipe_ingredients_recipe_id ON recipe_ingredients (recipe_id);
 
 **Die Kommentare dieser Datei dürfen die goose-Annotation nicht ausschreiben.** Der erste Entwurf tat es (mitten im Satz), und goose lehnte die ganze Datei ab: `failed to parse annotation line … invalid annotation`. Der Klammersatz oben ist deshalb Absicht.
 
-- [ ] **Step 5: Die Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 5: Die Tests laufen lassen, sie müssen grün sein**
 
 Run: `go test -count=1 -race ./internal/db/`
 Expected: PASS, darunter `TestMigration0004_…`, `TestMigration0003_…` und `TestMigrations_UpDownUp` (das die neue Migration ohne Änderung in beide Richtungen abdeckt).
 
-- [ ] **Step 6: sqlc bleibt unverändert**
+- [x] **Step 6: sqlc bleibt unverändert**
 
 Run: `make sqlc-generate && git diff --exit-code internal/db/sqlc && echo "sqlc: no drift"`
 Expected: `sqlc: no drift`. Die CI prüft dieselbe Drift.
 
-- [ ] **Step 7: Dokumentation nachziehen**
+- [x] **Step 7: Dokumentation nachziehen**
 
 `README.md`, Abschnitt „Changing the database schema": hinter den Satz, der mit `file instead.` endet, anhängen:
 
@@ -838,7 +838,7 @@ Den Eintrag im Abschnitt „Open work and backlog" streichen:
 > **Geprüft, kein Task (2026-09-25).** Der Eintrag ist auslöserbasiert und bleibt es: nötig wird der No-Transaction-Modus erst mit einer Migration, die `CREATE INDEX CONCURRENTLY` braucht. Der einzige Kandidat, das Entfernen des redundanten Index in `0004` (Plan [2026-09-25-backlog-cleanup.md](2026-09-25-backlog-cleanup.md), E8), braucht ihn nicht; ein einfaches `DROP INDEX` genügt bei dieser Tabellengröße. Dabei fiel auf, dass goose eine Kommentarzeile mit der Annotation als Direktive liest und die Datei ablehnt; das steht jetzt im README und in `AGENTS.md`.
 ```
 
-- [ ] **Step 8: Commit-Gate und Commit**
+- [x] **Step 8: Commit-Gate und Commit**
 
 ```bash
 git add internal/db README.md AGENTS.md docs
