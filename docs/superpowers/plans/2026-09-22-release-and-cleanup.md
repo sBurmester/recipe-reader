@@ -173,6 +173,8 @@ Dazu kommt ein fünfter Punkt, den der Nutzer am 2026-09-22 gesetzt hat:
 
 ### Backlog (bewusst nicht in diesem Plan)
 
+> **Widerlegt und behoben (2026-09-25).** Der folgende Eintrag ist im Plan [2026-09-25-backlog-cleanup.md](2026-09-25-backlog-cleanup.md) geschlossen (M1). Seine Prämisse trug nicht: der Abbruch erreicht den LLM-Aufruf sofort, gemessen gegen beide SDKs bei einem Timeout von einer Stunde. Die echte Lücke war, dass `HybridExtractor` den Abbruch als LLM-Ausfall auffing und die Pipeline den unterbrochenen Post als fehlgeschlagen zählte.
+
 - **Der aufgegebene Import endet erst nach seinem LLM-Timeout.** E3 behebt die Wirkung auf das Herunterfahren, nicht die Ursache. Wer sie aufgreift, reicht den Kontextabbruch bis in den Extraktionspfad durch, sodass ein aufgegebener Lauf sofort endet statt nach bis zu `LLM_TIMEOUT`.
 - **Kongs Kommandopfad-Präfix** (`serve: config: API_TOKEN …`): dass der Inhalt gleich bleibt, ist geprüft, ob das Präfix einem Betreiber hilft oder im Weg steht, nie. Braucht ein Nutzerurteil, keinen Task.
 - **Multi-Arch-Image.** Das Release baut `linux/amd64`. Ein `linux/arm64`-Image bräuchte QEMU oder einen ARM-Runner.

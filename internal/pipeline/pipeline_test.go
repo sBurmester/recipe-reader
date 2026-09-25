@@ -211,3 +211,65 @@ func TestPipeline_ExtractionFailureCountsAsFailedNotFatal(t *testing.T) {
 		t.Errorf("result = %+v", result)
 	}
 }
+
+// cancellingExtractor cancels the run's context while it is extracting and
+// reports what an SDK reports for it: a shutdown arriving mid-call.
+type cancellingExtractor struct{ cancel context.CancelFunc }
+
+func (c cancellingExtractor) Extract(
+	ctx context.Context, _ string,
+) (*extraction.ExtractedRecipe, error) {
+	c.cancel()
+	return nil, ctx.Err()
+}
+
+// cancelBeforeCreate cancels the run's context just before the store, so the
+// write is what the shutdown lands on.
+type cancelBeforeCreate struct {
+	repository.RecipeRepository
+	cancel context.CancelFunc
+}
+
+func (c cancelBeforeCreate) Create(ctx context.Context, r *domain.Recipe) error {
+	c.cancel()
+	return c.RecipeRepository.Create(ctx, r)
+}
+
+// A shutdown that lands on a post is not that post failing. It used to be
+// counted as Failed, with a warning naming the stage, so the import command's
+// summary after a Ctrl-C reported a failure that never happened — and the run
+// carried on to the next post instead of stopping. The post reached no outcome,
+// so it is in none of the buckets: the next run sees it again.
+func TestPipeline_ShutdownMidExtractionIsNotAFailedPost(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	p := newTestPipeline(t,
+		&fakeFetcher{posts: []instagram.SavedPost{{Source: "src-cut", Caption: "c"}}},
+		cancellingExtractor{cancel: cancel},
+	)
+
+	result, err := p.Run(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want it to wrap context.Canceled", err)
+	}
+	if result != (ImportResult{}) {
+		t.Errorf("result = %+v, want the interrupted post in none of the buckets", result)
+	}
+}
+
+func TestPipeline_ShutdownMidStoreIsNotAFailedPost(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	extracted := &extraction.ExtractedRecipe{Name: "Brot", Confidence: 0.9}
+	p := newTestPipeline(t,
+		&fakeFetcher{posts: []instagram.SavedPost{{Source: "src-cut", Caption: "c"}}},
+		&fakeExtractor{byCaption: map[string]*extraction.ExtractedRecipe{"c": extracted}},
+	)
+	p.Recipes = cancelBeforeCreate{RecipeRepository: p.Recipes, cancel: cancel}
+
+	result, err := p.Run(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want it to wrap context.Canceled", err)
+	}
+	if result != (ImportResult{}) {
+		t.Errorf("result = %+v, want the interrupted post in none of the buckets", result)
+	}
+}

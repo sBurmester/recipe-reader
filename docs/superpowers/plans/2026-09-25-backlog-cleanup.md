@@ -33,7 +33,7 @@
 - **Migrationen:** Eine Datei `internal/db/migrations/000N_<name>.sql` mit `-- +goose Up` und `-- +goose Down`, ohne `BEGIN;`/`COMMIT;`. Nach einer Migration: `make sqlc-generate`, und `git diff --exit-code internal/db/sqlc` bleibt leer.
 - **Tests:** Jeder Test für einen Fix wird **gezeigt rot**, bevor der Fix ihn grün macht. DB-Tests rufen kein `t.Parallel()`. Coverage wird nicht gegated.
 - **Kommentare** erklären das *Warum*, nicht das *Was*, im Ton des Repos; Zeilen bis ~100 Spalten. Code, Kommentare, README und Commit-Messages sind englisch, dieser Plan ist deutsch.
-- **Dokumentation im selben Change wie der Code:** `README.md`, `AGENTS.md` und der Backlog-Eintrag, den der Milestone schließt.
+- **Dokumentation im selben Change wie der Code:** `README.md`, `AGENTS.md` und der Backlog-Eintrag, den der Milestone schließt. **Aus `AGENTS.md` wird gelöscht, was der Milestone behebt**, ohne Vermerk, dass es behoben ist (O3). Hinein kommt nur, was danach gilt.
 - **Fortschritt:** Erledigte Steps und Tasks werden **in dieser Datei** abgehakt (`[x]`); jeder Milestone-PR endet mit einem Commit `docs: mark M<n> done in the backlog plan`.
 
 ---
@@ -90,12 +90,13 @@
 
 ### Entscheidungen des Nutzers
 
-Am 2026-09-25 entschieden; beide Fragen sind damit nicht mehr offen.
+Am 2026-09-25 entschieden; keine der Fragen ist damit mehr offen.
 
 | # | Frage | Entscheidung |
 | --- | --- | --- |
 | **O1** | Wie sollen Validierungsfehler aussehen? Heute: `serve: config: IMPORT_INTERVAL must be positive, got 0s` | **Beibehalten** und im README festhalten (nur Doku). Nicht gewählt: kongs Präfix entfernen (fragile String-Nachbearbeitung in `main`), nur unser `config:` streichen. |
 | **O2** | Präfix der PRs von M3 und M4 | **`feat(ci)`**: Minor-Release, der neue Lieferumfang erscheint im Changelog und lässt sich mit dem entstehenden Release-PR prüfen. |
+| **O3** | Was geschieht in `AGENTS.md` mit dem, was behoben ist? | **Löschen, ohne Vermerk.** `AGENTS.md` sagt, was heute gilt; den Verlauf halten Commit, Plan und die Kommentare im Code. Die Regel steht jetzt am Anfang von `AGENTS.md`. Auf M1 nachträglich angewandt: die dort ergänzten Absätze zum Shutdown und zum Abbruch entfielen wieder. Mit angewandt auf ältere Verlaufsvermerke: `--health-check` ohne Alias entfernt, „the old `NO_RECIPE_FOUND`", „replaced golang-migrate", keine Übernahme alter `schema_migrations`-Tabellen, „The panel remediation did this for every test". |
 
 ### Risiken
 
@@ -116,7 +117,7 @@ Am 2026-09-25 entschieden; beide Fragen sind damit nicht mehr offen.
 - [ ] Commit-Gate grün für jeden Commit mit Go-Änderung (M1, M2).
 - [ ] `actionlint` sauber für jeden Commit mit Workflow-Änderung (M3, M4).
 - [ ] Ein echtes Release nach M3 trägt ein Image mit beiden Plattformen; ein echtes Release nach M4 besteht alle Prüfbefehle aus Task 4, Step 13.
-- [ ] Der Abschnitt „Backlog, deliberately not scheduled" in `AGENTS.md` ist leer, oder er nennt nur, was dieser Plan ausdrücklich offen ließ.
+- [ ] Der Unterabschnitt „Backlog, deliberately not scheduled" in `AGENTS.md` ist entfernt, und `AGENTS.md` vermerkt nirgends, was dieser Plan behoben hat (O3).
 - [ ] Jeder geschlossene Eintrag im Release-Plan vom 2026-09-22 trägt einen `> **Erledigt.**`-Absatz mit Verweis auf diesen Plan.
 
 ### Was nach diesem Plan bleibt
@@ -165,7 +166,7 @@ docs/reviews/2026-09-11-working-plan.md                    # M2: T-55-Notiz
 | **M2:** Ein Index weniger | Task 2 | Migration `0004`; der Eintrag zum No-Transaction-Modus begründet geschlossen | nein |
 | **M3:** arm64-Image | Task 3 | Das Image trägt beide Plattformen | ja |
 | **M4:** Provenance | Task 4 | Binaries und Image sind mit `gh attestation verify` prüfbar | ja |
-| **M5:** kong-Präfix | Task 5 | Die Entscheidung O1 (Präfix bleibt) ist im README und in `AGENTS.md` festgehalten | nein (nur Doku) |
+| **M5:** kong-Präfix | Task 5 | Die Entscheidung O1 (Präfix bleibt) ist im README festgehalten; `AGENTS.md` führt die offene Frage nicht mehr | nein (nur Doku) |
 
 Reihenfolge: M1 → M2 → M3 → M4 → M5. M1, M2 und M5 sind voneinander unabhängig; M4 setzt M3 voraus (das Manifest, das M4 attestiert, entsteht in M3).
 
@@ -183,10 +184,10 @@ Ein PR enthält die Task-Commits seines Milestones, die Korrekturen aus dem Mile
 
 ### Aufgabenliste
 
-- [ ] **Vorbereitung:** Diesen Plan und das Abhaken der Task-Dateien vom 2026-09-25 über einen eigenen `docs:`-PR auf `main` bringen, damit jeder Milestone-Branch ihn schon enthält
-- [ ] **M1: Abbruch statt Fallback**
-  - [ ] **Task 1:** Ein Abbruch ist kein LLM-Ausfall und kein fehlgeschlagener Post (M)
-  - [ ] **Milestone-Review**
+- [x] **Vorbereitung:** Diesen Plan und das Abhaken der Task-Dateien vom 2026-09-25 über einen eigenen `docs:`-PR auf `main` bringen, damit jeder Milestone-Branch ihn schon enthält
+- [x] **M1: Abbruch statt Fallback**
+  - [x] **Task 1:** Ein Abbruch ist kein LLM-Ausfall und kein fehlgeschlagener Post (M)
+  - [x] **Milestone-Review**
 - [ ] **M2: Ein Index weniger**
   - [ ] **Task 2:** Migration `0004` (S)
   - [ ] **Milestone-Review**
@@ -213,7 +214,7 @@ Wie in den Vorgängerplänen: ein frischer Subagent pro Task, strikt nacheinande
 
 Der Branch `docs/agents-md` ist gemerged (PR #64) und bekommt nichts mehr. Das lokale `main` war beim Schreiben dieses Plans veraltet und enthielt `AGENTS.md` noch nicht; nach einem `fetch` liegt es auf `origin/main`. Ungespeichert im Arbeitsverzeichnis liegen dieser Plan und das Abhaken der Task-Dateien vom 2026-09-25 (161 Checkboxen in `2026-09-05-recipe-reader-implementation.md` und `2026-09-05-recipe-reader-tasks/25-provider-agnostic-llm-extractor.md`).
 
-- [ ] **Step 1: Neuen Branch von `origin/main` anlegen**
+- [x] **Step 1: Neuen Branch von `origin/main` anlegen**
 
 ```bash
 git fetch origin && git switch -c docs/backlog-cleanup-plan origin/main
@@ -221,12 +222,12 @@ git fetch origin && git switch -c docs/backlog-cleanup-plan origin/main
 
 Ungespeicherte Änderungen wandern mit, solange `origin/main` diese drei Dateien seit dem Abzweig nicht verändert hat. Verweigert `git switch` das, die Änderungen mit `git stash` beiseitelegen, wechseln und `git stash pop`.
 
-- [ ] **Step 2: Prüfen, dass genau das im Arbeitsverzeichnis liegt**
+- [x] **Step 2: Prüfen, dass genau das im Arbeitsverzeichnis liegt**
 
 Run: `git status --short && git diff --stat`
 Expected: der Plan als neue Datei, die beiden anderen Dateien geändert, `161 insertions(+), 161 deletions(-)` (nur Checkbox-Zeichen).
 
-- [ ] **Step 3: Commit, Push, PR, Merge** *(Freigabe des Nutzers)*
+- [x] **Step 3: Commit, Push, PR, Merge** *(Freigabe des Nutzers)*
 
 Alle geänderten Dateien liegen unter `docs/`, die CI überspringt den Lauf (CI-Ausnahme); es gibt nichts abzuwarten.
 
@@ -255,13 +256,13 @@ Die Unterscheidung, die fehlt, ist die zwischen **dem Timeout des LLM** (ein Hä
 - Consumes: `extraction.Extractor`, `extraction.NewHybridExtractor(rules, llm Extractor, threshold float64)`, `pipeline.ImportResult`, `repository.RecipeRepository`, die Test-Helfer `stubExtractor` (`hybrid_test.go`), `fakeFetcher`, `fakeExtractor`, `newTestPipeline` (`pipeline_test.go`).
 - Produces: unverändertes öffentliches API. Neu und paketintern: `pipeline.interrupted(ctx context.Context, result ImportResult) (ImportResult, error)`. Verhalten: `HybridExtractor.Extract` gibt bei abgebrochenem Aufrufer-Kontext `nil` und einen Fehler zurück, der `context.Canceled` umhüllt; `Pipeline.Run` gibt dann `pipeline: context canceled` zurück, und der unterbrochene Post steht in keinem Zähler und nicht in `Seen`.
 
-- [ ] **Step 1: Branch anlegen**
+- [x] **Step 1: Branch anlegen**
 
 ```bash
 git switch main && git pull --ff-only && git switch -c fix/cancellation-is-not-a-fallback
 ```
 
-- [ ] **Step 2: Den Beleg gegen die echten SDKs schreiben** (an `internal/extraction/llm_extract_test.go` anhängen; die Imports `net/http` und `net/http/httptest` ergänzen)
+- [x] **Step 2: Den Beleg gegen die echten SDKs schreiben** (an `internal/extraction/llm_extract_test.go` anhängen; die Imports `net/http` und `net/http/httptest` ergänzen)
 
 Dieser Test **besteht schon vor dem Fix**. Er ist kein Fix-Test, sondern die Messung, die die Prämisse des Backlog-Eintrags widerlegt, und er hält sie fest, damit der Eintrag geschlossen bleibt.
 
@@ -312,12 +313,12 @@ func TestLLMExtractor_ParentCancellationEndsARealCallAtOnce(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Den Beleg laufen lassen, er muss bestehen**
+- [x] **Step 3: Den Beleg laufen lassen, er muss bestehen**
 
 Run: `go test -count=1 -run TestLLMExtractor_ParentCancellation -v ./internal/extraction/`
 Expected: `PASS` für `anthropic` und `openai`, je rund 50 ms. Besteht er nicht, hält der Backlog-Eintrag: dann anhalten und melden, statt den Plan weiter abzuarbeiten.
 
-- [ ] **Step 4: Die zwei Hybrid-Tests schreiben** (an `internal/extraction/hybrid_test.go` anhängen; den Import `"fmt"` ergänzen)
+- [x] **Step 4: Die zwei Hybrid-Tests schreiben** (an `internal/extraction/hybrid_test.go` anhängen; den Import `"fmt"` ergänzen)
 
 ```go
 // cancellingExtractor cancels the context it was given and then reports what an
@@ -367,12 +368,12 @@ func TestHybridExtractor_LLMTimeoutStillFallsBackWhileTheCallerIsAlive(t *testin
 }
 ```
 
-- [ ] **Step 5: Die Tests laufen lassen, der erste muss fehlschlagen**
+- [x] **Step 5: Die Tests laufen lassen, der erste muss fehlschlagen**
 
 Run: `go test -count=1 -run 'TestHybridExtractor_(CancellationIsNot|LLMTimeoutStill)' -v ./internal/extraction/`
 Expected: `TestHybridExtractor_CancellationIsNotAnLLMFailure` **FAIL** mit `Extract() error = <nil>, want it to wrap context.Canceled`; `TestHybridExtractor_LLMTimeoutStillFallsBackWhileTheCallerIsAlive` PASS.
 
-- [ ] **Step 6: `hybrid.go` ändern**
+- [x] **Step 6: `hybrid.go` ändern**
 
 Den Import um `fmt` ergänzen. Alt:
 
@@ -434,12 +435,12 @@ Neu:
 		// Say so, and mark the result. This was the worst of the three silent
 ```
 
-- [ ] **Step 7: Die Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 7: Die Tests laufen lassen, sie müssen grün sein**
 
 Run: `go test -count=1 -race ./internal/extraction/`
 Expected: PASS
 
-- [ ] **Step 8: Die zwei Pipeline-Tests schreiben** (an `internal/pipeline/pipeline_test.go` anhängen; alle nötigen Imports stehen schon in der Datei)
+- [x] **Step 8: Die zwei Pipeline-Tests schreiben** (an `internal/pipeline/pipeline_test.go` anhängen; alle nötigen Imports stehen schon in der Datei)
 
 ```go
 // cancellingExtractor cancels the run's context while it is extracting and
@@ -503,12 +504,12 @@ func TestPipeline_ShutdownMidStoreIsNotAFailedPost(t *testing.T) {
 }
 ```
 
-- [ ] **Step 9: Die Tests laufen lassen, beide müssen fehlschlagen**
+- [x] **Step 9: Die Tests laufen lassen, beide müssen fehlschlagen**
 
 Run: `go test -count=1 -run 'TestPipeline_ShutdownMid' -v ./internal/pipeline/`
 Expected: beide **FAIL** mit `Run() error = <nil>, want it to wrap context.Canceled` (Docker muss laufen).
 
-- [ ] **Step 10: `pipeline.go` ändern**
+- [x] **Step 10: `pipeline.go` ändern**
 
 Die Extraktionsstufe. Alt:
 
@@ -603,41 +604,12 @@ Neu:
 // NoRecipe is counted apart from Skipped and Failed on purpose: a saved-posts
 ```
 
-- [ ] **Step 11: Die Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 11: Die Tests laufen lassen, sie müssen grün sein**
 
 Run: `go test -count=1 -race ./internal/extraction/ ./internal/pipeline/ ./internal/server/`
 Expected: PASS. Die Suite von `server` ist dabei, weil sie den Worker und den Abbruchpfad von außen treibt.
 
-- [ ] **Step 12: `AGENTS.md` berichtigen**
-
-Im Abschnitt „Import and Instagram" an den Absatz zum Shutdown anhängen. Alt:
-
-```
-- `serve` shutdown: HTTP drain plus import wait, with a 10s budget. After that an import is
-  abandoned with a log line. `server.Run` works on its own cancellable context and waits for its
-  goroutines even on a failed start.
-```
-
-Neu:
-
-```
-- `serve` shutdown: HTTP drain plus import wait, with a 10s budget. After that an import is
-  abandoned with a log line. `server.Run` works on its own cancellable context and waits for its
-  goroutines even on a failed start. A cancelled context reaches an LLM call at once, whatever
-  `LLM_TIMEOUT` is: `Extract` derives its timeout from the caller's context and both SDKs wait on
-  it (`TestLLMExtractor_ParentCancellationEndsARealCallAtOnce`). An abandoned import therefore
-  does not run on for a timeout; the old backlog entry saying so was measured and withdrawn.
-```
-
-Im Abschnitt „Extraction" hinter den Absatz, der mit `(E1, E8/T-15).` endet, ein neuer Absatz:
-
-```
-- **A cancelled caller is not an LLM failure.** Hybrid returns the caller's context error instead
-  of falling back, and the pipeline ends the run on it: the interrupted post is counted nowhere
-  (not `failed`, not `seen`) and is seen again by the next run. The check is on the caller's own
-  context, not on the error, because the LLM's timeout is a context error too and stays a
-  fallback (`TestHybridExtractor_LLMTimeoutStillFallsBackWhileTheCallerIsAlive`).
-```
+- [x] **Step 12: `AGENTS.md` berichtigen**
 
 Im Abschnitt „Open work and backlog" den Eintrag streichen. Alt:
 
@@ -648,7 +620,9 @@ Im Abschnitt „Open work and backlog" den Eintrag streichen. Alt:
 
 Neu: (Zeilen entfernt.)
 
-- [ ] **Step 13: Den Backlog-Eintrag im Release-Plan schließen**
+Sonst nichts (O3). Zuerst waren hier zwei Absätze ergänzt worden, einer am Shutdown („A cancelled context reaches an LLM call at once …") und einer in der Extraktion („A cancelled caller is not an LLM failure …"). Sie beschrieben den Fix und sind wieder entfallen. Was sie sagten, steht im Kommentar vor der Prüfung in `hybrid.go`, im Doc-Kommentar von `interrupted` in `pipeline.go` und in den Tests.
+
+- [x] **Step 13: Den Backlog-Eintrag im Release-Plan schließen**
 
 In `docs/superpowers/plans/2026-09-22-release-and-cleanup.md` im Abschnitt „Backlog (bewusst nicht in diesem Plan)" vor den Eintrag „Der aufgegebene Import endet erst nach seinem LLM-Timeout" einfügen:
 
@@ -656,7 +630,7 @@ In `docs/superpowers/plans/2026-09-22-release-and-cleanup.md` im Abschnitt „Ba
 > **Widerlegt und behoben (2026-09-25).** Der folgende Eintrag ist im Plan [2026-09-25-backlog-cleanup.md](2026-09-25-backlog-cleanup.md) geschlossen (M1). Seine Prämisse trug nicht: der Abbruch erreicht den LLM-Aufruf sofort, gemessen gegen beide SDKs bei einem Timeout von einer Stunde. Die echte Lücke war, dass `HybridExtractor` den Abbruch als LLM-Ausfall auffing und die Pipeline den unterbrochenen Post als fehlgeschlagen zählte.
 ```
 
-- [ ] **Step 14: Commit-Gate und Commit**
+- [x] **Step 14: Commit-Gate und Commit**
 
 ```bash
 git add internal docs AGENTS.md
@@ -824,12 +798,10 @@ Expected: `sqlc: no drift`. Die CI prüft dieselbe Drift.
   migration.
 ```
 
-Neu:
+Neu (O3: der behobene Satz entfällt ohne Ersatz):
 
 ```
   `(recipe_id, ingredient_id)` is not (T-55, migration `0003`).
-  `idx_recipe_ingredients_recipe_id` was redundant from then on and is dropped by migration `0004`;
-  `TestMigration0004_…` checks the plan of the lookup rather than the argument.
 ```
 
 Alt:
@@ -839,13 +811,12 @@ Alt:
   Never renumber or edit an applied migration.
 ```
 
-Neu:
+Neu (die Warnung gilt ab jetzt für jede Migration; warum `0004` ohne den No-Transaction-Modus auskommt, steht im Kommentar der Migration und unter E8):
 
 ```
   transaction. Use `-- +goose NO TRANSACTION` only for statements like `CREATE INDEX CONCURRENTLY`.
-  No migration needs it yet: `0004` drops an index with a plain `DROP INDEX`, because on this
-  table's size the lock is milliseconds. **A comment must not contain a `+goose` annotation, even
-  mid-sentence:** goose reads such a line as a directive and refuses the file.
+  **A comment must not contain a `+goose` annotation, even mid-sentence:** goose reads such a line
+  as a directive and refuses the file.
   Never renumber or edit an applied migration.
 ```
 
@@ -1337,7 +1308,7 @@ Den Rest-Eintrag im Backlog streichen. Alt:
 - Signing or provenance for release artifacts.
 ```
 
-Neu: (Zeile entfernt; damit ist die Liste leer, siehe die Abschluss-Verifikation.)
+Neu: (Zeile entfernt. Übrig bleibt der Eintrag zum kong-Präfix, den M5 streicht.)
 
 `docs/superpowers/plans/2026-09-22-release-and-cleanup.md`, Backlog, vor den Eintrag „Signatur und Provenance" einfügen:
 
@@ -1370,7 +1341,7 @@ Scheitert der Lauf (R1): das Release bleibt Entwurf, nichts Öffentliches ist ka
 
 ### Task 5: Die Entscheidung zum kong-Präfix umsetzen
 
-Entschieden ist **O1**: das Präfix bleibt (Nutzer, 2026-09-25). Der Task ist deshalb reine Dokumentation: er hält die Form der Meldung im README fest, ersetzt in `AGENTS.md` die offene Frage durch die Entscheidung und schließt den Backlog-Eintrag. Am Code ändert sich nichts.
+Entschieden ist **O1**: das Präfix bleibt (Nutzer, 2026-09-25). Der Task ist deshalb reine Dokumentation: er hält die Form der Meldung im README fest und streicht in `AGENTS.md` die offene Frage und den Backlog-Eintrag (O3: die Entscheidung wird dort nicht nachgetragen). Am Code ändert sich nichts.
 
 **Files:** `README.md`, `AGENTS.md`, `docs/superpowers/plans/2026-09-22-release-and-cleanup.md`
 
@@ -1398,31 +1369,24 @@ command's settings were checked; `config:` marks the check that refused the valu
 value that kong itself refuses, such as `--log-level banana`, carries no such prefix.
 ```
 
-- [ ] **Step 3: `AGENTS.md` entscheiden**
+- [ ] **Step 3: `AGENTS.md` bereinigen**
 
-Den offenen Punkt im Abschnitt „CLI and configuration" ersetzen. Alt:
+Im Abschnitt „CLI and configuration" die offene Frage streichen, ohne Ersatz (O3; die Form der Meldung steht nach Step 2 im README):
 
 ```
 - Open question, left to the user: whether kong's command-path prefix in error messages
   (`serve: config: API_TOKEN …`) helps operators.
 ```
 
-Neu:
+Im Abschnitt „Open work and backlog" den letzten Backlog-Eintrag streichen und mit ihm den Unterabschnitt, der dann leer ist. Alt:
 
 ```
-- kong's command-path prefix in error messages (`serve: config: API_TOKEN …`) stays. kong sets the
-  `serve:` itself for every error from a `Validate()` method, with no option to turn it off, and it
-  says which command's settings were checked even when `serve` was the default; `config:` is ours.
-  Removing kong's part would mean rewriting the message in `main` or moving validation off the
-  selected command's path (E7/E13 of the kong plan), neither of which is worth a cosmetic gain.
-  Decided by the user on 2026-09-25.
-```
+Backlog, deliberately not scheduled:
 
-Den Eintrag im Abschnitt „Open work and backlog" streichen:
-
-```
 - kong's command-path prefix in error messages needs a judgement from the user.
 ```
+
+Neu: (Zeilen entfernt. Der Abschnitt nennt danach nur noch T-43 und T-24.)
 
 - [ ] **Step 4: Den Backlog-Eintrag im Release-Plan schließen**
 
@@ -1436,7 +1400,7 @@ Den Eintrag im Abschnitt „Open work and backlog" streichen:
 
 ```bash
 git add README.md AGENTS.md docs
-git commit -m "docs: record the decision on kong's error prefix" -m "The prefix stays: kong sets the command path itself for every Validate() error and offers no switch, and it names the selected command even when serve was the default. The README now describes the shape of a rejected setting, and AGENTS.md records the decision in place of the open question."
+git commit -m "docs: record the decision on kong's error prefix" -m "The prefix stays: kong sets the command path itself for every Validate() error and offers no switch, and it names the selected command even when serve was the default. The README now describes the shape of a rejected setting, and AGENTS.md drops the open question and the last backlog entry."
 ```
 
 ---
@@ -1446,7 +1410,10 @@ git commit -m "docs: record the decision on kong's error prefix" -m "The prefix 
 - [ ] **Step 1: Der Backlog ist leer, wo er leer sein soll**
 
 Run: `sed -n '/^## Open work and backlog/,$p' AGENTS.md`
-Expected: T-43 und T-24 unter „blocked on access"; der Unterabschnitt „Backlog, deliberately not scheduled" ist leer oder entfernt. Keine Zeile nennt mehr den Abbruch, das kong-Präfix, das Multi-Arch-Image, Signatur/Provenance oder den redundanten Index.
+Expected: T-43 und T-24 unter „blocked on access"; der Unterabschnitt „Backlog, deliberately not scheduled" ist entfernt. Keine Zeile nennt mehr den Abbruch, das kong-Präfix, das Multi-Arch-Image, Signatur/Provenance oder den redundanten Index.
+
+Run: `grep -nE 'withdrawn|now redundant|dropped by migration|Open question, left|Decided by the user' AGENTS.md`
+Expected: keine Treffer. `AGENTS.md` vermerkt nicht, was dieser Plan behoben hat (O3).
 
 - [ ] **Step 2: Keine Zeile behauptet mehr „amd64 only" oder „not signed"**
 

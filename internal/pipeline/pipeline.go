@@ -59,6 +59,9 @@ var ErrImportInProgress = errors.New("import: another import is already running"
 // returned; the other four partition it — Imported (stored), Skipped (already
 // present, matched by source), NoRecipe (the caption carried no recipe, so
 // nothing was stored), Failed (extraction or storage error on that one post).
+// A post that a cancellation cut off part-way is the one exception: it reached
+// no outcome, so it is in none of the four and not in Seen either (see
+// interrupted).
 //
 // NoRecipe is counted apart from Skipped and Failed on purpose: a saved-posts
 // feed legitimately contains things that are not recipes, and folding them
@@ -116,7 +119,8 @@ type Pipeline struct {
 }
 
 // Run fetches posts and imports the new ones. A failure on any single post
-// is counted in ImportResult.Failed and does not abort the run.
+// is counted in ImportResult.Failed and does not abort the run; a cancellation
+// does, and the post it cut off is counted nowhere (see interrupted).
 //
 // A fetch that fails part-way still hands back what it collected, and those
 // posts are imported before the error is returned. That matters most for a
@@ -162,6 +166,9 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 			continue
 		}
 		if err != nil {
+			if ctx.Err() != nil {
+				return interrupted(ctx, result)
+			}
 			result.Failed++
 			slog.Warn("import: post failed", "stage", "extract", "source", post.Source, "error", err)
 			continue
@@ -201,6 +208,9 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 			continue
 		}
 		if err != nil {
+			if ctx.Err() != nil {
+				return interrupted(ctx, result)
+			}
 			result.Failed++
 			slog.Warn("import: post failed", "stage", "store", "source", post.Source, "error", err)
 			continue
@@ -215,6 +225,20 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error) {
 		return result, fmt.Errorf("%w: %w", ErrFetch, fetchErr)
 	}
 	return result, nil
+}
+
+// interrupted ends the run for a post that a cancellation cut off part-way.
+//
+// Such a post is not a failure: nothing was wrong with it, the run was told to
+// stop. It used to be counted as Failed and warned about by stage, so a Ctrl-C
+// during `recipe-reader import` printed a summary reporting a post that never
+// failed — and the loop went on to the next post rather than stopping. The post
+// reached no outcome, so it leaves Seen too and is in none of the buckets; the
+// next run sees it again, because nothing was stored.
+func interrupted(ctx context.Context, result ImportResult) (ImportResult, error) {
+	result.Seen--
+	slog.Warn("import: cancelled mid-run", "error", ctx.Err(), "result", result)
+	return result, fmt.Errorf("pipeline: %w", ctx.Err())
 }
 
 // toRecipe maps an extraction result onto a domain.Recipe, carrying the

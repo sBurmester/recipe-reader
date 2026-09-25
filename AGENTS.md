@@ -5,7 +5,10 @@ It gathers the decisions scattered across `README.md`, `docs/PROJECT.md`, the 20
 panel (`docs/reviews/`) and the plans (`docs/superpowers/plans/`). Those files keep the full
 reasoning. This one tells you what holds today and what not to undo.
 
-If this file and the code disagree, the code wins. Fix this file in the same change.
+If this file and the code disagree, the code wins. Fix this file in the same change. When a change
+fixes something listed here (a backlog entry, an open question, a known gap), delete it from this
+file rather than noting that it was fixed. The commit, the plan and the code's comments keep that
+history.
 
 ## What this is
 
@@ -167,8 +170,7 @@ Invariants of the layering (kong plan E7/E13, CLI backlog D3):
   `t.Parallel()`**, and calling `New` a second time wipes what the test wrote.
 - `testdb.NewDatabase(t, name)` creates an empty, unmigrated database on the shared container and
   returns its DSN. It is for migration tests that stop at an earlier version.
-- A test for a fix must be **shown to fail with the fix reverted**. The panel remediation did this
-  for every test.
+- A test for a fix must be **shown to fail with the fix reverted**.
 - Coverage is measured and reported but **never gated**. Don't add a threshold (review D6).
 - The suite is hermetic. The Instagram login test makes no network call: instago returns
   `BadCredentials` on empty credentials before it sends anything (consensus correction 1).
@@ -183,8 +185,7 @@ Each of these was decided on purpose. Don't reverse one without the user's appro
 
 - Commands are `serve` (default), `healthcheck`, `migrate` and `import`. `serve` is
   `default:"withargs"`, so `recipe-reader` and `recipe-reader --http-addr …` keep working (E1).
-- `--health-check` was removed **without an alias**, and `healthcheck` replaces it (E2). `--version`
-  stays a global `kong.VersionFlag` with no env tag (E3).
+- `--version` is a global `kong.VersionFlag` with no env tag (E3).
 - A flag placed **before** another command's name is refused by `rejectMisplacedFlags` (E11).
   `--log-level` and `--log-format` are the exceptions: they sit on the root and apply to every
   command.
@@ -310,10 +311,9 @@ Each of these was decided on purpose. Don't reverse one without the user's appro
 - LLM confidence = min(the model's self-report, a structural score). The rules confidence is
   continuous, but the pinned boundaries must hold: nothing extracted → exactly `0`, one section
   alone → at most `0.5`, a clean full caption → `1.0`, and no usable title → ×0.75 (T-40).
-- No recipe → `extraction.ErrNoRecipe`, and **nothing is stored**. Never write sentinel rows
-  (the old `NO_RECIPE_FOUND`). In hybrid mode, an LLM `ErrNoRecipe` is final and never falls back
-  to the rules result. An LLM *failure* does fall back, and the result is marked `Degraded` and
-  logged (E1, E8/T-15).
+- No recipe → `extraction.ErrNoRecipe`, and **nothing is stored**. Never write sentinel rows. In
+  hybrid mode, an LLM `ErrNoRecipe` is final and never falls back to the rules result. An LLM
+  *failure* does fall back, and the result is marked `Degraded` and logged (E1, E8/T-15).
 - **Prompt injection:** the caption is attacker-controlled. It is wrapped in a `<caption>` span
   declared as data, with any `<caption>`/`</caption>` in it neutralised, and the confidence field
   is named as part of that data. `ToolChoice` is pinned to `record_recipe` and the schema is
@@ -336,10 +336,10 @@ Each of these was decided on purpose. Don't reverse one without the user's appro
 
 ### Persistence and migrations
 
-- Migrations run under **goose** (`pressly/goose/v3`, embedded in the binary), which replaced
-  golang-migrate (E12). Bookkeeping is in `goose_db_version`. `PostgresSessionLocker` makes
-  concurrent starts queue up (E16). Migrations run over their own `*sql.DB` (`pgx/v5/stdlib`),
-  separate from the pool (E17). goose logs through slog, with per-statement lines at debug only.
+- Migrations run under **goose** (`pressly/goose/v3`, embedded in the binary; E12). Bookkeeping
+  is in `goose_db_version`. `PostgresSessionLocker` makes concurrent starts queue up (E16).
+  Migrations run over their own `*sql.DB` (`pgx/v5/stdlib`), separate from the pool (E17). goose
+  logs through slog, with per-statement lines at debug only.
 - **A new migration is one file**, `internal/db/migrations/000N_<name>.sql`, with `-- +goose Up`
   and `-- +goose Down` and **no `BEGIN;`/`COMMIT;`**, because goose wraps each migration in a
   transaction. Use `-- +goose NO TRANSACTION` only for statements like `CREATE INDEX CONCURRENTLY`.
@@ -350,8 +350,6 @@ Each of these was decided on purpose. Don't reverse one without the user's appro
 - `TestMigrations_UpDownUp` exercises every Down section automatically. A migration that
   **transforms existing rows** needs its own test that stops at the previous version, writes the
   rows and migrates over them, like `0002` and `0003` (T-54).
-- No takeover of old `schema_migrations` tables. The software was never deployed, and a
-  pre-goose dev database gets recreated or fixed by hand as described in the README (E15).
 - `serve`, `migrate` and `import` all migrate and seed on start. Cancelling a migration rolls back
   the one in flight, and re-running is safe. `db.MigrateDown` exists only for tests.
 - **The insert is the dedupe:** `CreateRecipe` uses `ON CONFLICT (source) DO NOTHING` and maps to
@@ -425,8 +423,6 @@ These are blocked on access, not on work. Don't try to finish them from the repo
 
 Backlog, deliberately not scheduled:
 
-- An abandoned import ends only after its `LLM_TIMEOUT`. Fixing the cause means threading
-  cancellation into the extraction path.
 - kong's command-path prefix in error messages needs a judgement from the user.
 - A multi-arch image (`linux/arm64`), and signing or provenance for release artifacts.
 - The redundant `idx_recipe_ingredients_recipe_id` index.
