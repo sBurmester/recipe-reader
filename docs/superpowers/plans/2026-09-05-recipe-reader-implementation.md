@@ -108,13 +108,13 @@ recipe-reader/
 **Interfaces:**
 - Produces: module path `github.com/sBurmester/recipe-reader`, `Makefile` targets `build`, `test`, `lint`, `vuln`, `check`, `run`, `frontend`, `docker`, `sqlc-generate` — later tasks assume these exist.
 
-- [ ] **Step 1: Initialize the Go module**
+- [x] **Step 1: Initialize the Go module**
 
 ```bash
 go mod init github.com/sBurmester/recipe-reader
 ```
 
-- [ ] **Step 2: Create `.gitignore`**
+- [x] **Step 2: Create `.gitignore`**
 
 ```gitignore
 /bin/
@@ -127,7 +127,7 @@ internal/webui/dist/*
 !internal/webui/dist/index.html
 ```
 
-- [ ] **Step 3: Create `.env.example`**
+- [x] **Step 3: Create `.env.example`**
 
 ```dotenv
 HTTP_ADDR=:8080
@@ -148,7 +148,7 @@ ANTHROPIC_MODEL=claude-opus-5
 IMPORT_INTERVAL=6h
 ```
 
-- [ ] **Step 4: Create the committed embed placeholder**
+- [x] **Step 4: Create the committed embed placeholder**
 
 ```bash
 mkdir -p internal/webui/dist
@@ -163,7 +163,7 @@ mkdir -p internal/webui/dist
 </html>
 ```
 
-- [ ] **Step 5: Create `.golangci.yml`**
+- [x] **Step 5: Create `.golangci.yml`**
 
 ```yaml
 version: "2"
@@ -183,7 +183,7 @@ formatters:
 
 golangci-lint v2 requires the `version: "2"` key and splits formatters (`gofmt`, `goimports`) out of `linters` into their own `formatters` section — a v1-style config fails with `unsupported version of the configuration` on v2. Confirmed against golangci-lint 2.13.2 while executing Task 1.
 
-- [ ] **Step 6: Create the `Makefile`**
+- [x] **Step 6: Create the `Makefile`**
 
 ```makefile
 .PHONY: build test lint vuln check run docker frontend sqlc-generate db-up
@@ -224,7 +224,7 @@ docker:
 	docker build -t recipe-reader .
 ```
 
-- [ ] **Step 7: Minimal `cmd/recipe-reader/main.go`**
+- [x] **Step 7: Minimal `cmd/recipe-reader/main.go`**
 
 ```go
 package main
@@ -239,12 +239,12 @@ func main() {
 }
 ```
 
-- [ ] **Step 8: Verify it builds**
+- [x] **Step 8: Verify it builds**
 
 Run: `go build ./...`
 Expected: no output, exit code 0.
 
-- [ ] **Step 9: Install dev-time tools**
+- [x] **Step 9: Install dev-time tools**
 
 `sqlc` and `golangci-lint` are dev-time tools, not `go.mod` dependencies:
 
@@ -253,7 +253,7 @@ go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 # golangci-lint: follow https://golangci-lint.run/welcome/install/ for your platform
 ```
 
-- [ ] **Step 10: Create `README.md` skeleton**
+- [x] **Step 10: Create `README.md` skeleton**
 
 ```markdown
 # Recipe Reader
@@ -273,7 +273,7 @@ Imports recipes from Instagram saved posts, extracts structured data, and serves
                  # go test spins up ephemeral Postgres containers via testcontainers-go — Docker must be running.
 ```
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add go.mod .gitignore .env.example Makefile .golangci.yml README.md cmd/recipe-reader/main.go internal/webui/dist/index.html
@@ -296,7 +296,7 @@ EOF
 **Interfaces:**
 - Produces: `config.Config` struct (fields: `HTTPAddr`, `DBDSN`, `InstagramUsername`, `InstagramPassword`, `InstagramSessionPath`, `InstagramCollection`, `ExtractionMode`, `ExtractionThreshold float64`, `AnthropicAPIKey`, `AnthropicModel`, `ImportInterval time.Duration`) and `config.Load() (Config, error)`. All later tasks (Task 3 DB, Task 8 LLM, Task 10 Instagram, Task 13 worker, Task 18 main) consume `config.Config` by field name above — do not rename fields later.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/config/config_test.go
@@ -339,12 +339,12 @@ func TestLoad_InvalidThreshold(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/config/... -v`
 Expected: FAIL — `package config: config.go: no such file or directory` (or `undefined: Load`).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/config/config.go
@@ -411,12 +411,12 @@ func getEnv(key, fallback string) string {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/config/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/config
@@ -484,14 +484,14 @@ func New(t *testing.T) *pgxpool.Pool   // starts an ephemeral Postgres container
 
 Every later task that touches the database (Task 4, 5, 12, 15, 16, 17, 18) imports `internal/domain` for types and either `internal/db` (connect/migrate/seed, wired once in `main.go`) or `internal/db/testdb` (in tests). `int64` is the ID type throughout — Postgres `BIGSERIAL`/`BIGINT`, not the `uint` GORM used, since there is no ORM auto-mapping doing that conversion anymore.
 
-- [ ] **Step 1: Add dependencies**
+- [x] **Step 1: Add dependencies**
 
 ```bash
 go get github.com/jackc/pgx/v5 github.com/golang-migrate/migrate/v4
 go get github.com/testcontainers/testcontainers-go github.com/testcontainers/testcontainers-go/modules/postgres
 ```
 
-- [ ] **Step 2: Write the schema migration**
+- [x] **Step 2: Write the schema migration**
 
 ```sql
 -- internal/db/migrations/0001_init.up.sql
@@ -552,7 +552,7 @@ DROP TABLE IF EXISTS units;
 
 `default_unit_id` on ingredients (present in the original GORM model) is dropped here — nothing in the app ever reads or writes it, so it doesn't earn a place in a hand-written schema the way it might have as an unused ORM struct field. Add it back in a `0002_...` migration if a real use for it shows up.
 
-- [ ] **Step 3: Write `sqlc.yaml`**
+- [x] **Step 3: Write `sqlc.yaml`**
 
 ```yaml
 version: "2"
@@ -568,7 +568,7 @@ sql:
         emit_interface: true
 ```
 
-- [ ] **Step 4: Write the query files**
+- [x] **Step 4: Write the query files**
 
 ```sql
 -- internal/db/queries/units.sql
@@ -673,7 +673,7 @@ DELETE FROM recipe_categories WHERE recipe_id = $1;
 
 `sqlc.narg(...)` marks a nullable/optional query parameter — `Search`/`Count` callers pass a `pgtype.Text`/`pgtype.Int8` with `Valid: false` for "no filter", which sqlc's generated code turns into a SQL `NULL` bound to that parameter. Task 4 shows exactly how the repository constructs these.
 
-- [ ] **Step 5: Generate and inspect the sqlc output**
+- [x] **Step 5: Generate and inspect the sqlc output**
 
 ```bash
 sqlc generate
@@ -681,7 +681,7 @@ sqlc generate
 
 Expected: `internal/db/sqlc/` now contains `db.go`, `models.go`, `querier.go`, and one `*.sql.go` file per query file above, with a `Queries` struct and one Go method per `-- name:` annotation. Run `go doc ./internal/db/sqlc` and skim the generated `Recipe`, `SearchRecipesParams`, `SearchRecipesRow`, and `ListRecipeIngredientsRow` struct field names — Task 4/5's code below assumes sqlc's standard `snake_case` → `PascalCase` naming (e.g. `ingredient_id` → `IngredientID`, `image_url` → `ImageUrl`); if a generated field name differs, fix the repository code to match what the compiler/`go doc` actually shows rather than guessing further.
 
-- [ ] **Step 6: Implement `internal/domain/models.go`**
+- [x] **Step 6: Implement `internal/domain/models.go`**
 
 ```go
 package domain
@@ -737,7 +737,7 @@ type Recipe struct {
 }
 ```
 
-- [ ] **Step 7: Implement `internal/db/connect.go`**
+- [x] **Step 7: Implement `internal/db/connect.go`**
 
 ```go
 package db
@@ -788,7 +788,7 @@ func Migrate(dsn string) error {
 var _ = pgxmigrate.WithInstance // referenced only to document the intended driver; see Step 8 note
 ```
 
-- [ ] **Step 8: Verify the migration driver against the installed module**
+- [x] **Step 8: Verify the migration driver against the installed module**
 
 `golang-migrate`'s pgx-v5 support has moved between import paths and setup calls across versions. Run:
 
@@ -798,7 +798,7 @@ go doc github.com/golang-migrate/migrate/v4/database/pgx/v5
 
 If `migrate.NewWithSourceInstance("iofs", src, dsn)` doesn't compile against what that shows (e.g. it wants a registered driver via a blank import like `_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"` plus a `pgx5://` DSN scheme, or an explicit `pgxmigrate.WithInstance(...)` call producing a `database.Driver` passed to `migrate.NewWithInstance`), adjust `Connect`/`Migrate` to match and delete the placeholder `var _ = pgxmigrate.WithInstance` line — it exists only to keep the import from being flagged as unused while you wire up whichever exact call shape the installed version expects. This is real, load-bearing code to get right, not a stub: don't move on until `go build ./internal/db/...` succeeds and Step 11's test passes against a real container.
 
-- [ ] **Step 9: Implement `internal/db/seed.go`**
+- [x] **Step 9: Implement `internal/db/seed.go`**
 
 ```go
 package db
@@ -834,7 +834,7 @@ func Seed(ctx context.Context, pool *pgxpool.Pool) error {
 }
 ```
 
-- [ ] **Step 10: Implement `internal/db/testdb/testdb.go`**
+- [x] **Step 10: Implement `internal/db/testdb/testdb.go`**
 
 ```go
 package testdb
@@ -890,7 +890,7 @@ func New(t *testing.T) *pgxpool.Pool {
 }
 ```
 
-- [ ] **Step 11: Write and run the verification test**
+- [x] **Step 11: Write and run the verification test**
 
 ```go
 // internal/db/db_test.go
@@ -937,7 +937,7 @@ func TestMigrateConnectSeed(t *testing.T) {
 Run: `go test ./internal/db/... -v` (needs Docker running)
 Expected: PASS — this single test exercises `Migrate`, `Connect`, and `Seed` together against a real, disposable Postgres.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add sqlc.yaml internal/domain internal/db go.mod go.sum
@@ -990,7 +990,7 @@ func NewRecipeRepository(pool *pgxpool.Pool) RecipeRepository
 
 `GetByID`/`GetBySource` return `(nil, repository.ErrNotFound)` when missing — Task 12 (pipeline dedupe) and Task 15 (HTTP 404 mapping) both branch on this sentinel. `Create`/`Update` replace both the `Ingredients` and `Categories` child rows atomically in one transaction — there is no ORM association layer to get half-right here, so both are handled explicitly by the same `writeAssociations` helper.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/repository/recipe_repository_test.go
@@ -1177,12 +1177,12 @@ func TestRecipeRepository_Search(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/repository/... -v`
 Expected: FAIL — package doesn't compile (`RecipeRepository`, `ErrNotFound`, `NewLookupRepository` undefined; the latter arrives in Task 5, so this whole package's tests only fully pass once both Task 4 and Task 5 are done — that's fine, they're one PR-sized unit of work).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/repository/recipe_repository.go
@@ -1425,12 +1425,12 @@ func (r *pgRecipeRepository) assemble(ctx context.Context, row sqlc.Recipe) (*do
 
 `sqlc generate`'s exact field names (`ImageUrl` vs `ImageURL`, `ListRecipeIngredientsRow` field names, whether `SearchRecipes`/`CountRecipes` params share one generated struct) depend on the installed sqlc version's naming conventions — this is the same "write it, then fix against the compiler" situation as Task 3 Step 8. Run `go build ./internal/repository/...` after `sqlc generate` and correct any field-name mismatches the compiler reports; the query logic and control flow above are what matters and shouldn't need to change.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/repository/... -v` (needs Docker running; each test starts its own Postgres container)
 Expected: PASS once Task 5's `NewLookupRepository`/`FindOrCreate*` exist too.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/repository/recipe_repository.go internal/repository/recipe_repository_test.go
@@ -1469,7 +1469,7 @@ func NewLookupRepository(pool *pgxpool.Pool) LookupRepository
 
 Task 12 (pipeline) uses `FindOrCreate*` to resolve extracted ingredient/unit/category names into IDs before building a `domain.Recipe`. Task 16 (HTTP handlers) uses the `List*` methods.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/repository/lookup_repository_test.go
@@ -1536,12 +1536,12 @@ func TestLookupRepository_FindOrCreateUnitAndCategory(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/repository/... -run TestLookupRepository -v`
 Expected: FAIL — `LookupRepository` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/repository/lookup_repository.go
@@ -1635,12 +1635,12 @@ func (r *pgLookupRepository) FindOrCreateIngredient(ctx context.Context, name st
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/repository/... -v`
 Expected: PASS (full `internal/repository` suite: recipe repository + lookup repository)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/repository/lookup_repository.go internal/repository/lookup_repository_test.go
@@ -1685,7 +1685,7 @@ func NormalizeUnit(candidate string) string
 
 Task 7 (rules), Task 8 (LLM), Task 9 (hybrid), and Task 12 (pipeline) all implement/consume `Extractor` and `ExtractedRecipe` exactly as defined here — do not add fields without updating all four.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/extraction/units_test.go
@@ -1717,12 +1717,12 @@ func TestNormalizeUnit(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/extraction/... -v`
 Expected: FAIL — package doesn't exist yet.
 
-- [ ] **Step 3: Implement `extractor.go`**
+- [x] **Step 3: Implement `extractor.go`**
 
 ```go
 // internal/extraction/extractor.go
@@ -1749,7 +1749,7 @@ type Extractor interface {
 }
 ```
 
-- [ ] **Step 4: Implement `units.go`**
+- [x] **Step 4: Implement `units.go`**
 
 ```go
 // internal/extraction/units.go
@@ -1785,12 +1785,12 @@ func NormalizeUnit(candidate string) string {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/extraction/... -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/extraction/extractor.go internal/extraction/units.go internal/extraction/units_test.go
@@ -1814,7 +1814,7 @@ EOF
 - Consumes: `Extractor`, `ExtractedRecipe`, `ExtractedIngredient`, `IsKnownUnit`, `NormalizeUnit` (Task 6).
 - Produces: `func NewRuleBasedExtractor() *RuleBasedExtractor` implementing `Extractor`. Parses German `Zutaten:` / `Zubereitung:` sections; assigns `Confidence` 0.5 per non-empty ingredients list and 0.5 per non-empty instructions (max 1.0) — Task 9's hybrid extractor and Task 12's pipeline both key off this exact scoring to decide LLM fallback / `needs_review` status.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/extraction/rules_test.go
@@ -1886,12 +1886,12 @@ func TestRuleBasedExtractor_NoRecipeSections(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/extraction/... -run TestRuleBasedExtractor -v`
 Expected: FAIL — `NewRuleBasedExtractor` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/extraction/rules.go
@@ -1999,12 +1999,12 @@ func confidenceFor(r *ExtractedRecipe) float64 {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/extraction/... -v`
 Expected: PASS. If `TestRuleBasedExtractor_FullCaption` fails on the ingredient count or the `400 g` match, print `result.Ingredients` with `t.Logf("%+v", result.Ingredients)` and adjust `ingredientLineRe` / `parseIngredientLine` — regex-based parsing of freeform captions is inherently approximate; iterate against the test fixtures until they pass, then add any caption shape you find failing in real usage as a new test case.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/extraction/rules.go internal/extraction/rules_test.go
@@ -2032,13 +2032,13 @@ EOF
 
 Per this session's default-model policy, `model` defaults to `claude-opus-5` when empty. This is a background batch-extraction task on short captions, not a chat product, so cost-sensitive deployments may prefer swapping in `claude-sonnet-5` or `claude-haiku-4-5` via the `ANTHROPIC_MODEL` env var (Task 2) — that is the user's call to make at deploy time, not a default this code should silently apply.
 
-- [ ] **Step 1: Add the SDK dependency**
+- [x] **Step 1: Add the SDK dependency**
 
 ```bash
 go get github.com/anthropics/anthropic-sdk-go
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 The live API is not called in this test — `parseToolInput` (the JSON→`ExtractedRecipe` mapping) is unit-tested directly against a fixture, since that is the only genuinely new logic; the API call itself is exercised manually per Step 5.
 
@@ -2089,12 +2089,12 @@ func TestParseToolInput_NoRecipeFound(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `go test ./internal/extraction/... -run TestParseToolInput -v`
 Expected: FAIL — `parseToolInput` undefined.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 ```go
 // internal/extraction/llm.go
@@ -2216,7 +2216,7 @@ func parseToolInput(raw []byte) (*ExtractedRecipe, error) {
 }
 ```
 
-- [ ] **Step 5: Run tests, then fix any SDK field-name mismatches against the compiler**
+- [x] **Step 5: Run tests, then fix any SDK field-name mismatches against the compiler**
 
 Run: `go test ./internal/extraction/... -v`
 
@@ -2251,7 +2251,7 @@ rm /tmp/llm_smoke_test.go
 
 Expected: prints a populated `ExtractedRecipe` with `Confidence: 0.9` and no error. This confirms the live request/response shape against the real API; keep it as a manual check, not a CI test (it costs money and requires a real key).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add internal/extraction/llm.go internal/extraction/llm_test.go go.mod go.sum
@@ -2293,7 +2293,7 @@ Implements `Extractor`. This is what Task 12 (pipeline) and Task 18 (`main.go` w
 
 > **[Task 25](2026-09-05-recipe-reader-tasks/25-provider-agnostic-llm-extractor.md)** requires this extractor to work with non-Anthropic providers too. No code change is needed here — `HybridExtractor` depends only on the `Extractor` interface — but Task 25 adds a regression test that drives it through an OpenAI-compatible `LLMExtractor`, and `main.go` gains the `nil`-when-no-key check for every provider, not just Anthropic.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/extraction/hybrid_test.go
@@ -2378,12 +2378,12 @@ func TestHybridExtractor_LLMErrorFallsBackToRulesResult(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/extraction/... -run TestHybridExtractor -v`
 Expected: FAIL — `NewHybridExtractor` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/extraction/hybrid.go
@@ -2419,12 +2419,12 @@ func (h *HybridExtractor) Extract(ctx context.Context, caption string) (*Extract
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/extraction/... -v`
 Expected: PASS (all extraction package tests: units, rules, llm parsing, hybrid)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/extraction/hybrid.go internal/extraction/hybrid_test.go
@@ -2447,13 +2447,13 @@ EOF
 **Interfaces:**
 - Produces: `func NewClient() *Client`, `func (c *Client) LoginOrRestore(username, password, sessionPath string) error`. Task 11 adds methods to the same `*Client`; Task 18 (`main.go`) constructs one `*Client` and calls `LoginOrRestore` once at startup.
 
-- [ ] **Step 1: Add the dependency**
+- [x] **Step 1: Add the dependency**
 
 ```bash
 go get github.com/felipeinf/instago
 ```
 
-- [ ] **Step 2: Write the test**
+- [x] **Step 2: Write the test**
 
 Live Instagram login can't run in CI (real credentials, 2FA, rate limits). This test only verifies the wrapper's session-restore short-circuit logic using a temp file, not real network calls.
 
@@ -2486,12 +2486,12 @@ func TestClient_LoginOrRestore_RestoresExistingSession(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `go test ./internal/instagram/... -v`
 Expected: FAIL — package doesn't exist.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 ```go
 // internal/instagram/client.go
@@ -2529,12 +2529,12 @@ func (c *Client) LoginOrRestore(username, password, sessionPath string) error {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/instagram/... -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/instagram/client.go internal/instagram/client_test.go go.mod go.sum
@@ -2580,7 +2580,7 @@ Task 12 (pipeline) consumes `SavedPost` and calls either `FetchSavedPosts` or `F
 
 **⚠️ Verification required before production use.** `instago` (verified against its source on 2026-09-05) has no typed method for saved posts or collections — this task calls the private/unofficial `feed/saved/posts/`, `collections/list/`, and `feed/collection/{id}/posts/` endpoints directly via `instago`'s generic `PrivateRequest`, using endpoint paths and a response shape inferred from other open-source Instagram clients, not from `instago`'s own documentation. The media-parsing logic (`extractMedia`) *is* grounded in `instago`'s verified internal JSON field mapping (`caption.text`, `image_versions2.candidates[].url`). Step 6 below is a mandatory manual verification against a real account before this is relied on.
 
-- [ ] **Step 1: Write the failing test (parsing logic only, no network)**
+- [x] **Step 1: Write the failing test (parsing logic only, no network)**
 
 ```go
 // internal/instagram/saved_test.go
@@ -2623,12 +2623,12 @@ func TestExtractMedia_MissingCode(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/instagram/... -run TestExtractMedia -v`
 Expected: FAIL — `extractMedia` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/instagram/saved.go
@@ -2766,12 +2766,12 @@ func extractMedia(media map[string]any) (SavedPost, bool) {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/instagram/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/instagram/saved.go internal/instagram/saved_test.go
@@ -2854,7 +2854,7 @@ func (p *Pipeline) Run(ctx context.Context) (ImportResult, error)
 
 Task 13 (worker) wraps `Pipeline.Run`. Task 18 (`main.go`) implements `PostFetcher` with a tiny adapter around `*instagram.Client` (Task 10/11's `PipelineFetcher`).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/pipeline/pipeline_test.go
@@ -2998,12 +2998,12 @@ func TestPipeline_ExtractionFailureCountsAsFailedNotFatal(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/pipeline/... -v`
 Expected: FAIL — package doesn't exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/pipeline/pipeline.go
@@ -3117,12 +3117,12 @@ func (p *Pipeline) toRecipe(ctx context.Context, post instagram.SavedPost, ex *e
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/pipeline/... -v` (needs Docker running)
 Expected: PASS (all four scenarios)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/pipeline/pipeline.go internal/pipeline/pipeline_test.go
@@ -3156,7 +3156,7 @@ func (w *Worker) Status() (lastRun time.Time, lastResult ImportResult, lastErr e
 
 Task 17 (`handlers_import.go`) calls `RunOnce` (trigger endpoint) and `Status` (status endpoint) on the single `*Worker` instance constructed in Task 18 (`main.go`), which also calls `Start` once at boot.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/pipeline/worker_test.go
@@ -3228,12 +3228,12 @@ func TestWorker_RunOnce_SkipsConcurrentOverlap(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/pipeline/... -run TestWorker -v`
 Expected: FAIL — `NewWorker` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/pipeline/worker.go
@@ -3304,16 +3304,16 @@ func (w *Worker) Status() (lastRun time.Time, lastResult ImportResult, lastErr e
 }
 ```
 
-- [ ] **Step 4: Add the missing test-file imports**
+- [x] **Step 4: Add the missing test-file imports**
 
 `internal/pipeline/worker_test.go` needs `"github.com/sBurmester/recipe-reader/internal/extraction"` and `"github.com/sBurmester/recipe-reader/internal/instagram"` added to its import block (used by `fakeExtractor`/`instagram.SavedPost` inside `blockingFetcher`).
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/pipeline/... -v -race`
 Expected: PASS. Run with `-race` since `Worker` is accessed from two goroutines in the overlap test — this is the moment to catch a missing lock, not later in production.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/pipeline/worker.go internal/pipeline/worker_test.go
@@ -3348,7 +3348,7 @@ func NewRouter(deps Deps) http.Handler   // wraps the ServeMux with logging + re
 
 Task 15-17 add handler methods on `Deps`; Task 18 (`main.go`) is the only caller of `NewRouter`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/api/router_test.go
@@ -3408,12 +3408,12 @@ func TestRouter_SetsCORSHeaders(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/api/... -v`
 Expected: FAIL — package doesn't exist.
 
-- [ ] **Step 3: Implement `middleware.go`**
+- [x] **Step 3: Implement `middleware.go`**
 
 ```go
 // internal/api/middleware.go
@@ -3459,7 +3459,7 @@ func withCORS(next http.Handler) http.Handler {
 }
 ```
 
-- [ ] **Step 4: Implement `router.go`**
+- [x] **Step 4: Implement `router.go`**
 
 ```go
 // internal/api/router.go
@@ -3504,7 +3504,7 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 ```
 
-- [ ] **Step 5: Add the shared JSON helpers**
+- [x] **Step 5: Add the shared JSON helpers**
 
 These are used by every handler task that follows (15-17); put them in `internal/api/dto.go`'s preamble now so Task 15 doesn't need to touch this file again.
 
@@ -3528,12 +3528,12 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `go test ./internal/api/... -v`
 Expected: PASS (`TestRouter_Health`, `TestRouter_RecoversFromPanic` — nil `Deps.Recipes` in `handleListRecipes` will panic until Task 15 adds real handlers, which the recovery middleware turns into a 500 — and `TestRouter_SetsCORSHeaders`).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add internal/api/router.go internal/api/middleware.go internal/api/dto.go internal/api/router_test.go
@@ -3559,7 +3559,7 @@ EOF
 - Consumes: `Deps` (Task 14); `repository.RecipeRepository`, `repository.LookupRepository`, `repository.SearchQuery`, `repository.ErrNotFound` (Task 4/5); `domain.Recipe`, `domain.RecipeIngredient`, `domain.Category`, `domain.RecipeStatus` (Task 3); `testdb.New` (Task 3).
 - Produces: `writeJSON`, `writeError` helpers; `RecipeDTO`, `IngredientDTO`, `CategoryDTO` (JSON shape for the frontend — Task 19's `types.ts` mirrors these field names exactly; IDs are JSON numbers either way, so the Go `int64` vs the old `uint` makes no difference on the wire), `toRecipeDTO(domain.Recipe) RecipeDTO`, and the five `Deps.handle*Recipe*` methods wired in Task 14's router.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/api/handlers_recipes_test.go
@@ -3696,12 +3696,12 @@ func TestRecipeHandlers_CreateValidation(t *testing.T) {
 
 Add `"fmt"` to this test file's imports (used by `fmt.Sprintf` above).
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/api/... -run TestRecipeHandlers -v`
 Expected: FAIL — `RecipeDTO` undefined.
 
-- [ ] **Step 3: Implement `dto.go`**
+- [x] **Step 3: Implement `dto.go`**
 
 ```go
 // internal/api/dto.go
@@ -3763,7 +3763,7 @@ func toRecipeDTO(r domain.Recipe) RecipeDTO {
 }
 ```
 
-- [ ] **Step 4: Implement handlers**
+- [x] **Step 4: Implement handlers**
 
 ```go
 // internal/api/handlers_recipes.go
@@ -3937,12 +3937,12 @@ func parseIDParam(r *http.Request) (int64, error) {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/api/... -v` (needs Docker running)
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/api/dto.go internal/api/handlers_recipes.go internal/api/handlers_recipes_test.go
@@ -3967,7 +3967,7 @@ EOF
 - Consumes: `Deps`, `writeJSON` (Task 14/15); `repository.LookupRepository` (Task 5); `CategoryDTO` (Task 15).
 - Produces: `Deps.handleListCategories`, `Deps.handleListUnits`, `Deps.handleListIngredients` (already referenced by Task 14's router).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/api/handlers_lookups_test.go
@@ -4017,12 +4017,12 @@ func TestLookupHandlers_ListCategoriesUnitsIngredients(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/api/... -run TestLookupHandlers -v`
 Expected: FAIL — `handleListCategories` etc. undefined (router already references them per Task 14, so this is a compile error until they exist).
 
-- [ ] **Step 3: Extend `dto.go`**
+- [x] **Step 3: Extend `dto.go`**
 
 ```go
 type UnitDTO struct {
@@ -4036,7 +4036,7 @@ type IngredientLookupDTO struct {
 }
 ```
 
-- [ ] **Step 4: Implement handlers**
+- [x] **Step 4: Implement handlers**
 
 ```go
 // internal/api/handlers_lookups.go
@@ -4084,12 +4084,12 @@ func (d Deps) handleListIngredients(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `go test ./internal/api/... -v`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/api/dto.go internal/api/handlers_lookups.go internal/api/handlers_lookups_test.go
@@ -4113,7 +4113,7 @@ EOF
 - Consumes: `Deps`, `writeJSON` (Task 14/15); `pipeline.Worker`, `pipeline.ImportResult` (Task 13).
 - Produces: `Deps.handleImportRun`, `Deps.handleImportStatus` (already referenced by Task 14's router).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 // internal/api/handlers_import_test.go
@@ -4174,12 +4174,12 @@ func TestImportHandlers_RunAndStatus(t *testing.T) {
 
 `Extractor: (*extraction.HybridExtractor)(nil)` is safe here only because `noopFetcher.FetchNewPosts` returns zero posts, so the pipeline loop never reaches `Extract` — no nil-pointer call actually happens.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test ./internal/api/... -run TestImportHandlers -v`
 Expected: FAIL — `handleImportRun` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```go
 // internal/api/handlers_import.go
@@ -4211,12 +4211,12 @@ func (d Deps) handleImportStatus(w http.ResponseWriter, r *http.Request) {
 
 `handleImportRun` triggers the run in a background goroutine and returns immediately with 202 Accepted — matching PROJECT.md's requirement that extraction/storage need not be real-time, while the recipe-display API stays fast and unaffected by an in-flight import.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `go test ./internal/api/... -v`
 Expected: PASS (full `internal/api` suite: router, recipe handlers, lookup handlers, import handlers)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/api/handlers_import.go internal/api/handlers_import_test.go
@@ -4242,7 +4242,7 @@ EOF
 
 > **If [Task 25](2026-09-05-recipe-reader-tasks/25-provider-agnostic-llm-extractor.md) is done first,** replace the `NewLLMExtractor(cfg.AnthropicAPIKey, cfg.AnthropicModel)` block in Step 2's `run()` with the config-driven `extraction.LLMConfig` construction from Task 25 Step 6 (handles `LLM_PROVIDER` / `LLM_BASE_URL` and returns an `error`). The `llm == nil ⇒ rules-only` behaviour is unchanged.
 
-- [ ] **Step 1: Implement the fetcher adapter**
+- [x] **Step 1: Implement the fetcher adapter**
 
 ```go
 // internal/instagram/fetcher_adapter.go
@@ -4275,7 +4275,7 @@ func (f *PipelineFetcher) FetchNewPosts(_ context.Context) ([]SavedPost, error) 
 }
 ```
 
-- [ ] **Step 2: Replace `cmd/recipe-reader/main.go`**
+- [x] **Step 2: Replace `cmd/recipe-reader/main.go`**
 
 ```go
 // cmd/recipe-reader/main.go
@@ -4377,7 +4377,7 @@ func run() error {
 
 `api.Deps.Worker` is `*pipeline.Worker`; when Instagram credentials are not configured, `worker` stays `nil` and `handleImportRun`/`handleImportStatus` (Task 17) will panic on the nil pointer — the recovery middleware (Task 14) turns that into a 500. If this shows up in practice, add a `d.Worker == nil` → `503 Service Unavailable` guard as the first line of both handlers.
 
-- [ ] **Step 3: Verify the full build and test suite**
+- [x] **Step 3: Verify the full build and test suite**
 
 ```bash
 go build ./...
@@ -4386,7 +4386,7 @@ go test ./...
 
 Expected: build succeeds, all tests from Tasks 2-17 pass (Docker must be running — `internal/db`, `internal/repository`, `internal/pipeline`, and `internal/api` tests all spin up ephemeral Postgres containers via `testdb.New`).
 
-- [ ] **Step 4: Manual smoke test**
+- [x] **Step 4: Manual smoke test**
 
 ```bash
 cp .env.example .env
@@ -4399,7 +4399,7 @@ curl -s localhost:8080/api/categories
 
 Expected: `{"status":"ok"}` and a JSON array of the seeded categories.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add cmd/recipe-reader/main.go internal/instagram/fetcher_adapter.go
@@ -4445,7 +4445,7 @@ export function importStatus(): Promise<ImportStatus>
 
 Task 20 (list page), Task 21 (detail page), and Task 22 (import page) consume every function in `api.ts` and the `el()` helper from `dom.ts` — do not rename any of them later.
 
-- [ ] **Step 1: Scaffold the Vite project**
+- [x] **Step 1: Scaffold the Vite project**
 
 ```bash
 mkdir -p web/src/pages
@@ -4522,13 +4522,13 @@ export default defineConfig({
 </html>
 ```
 
-- [ ] **Step 2: Install dependencies**
+- [x] **Step 2: Install dependencies**
 
 ```bash
 npm --prefix web install
 ```
 
-- [ ] **Step 3: Implement `types.ts`**
+- [x] **Step 3: Implement `types.ts`**
 
 ```ts
 // web/src/types.ts
@@ -4572,7 +4572,7 @@ export interface ImportStatus {
 }
 ```
 
-- [ ] **Step 4: Implement `dom.ts`**
+- [x] **Step 4: Implement `dom.ts`**
 
 ```ts
 // web/src/dom.ts
@@ -4602,7 +4602,7 @@ export function clear(node: Element): void {
 }
 ```
 
-- [ ] **Step 5: Implement `api.ts`**
+- [x] **Step 5: Implement `api.ts`**
 
 ```ts
 // web/src/api.ts
@@ -4672,12 +4672,12 @@ export function importStatus(): Promise<ImportStatus> {
 }
 ```
 
-- [ ] **Step 6: Verify it typechecks**
+- [x] **Step 6: Verify it typechecks**
 
 Run: `npm --prefix web run typecheck`
 Expected: no errors (there are no pages/main.ts yet, but `types.ts`, `dom.ts`, `api.ts` compile standalone).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add web/package.json web/vite.config.ts web/tsconfig.json web/index.html web/src/types.ts web/src/api.ts web/src/dom.ts
@@ -4700,7 +4700,7 @@ EOF
 - Consumes: `listRecipes`, `listCategories` (Task 19 `api.ts`); `el`, `clear` (Task 19 `dom.ts`); `Recipe`, `Category` (Task 19 `types.ts`).
 - Produces: `export function renderListPage(container: HTMLElement): void`. Task 22 (`main.ts` router) calls this for the `#/` route.
 
-- [ ] **Step 1: Implement**
+- [x] **Step 1: Implement**
 
 ```ts
 // web/src/pages/list.ts
@@ -4791,12 +4791,12 @@ export function renderListPage(container: HTMLElement): void {
 }
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `npm --prefix web run typecheck`
 Expected: no errors. (Manual browser verification happens in Task 22 once the router wires this page in.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add web/src/pages/list.ts
@@ -4819,7 +4819,7 @@ EOF
 - Consumes: `getRecipe`, `updateRecipe`, `deleteRecipe`, `listUnits` (Task 19 `api.ts`); `el`, `clear` (Task 19 `dom.ts`); `Recipe`, `Ingredient`, `Unit` (Task 19 `types.ts`).
 - Produces: `export function renderDetailPage(container: HTMLElement, id: number): void`. Task 22 calls this for the `#/recipes/:id` route.
 
-- [ ] **Step 1: Implement**
+- [x] **Step 1: Implement**
 
 ```ts
 // web/src/pages/detail.ts
@@ -4933,12 +4933,12 @@ function renderForm(container: HTMLElement, recipe: Recipe, units: Unit[]): void
 }
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `npm --prefix web run typecheck`
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add web/src/pages/detail.ts
@@ -4961,7 +4961,7 @@ EOF
 - Consumes: `triggerImport`, `importStatus` (Task 19 `api.ts`); `el`, `clear` (Task 19 `dom.ts`); `renderListPage` (Task 20); `renderDetailPage` (Task 21).
 - Produces: the app entry point. No later Go/TS task consumes this — it is the frontend composition root, mirroring `main.go` (Task 18) on the backend.
 
-- [ ] **Step 1: Implement `pages/import.ts`**
+- [x] **Step 1: Implement `pages/import.ts`**
 
 ```ts
 // web/src/pages/import.ts
@@ -5020,7 +5020,7 @@ export function renderImportPage(container: HTMLElement): void {
 }
 ```
 
-- [ ] **Step 2: Implement `main.ts` (hash router)**
+- [x] **Step 2: Implement `main.ts` (hash router)**
 
 ```ts
 // web/src/main.ts
@@ -5053,7 +5053,7 @@ window.addEventListener("hashchange", route);
 route();
 ```
 
-- [ ] **Step 3: Implement `style.css`**
+- [x] **Step 3: Implement `style.css`**
 
 ```css
 /* web/src/style.css */
@@ -5138,7 +5138,7 @@ button.danger {
 }
 ```
 
-- [ ] **Step 4: Typecheck and build**
+- [x] **Step 4: Typecheck and build**
 
 ```bash
 npm --prefix web run typecheck
@@ -5147,7 +5147,7 @@ npm --prefix web run build
 
 Expected: both succeed; `web/dist/` is created.
 
-- [ ] **Step 5: Manual browser verification**
+- [x] **Step 5: Manual browser verification**
 
 ```bash
 make run &                # backend on :8080
@@ -5156,7 +5156,7 @@ npm --prefix web run dev  # frontend dev server, proxies /api to :8080
 
 Open `http://localhost:5173`. Verify: the recipe list loads (empty state renders correctly with zero recipes), category filter dropdown populates, search debounces, `#/import` shows the import status page and "Import jetzt starten" triggers a run (status will show `Fehler` since Instagram credentials aren't configured in dev — that's expected; the page must still render the error state cleanly, not crash). Create a recipe via `curl -X POST localhost:8080/api/recipes ...` and confirm it appears in the list and its detail/edit page loads, saves, and deletes correctly.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add web/src/pages/import.ts web/src/main.ts web/src/style.css
@@ -5182,7 +5182,7 @@ EOF
 - Consumes: `internal/webui/dist/*` (placeholder from Task 1, real build from Task 22's `npm run build` + the `make frontend` copy step).
 - Produces: `func webui.Handler() (http.Handler, error)` — SPA-fallback file server. Task 18's `main.go` wiring is extended (not replaced) to serve it for any path not under `/api/`.
 
-- [ ] **Step 1: Implement the embed handler**
+- [x] **Step 1: Implement the embed handler**
 
 ```go
 // internal/webui/embed.go
@@ -5223,7 +5223,7 @@ func Handler() (http.Handler, error) {
 }
 ```
 
-- [ ] **Step 2: Wire it into `main.go`**
+- [x] **Step 2: Wire it into `main.go`**
 
 In `run()` (Task 18), replace:
 
@@ -5249,7 +5249,7 @@ server := &http.Server{Addr: cfg.HTTPAddr, Handler: mux}
 
 Add `"github.com/sBurmester/recipe-reader/internal/webui"` to the import block.
 
-- [ ] **Step 3: Verify with the placeholder frontend**
+- [x] **Step 3: Verify with the placeholder frontend**
 
 ```bash
 go build ./...
@@ -5262,7 +5262,7 @@ kill %1
 
 Expected: the placeholder message and `{"status":"ok"}`.
 
-- [ ] **Step 4: Verify with the real frontend**
+- [x] **Step 4: Verify with the real frontend**
 
 ```bash
 make frontend
@@ -5275,7 +5275,7 @@ git checkout -- internal/webui/dist/index.html   # restore the committed placeho
 
 Expected: both requests return HTML (the real app shell), not the placeholder or a 404.
 
-- [ ] **Step 5: Create the `Dockerfile`**
+- [x] **Step 5: Create the `Dockerfile`**
 
 Check `docker --version`, current Node LTS, and current Go stable before building — pin close to what's actually current rather than these exact tags if newer patch releases exist. `sqlc generate`'s output (`internal/db/sqlc/`) is committed to git (Task 3), so the Docker build never needs the `sqlc` CLI itself — it's building already-generated Go source like any other package.
 
@@ -5304,7 +5304,7 @@ EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/recipe-reader"]
 ```
 
-- [ ] **Step 6: Create `docker-compose.yml`**
+- [x] **Step 6: Create `docker-compose.yml`**
 
 ```yaml
 services:
@@ -5345,7 +5345,7 @@ volumes:
 
 `make db-up` (Task 1) runs `docker compose up -d db` — the same service the full `app` container talks to, so local dev and the containerized app hit an identical schema/dialect.
 
-- [ ] **Step 7: Build and run the Docker image**
+- [x] **Step 7: Build and run the Docker image**
 
 ```bash
 docker compose up --build
@@ -5355,7 +5355,7 @@ docker compose down
 
 Expected: `{"status":"ok"}`, served by the app container against the compose-managed Postgres.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add internal/webui/embed.go cmd/recipe-reader/main.go Dockerfile docker-compose.yml
@@ -5379,7 +5379,7 @@ EOF
 - Consumes: `Makefile` targets `check`, `frontend`, `build`, `sqlc-generate` (Task 1); `npm run typecheck`/`build` (Task 19/22).
 - Produces: nothing further consumes this — it is the last task in the plan.
 
-- [ ] **Step 1: Create the CI workflow**
+- [x] **Step 1: Create the CI workflow**
 
 ```yaml
 # .github/workflows/ci.yml
@@ -5449,7 +5449,7 @@ jobs:
 
 Check the current Go/Node minor versions at execution time (`go version`, `node --version`) and update the `go-version`/`node-version` fields to match — this workflow was written against Go 1.27 and Node 26, current at plan-writing time.
 
-- [ ] **Step 2: Verify the workflow's steps locally**
+- [x] **Step 2: Verify the workflow's steps locally**
 
 ```bash
 sqlc generate && git diff --exit-code -- internal/db/sqlc
@@ -5461,7 +5461,7 @@ docker build -t recipe-reader:ci .
 
 Expected: every command succeeds (`make check` = gofmt + go vet + golangci-lint + govulncheck + go test, per Task 1's Makefile; the `go test` leg needs Docker running for the testcontainers-backed suites).
 
-- [ ] **Step 3: Finalize `README.md`**
+- [x] **Step 3: Finalize `README.md`**
 
 ```markdown
 # Recipe Reader
@@ -5525,7 +5525,7 @@ Service risk — use it against your own account for personal recipe
 collection, not as a scraping service.
 ```
 
-- [ ] **Step 4: Final full-repo verification**
+- [x] **Step 4: Final full-repo verification**
 
 ```bash
 make check
@@ -5541,7 +5541,7 @@ kill %1
 
 Expected: every command exits 0; both `curl` calls return valid responses. This is the final acceptance check for the whole plan — if it passes, the app builds, tests pass, lints clean, and serves both the API and the embedded frontend from one binary against Postgres.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add .github/workflows/ci.yml README.md
@@ -5599,15 +5599,15 @@ func NewLLMExtractor(cfg LLMConfig) (*LLMExtractor, error)
 
 **Config additions** (`internal/config/config.go`, amends Task 2 — keep the existing `AnthropicAPIKey` / `AnthropicModel` as the anthropic-provider fallback): `LLMProvider` (`LLM_PROVIDER`, default `anthropic`), `LLMAPIKey` (`LLM_API_KEY`), `LLMModel` (`LLM_MODEL`), `LLMBaseURL` (`LLM_BASE_URL`), plus a `Config.LLMExtractorConfig() (provider, apiKey, model, baseURL string, ok bool)` helper that applies the `ANTHROPIC_*` fallbacks and reports `ok == false` when no key is configured (so `main.go` passes `llm = nil` and hybrid stays rules-only — unchanged Global Constraint, now per-provider).
 
-- [ ] **Step 1: Add the OpenAI SDK dependency** — `go get github.com/openai/openai-go` (official SDK, `option.WithBaseURL` per host; a hand-rolled `net/http` client is an acceptable alternative).
-- [ ] **Step 2: Write the failing tests** — extend `llm_test.go`; add `llm_provider_test.go` with `httptest.Server` stubs returning a canned Anthropic `tool_use` response and a canned OpenAI `tool_calls` response (both carrying the same `record_recipe` args JSON); add `TestHybridExtractor_FallsBackThroughOpenAICompatibleProvider`. No live API. Assert both transports yield an identical `ExtractedRecipe` (name, one ingredient, `Confidence == 0.9`), that the openai provider errors with no model, and that an unknown provider errors.
-- [ ] **Step 3: Run tests to verify they fail** — `LLMConfig` / `ProviderOpenAI` / new constructor undefined.
-- [ ] **Step 4: Implement `llm_provider.go`** — `llmClient` interface; `anthropicClient` (moves the shipped forced-tool-call code from `llm.go`, adds `option.WithBaseURL` when `cfg.BaseURL != ""`, returns `tu.Input`); `openAIClient` (`openai.Chat.Completions.New` with `SystemMessage`/`UserMessage`, a `record_recipe` function whose parameters mirror `recordRecipeTool.InputSchema`, `ToolChoice` forced to that function, reads `resp.Choices[0].Message.ToolCalls[0].Function.Arguments`); `newLLMClient(cfg)` switch on `cfg.Provider`. **SDK-surface caveat (as in Task 8 Step 5):** verify the `openai-go` forced-function-call type names with `go doc` against the installed version and fix the literal if `go build` complains.
-- [ ] **Step 5: Rewrite `llm.go` to delegate** — keep `defaultLLMModel`, `systemPrompt`, `recordRecipeTool`, `parseToolInput` unchanged; `LLMExtractor` becomes `struct{ client llmClient }`; new constructor calls `newLLMClient`; `Extract` = `recordRecipe` + `parseToolInput`; drop the now-unused `anthropic`/`option` imports from `llm.go`.
-- [ ] **Step 6: Wire through config and `main.go`** — add the four fields + `LLMExtractorConfig()` to `config.go`; in Task 18's `run()` build `extraction.LLMConfig` from it, `return fmt.Errorf(...)` on constructor error, keep `llm == nil ⇒ rules-only`.
-- [ ] **Step 7: Run the full suite** — `go test ./internal/extraction/... ./internal/config/... -v`, expect PASS.
-- [ ] **Step 8: Update docs** — `.env.example` (`LLM_PROVIDER` / `LLM_API_KEY` / `LLM_MODEL` / `LLM_BASE_URL`, with the OpenAI-compatible-host comment and the `ANTHROPIC_*` fallback note); `README.md` extraction notes; this plan's Global Constraints "Extraction" bullet (done).
-- [ ] **Step 9: Pre-commit gate & commit** — `gofmt -w . && go vet ./... && golangci-lint run ./... && govulncheck ./... && go test ./...`, then commit `feat: make the LLM and hybrid extractors provider-agnostic` with the `Assisted-by:` footer.
+- [x] **Step 1: Add the OpenAI SDK dependency** — `go get github.com/openai/openai-go` (official SDK, `option.WithBaseURL` per host; a hand-rolled `net/http` client is an acceptable alternative).
+- [x] **Step 2: Write the failing tests** — extend `llm_test.go`; add `llm_provider_test.go` with `httptest.Server` stubs returning a canned Anthropic `tool_use` response and a canned OpenAI `tool_calls` response (both carrying the same `record_recipe` args JSON); add `TestHybridExtractor_FallsBackThroughOpenAICompatibleProvider`. No live API. Assert both transports yield an identical `ExtractedRecipe` (name, one ingredient, `Confidence == 0.9`), that the openai provider errors with no model, and that an unknown provider errors.
+- [x] **Step 3: Run tests to verify they fail** — `LLMConfig` / `ProviderOpenAI` / new constructor undefined.
+- [x] **Step 4: Implement `llm_provider.go`** — `llmClient` interface; `anthropicClient` (moves the shipped forced-tool-call code from `llm.go`, adds `option.WithBaseURL` when `cfg.BaseURL != ""`, returns `tu.Input`); `openAIClient` (`openai.Chat.Completions.New` with `SystemMessage`/`UserMessage`, a `record_recipe` function whose parameters mirror `recordRecipeTool.InputSchema`, `ToolChoice` forced to that function, reads `resp.Choices[0].Message.ToolCalls[0].Function.Arguments`); `newLLMClient(cfg)` switch on `cfg.Provider`. **SDK-surface caveat (as in Task 8 Step 5):** verify the `openai-go` forced-function-call type names with `go doc` against the installed version and fix the literal if `go build` complains.
+- [x] **Step 5: Rewrite `llm.go` to delegate** — keep `defaultLLMModel`, `systemPrompt`, `recordRecipeTool`, `parseToolInput` unchanged; `LLMExtractor` becomes `struct{ client llmClient }`; new constructor calls `newLLMClient`; `Extract` = `recordRecipe` + `parseToolInput`; drop the now-unused `anthropic`/`option` imports from `llm.go`.
+- [x] **Step 6: Wire through config and `main.go`** — add the four fields + `LLMExtractorConfig()` to `config.go`; in Task 18's `run()` build `extraction.LLMConfig` from it, `return fmt.Errorf(...)` on constructor error, keep `llm == nil ⇒ rules-only`.
+- [x] **Step 7: Run the full suite** — `go test ./internal/extraction/... ./internal/config/... -v`, expect PASS.
+- [x] **Step 8: Update docs** — `.env.example` (`LLM_PROVIDER` / `LLM_API_KEY` / `LLM_MODEL` / `LLM_BASE_URL`, with the OpenAI-compatible-host comment and the `ANTHROPIC_*` fallback note); `README.md` extraction notes; this plan's Global Constraints "Extraction" bullet (done).
+- [x] **Step 9: Pre-commit gate & commit** — `gofmt -w . && go vet ./... && golangci-lint run ./... && govulncheck ./... && go test ./...`, then commit `feat: make the LLM and hybrid extractors provider-agnostic` with the `Assisted-by:` footer.
 - [ ] **Step 10: Manual live smoke test (deferred)** — one run per provider with real keys before production, e.g. `LLM_PROVIDER=openai LLM_BASE_URL=https://api.groq.com/openai/v1 LLM_API_KEY=… LLM_MODEL=… go run ./cmd/recipe-reader`.
 
 ---
