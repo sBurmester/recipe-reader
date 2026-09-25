@@ -385,9 +385,11 @@ Each of these was decided on purpose. Don't reverse one without the user's appro
   `go test -race` with coverage, plus frontend typecheck and build, plus `docker build` and
   `scripts/smoke-test-image.sh`. The smoke test checks healthz, the image `HEALTHCHECK` status, a
   DB route, a real frontend (not the placeholder), and a stamped version matching `--version`.
-- **CI skips runs where every changed file is `**.md`, `docs/**` or `.github/workflows/**`.**
-  Workflow-only changes, including Renovate action updates, must be run by hand:
-  `gh workflow run ci.yml --ref <branch>`.
+- **CI skips runs where every changed file is `**.md`, `docs/**`, `.github/workflows/**` or
+  `.release-please-manifest.json`.** Workflow-only changes, including Renovate action updates,
+  must be run by hand: `gh workflow run ci.yml --ref <branch>`. The manifest is ignored so that the
+  release PR starts no run. GitHub would hold that run for approval, because the PR is opened with
+  `GITHUB_TOKEN`.
 - Every GitHub Action and base image is **pinned by digest with a readable tag comment**
   (`uses: actions/checkout@<sha> # v7`, `image@sha256:… `). Pin anything you add. Renovate raises
   digests. Don't pin by hand in bulk (E10).

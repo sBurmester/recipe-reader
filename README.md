@@ -554,9 +554,11 @@ change alone once produced `v0.1.2`. A breaking `refactor!:` still releases and 
 the breaking changes.
 
 The workflow opens its PR and creates the release with the workflow's own token, which needs
-*Settings → Actions → General → Allow GitHub Actions to create and approve pull requests*. A PR
-opened that way starts no other workflow, so CI does not run on the release PR; it changes only
-the changelog and the version manifest.
+*Settings → Actions → General → Allow GitHub Actions to create and approve pull requests*. Since
+June 2026, GitHub holds every workflow run started by a PR opened that way until a maintainer
+approves it. CI therefore ignores `.release-please-manifest.json` as well as `**.md`. The release
+PR changes only that manifest and `CHANGELOG.md`, so it starts no CI run and there is nothing to
+approve. The code it releases was already tested on `main`.
 
 Each release carries a single static binary for `linux/amd64`, `linux/arm64` and `darwin/arm64`,
 with the frontend embedded and the tag stamped in, plus a `checksums.txt`. Installing one:
