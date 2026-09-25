@@ -183,9 +183,9 @@ Ein PR enthält die Task-Commits seines Milestones, die Korrekturen aus dem Mile
 
 ### Aufgabenliste
 
-- [ ] **Vorbereitung:** Diesen Plan und das Abhaken der Task-Dateien vom 2026-09-25 über einen eigenen `docs:`-PR auf `main` bringen, damit jeder Milestone-Branch ihn schon enthält
+- [x] **Vorbereitung:** Diesen Plan und das Abhaken der Task-Dateien vom 2026-09-25 über einen eigenen `docs:`-PR auf `main` bringen, damit jeder Milestone-Branch ihn schon enthält
 - [ ] **M1: Abbruch statt Fallback**
-  - [ ] **Task 1:** Ein Abbruch ist kein LLM-Ausfall und kein fehlgeschlagener Post (M)
+  - [x] **Task 1:** Ein Abbruch ist kein LLM-Ausfall und kein fehlgeschlagener Post (M)
   - [ ] **Milestone-Review**
 - [ ] **M2: Ein Index weniger**
   - [ ] **Task 2:** Migration `0004` (S)
@@ -213,7 +213,7 @@ Wie in den Vorgängerplänen: ein frischer Subagent pro Task, strikt nacheinande
 
 Der Branch `docs/agents-md` ist gemerged (PR #64) und bekommt nichts mehr. Das lokale `main` war beim Schreiben dieses Plans veraltet und enthielt `AGENTS.md` noch nicht; nach einem `fetch` liegt es auf `origin/main`. Ungespeichert im Arbeitsverzeichnis liegen dieser Plan und das Abhaken der Task-Dateien vom 2026-09-25 (161 Checkboxen in `2026-09-05-recipe-reader-implementation.md` und `2026-09-05-recipe-reader-tasks/25-provider-agnostic-llm-extractor.md`).
 
-- [ ] **Step 1: Neuen Branch von `origin/main` anlegen**
+- [x] **Step 1: Neuen Branch von `origin/main` anlegen**
 
 ```bash
 git fetch origin && git switch -c docs/backlog-cleanup-plan origin/main
@@ -221,12 +221,12 @@ git fetch origin && git switch -c docs/backlog-cleanup-plan origin/main
 
 Ungespeicherte Änderungen wandern mit, solange `origin/main` diese drei Dateien seit dem Abzweig nicht verändert hat. Verweigert `git switch` das, die Änderungen mit `git stash` beiseitelegen, wechseln und `git stash pop`.
 
-- [ ] **Step 2: Prüfen, dass genau das im Arbeitsverzeichnis liegt**
+- [x] **Step 2: Prüfen, dass genau das im Arbeitsverzeichnis liegt**
 
 Run: `git status --short && git diff --stat`
 Expected: der Plan als neue Datei, die beiden anderen Dateien geändert, `161 insertions(+), 161 deletions(-)` (nur Checkbox-Zeichen).
 
-- [ ] **Step 3: Commit, Push, PR, Merge** *(Freigabe des Nutzers)*
+- [x] **Step 3: Commit, Push, PR, Merge** *(Freigabe des Nutzers)*
 
 Alle geänderten Dateien liegen unter `docs/`, die CI überspringt den Lauf (CI-Ausnahme); es gibt nichts abzuwarten.
 
@@ -255,13 +255,13 @@ Die Unterscheidung, die fehlt, ist die zwischen **dem Timeout des LLM** (ein Hä
 - Consumes: `extraction.Extractor`, `extraction.NewHybridExtractor(rules, llm Extractor, threshold float64)`, `pipeline.ImportResult`, `repository.RecipeRepository`, die Test-Helfer `stubExtractor` (`hybrid_test.go`), `fakeFetcher`, `fakeExtractor`, `newTestPipeline` (`pipeline_test.go`).
 - Produces: unverändertes öffentliches API. Neu und paketintern: `pipeline.interrupted(ctx context.Context, result ImportResult) (ImportResult, error)`. Verhalten: `HybridExtractor.Extract` gibt bei abgebrochenem Aufrufer-Kontext `nil` und einen Fehler zurück, der `context.Canceled` umhüllt; `Pipeline.Run` gibt dann `pipeline: context canceled` zurück, und der unterbrochene Post steht in keinem Zähler und nicht in `Seen`.
 
-- [ ] **Step 1: Branch anlegen**
+- [x] **Step 1: Branch anlegen**
 
 ```bash
 git switch main && git pull --ff-only && git switch -c fix/cancellation-is-not-a-fallback
 ```
 
-- [ ] **Step 2: Den Beleg gegen die echten SDKs schreiben** (an `internal/extraction/llm_extract_test.go` anhängen; die Imports `net/http` und `net/http/httptest` ergänzen)
+- [x] **Step 2: Den Beleg gegen die echten SDKs schreiben** (an `internal/extraction/llm_extract_test.go` anhängen; die Imports `net/http` und `net/http/httptest` ergänzen)
 
 Dieser Test **besteht schon vor dem Fix**. Er ist kein Fix-Test, sondern die Messung, die die Prämisse des Backlog-Eintrags widerlegt, und er hält sie fest, damit der Eintrag geschlossen bleibt.
 
@@ -312,12 +312,12 @@ func TestLLMExtractor_ParentCancellationEndsARealCallAtOnce(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Den Beleg laufen lassen, er muss bestehen**
+- [x] **Step 3: Den Beleg laufen lassen, er muss bestehen**
 
 Run: `go test -count=1 -run TestLLMExtractor_ParentCancellation -v ./internal/extraction/`
 Expected: `PASS` für `anthropic` und `openai`, je rund 50 ms. Besteht er nicht, hält der Backlog-Eintrag: dann anhalten und melden, statt den Plan weiter abzuarbeiten.
 
-- [ ] **Step 4: Die zwei Hybrid-Tests schreiben** (an `internal/extraction/hybrid_test.go` anhängen; den Import `"fmt"` ergänzen)
+- [x] **Step 4: Die zwei Hybrid-Tests schreiben** (an `internal/extraction/hybrid_test.go` anhängen; den Import `"fmt"` ergänzen)
 
 ```go
 // cancellingExtractor cancels the context it was given and then reports what an
@@ -367,12 +367,12 @@ func TestHybridExtractor_LLMTimeoutStillFallsBackWhileTheCallerIsAlive(t *testin
 }
 ```
 
-- [ ] **Step 5: Die Tests laufen lassen, der erste muss fehlschlagen**
+- [x] **Step 5: Die Tests laufen lassen, der erste muss fehlschlagen**
 
 Run: `go test -count=1 -run 'TestHybridExtractor_(CancellationIsNot|LLMTimeoutStill)' -v ./internal/extraction/`
 Expected: `TestHybridExtractor_CancellationIsNotAnLLMFailure` **FAIL** mit `Extract() error = <nil>, want it to wrap context.Canceled`; `TestHybridExtractor_LLMTimeoutStillFallsBackWhileTheCallerIsAlive` PASS.
 
-- [ ] **Step 6: `hybrid.go` ändern**
+- [x] **Step 6: `hybrid.go` ändern**
 
 Den Import um `fmt` ergänzen. Alt:
 
@@ -434,12 +434,12 @@ Neu:
 		// Say so, and mark the result. This was the worst of the three silent
 ```
 
-- [ ] **Step 7: Die Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 7: Die Tests laufen lassen, sie müssen grün sein**
 
 Run: `go test -count=1 -race ./internal/extraction/`
 Expected: PASS
 
-- [ ] **Step 8: Die zwei Pipeline-Tests schreiben** (an `internal/pipeline/pipeline_test.go` anhängen; alle nötigen Imports stehen schon in der Datei)
+- [x] **Step 8: Die zwei Pipeline-Tests schreiben** (an `internal/pipeline/pipeline_test.go` anhängen; alle nötigen Imports stehen schon in der Datei)
 
 ```go
 // cancellingExtractor cancels the run's context while it is extracting and
@@ -503,12 +503,12 @@ func TestPipeline_ShutdownMidStoreIsNotAFailedPost(t *testing.T) {
 }
 ```
 
-- [ ] **Step 9: Die Tests laufen lassen, beide müssen fehlschlagen**
+- [x] **Step 9: Die Tests laufen lassen, beide müssen fehlschlagen**
 
 Run: `go test -count=1 -run 'TestPipeline_ShutdownMid' -v ./internal/pipeline/`
 Expected: beide **FAIL** mit `Run() error = <nil>, want it to wrap context.Canceled` (Docker muss laufen).
 
-- [ ] **Step 10: `pipeline.go` ändern**
+- [x] **Step 10: `pipeline.go` ändern**
 
 Die Extraktionsstufe. Alt:
 
@@ -603,12 +603,12 @@ Neu:
 // NoRecipe is counted apart from Skipped and Failed on purpose: a saved-posts
 ```
 
-- [ ] **Step 11: Die Tests laufen lassen, sie müssen grün sein**
+- [x] **Step 11: Die Tests laufen lassen, sie müssen grün sein**
 
 Run: `go test -count=1 -race ./internal/extraction/ ./internal/pipeline/ ./internal/server/`
 Expected: PASS. Die Suite von `server` ist dabei, weil sie den Worker und den Abbruchpfad von außen treibt.
 
-- [ ] **Step 12: `AGENTS.md` berichtigen**
+- [x] **Step 12: `AGENTS.md` berichtigen**
 
 Im Abschnitt „Import and Instagram" an den Absatz zum Shutdown anhängen. Alt:
 
@@ -648,7 +648,7 @@ Im Abschnitt „Open work and backlog" den Eintrag streichen. Alt:
 
 Neu: (Zeilen entfernt.)
 
-- [ ] **Step 13: Den Backlog-Eintrag im Release-Plan schließen**
+- [x] **Step 13: Den Backlog-Eintrag im Release-Plan schließen**
 
 In `docs/superpowers/plans/2026-09-22-release-and-cleanup.md` im Abschnitt „Backlog (bewusst nicht in diesem Plan)" vor den Eintrag „Der aufgegebene Import endet erst nach seinem LLM-Timeout" einfügen:
 
@@ -656,7 +656,7 @@ In `docs/superpowers/plans/2026-09-22-release-and-cleanup.md` im Abschnitt „Ba
 > **Widerlegt und behoben (2026-09-25).** Der folgende Eintrag ist im Plan [2026-09-25-backlog-cleanup.md](2026-09-25-backlog-cleanup.md) geschlossen (M1). Seine Prämisse trug nicht: der Abbruch erreicht den LLM-Aufruf sofort, gemessen gegen beide SDKs bei einem Timeout von einer Stunde. Die echte Lücke war, dass `HybridExtractor` den Abbruch als LLM-Ausfall auffing und die Pipeline den unterbrochenen Post als fehlgeschlagen zählte.
 ```
 
-- [ ] **Step 14: Commit-Gate und Commit**
+- [x] **Step 14: Commit-Gate und Commit**
 
 ```bash
 git add internal docs AGENTS.md
