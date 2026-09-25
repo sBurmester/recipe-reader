@@ -717,7 +717,10 @@ than overlooked: the window is milliseconds on a collection that changes every f
    Do not write `BEGIN;`/`COMMIT;` — goose runs each migration in a transaction of its own, and a
    `COMMIT;` in the middle would end it early. A statement that cannot run inside a transaction,
    `CREATE INDEX CONCURRENTLY` above all, needs `-- +goose NO TRANSACTION` on the first line of the
-   file instead.
+   file instead. Keep `+goose` out of comments altogether: goose takes every comment line that
+   contains it for an annotation. A valid one is obeyed silently, so a commented-out
+   `-- +goose NO TRANSACTION` still takes the file out of its transaction; anything else, a mention
+   mid-sentence included, makes goose refuse the whole file.
 2. Add or edit the relevant `internal/db/queries/*.sql`.
 3. Run `make sqlc-generate`.
 4. Commit the migration, the query, and the regenerated `internal/db/sqlc/` files together — CI
