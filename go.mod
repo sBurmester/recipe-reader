@@ -4,7 +4,8 @@ go 1.27.1
 
 require (
 	github.com/alecthomas/kong v1.16.1
-	github.com/anthropics/anthropic-sdk-go v1.75.0
+	github.com/anthropics/anthropic-sdk-go v1.84.0
+	github.com/anthropics/anthropic-sdk-go/v2 v2.4.0
 	github.com/felipeinf/instago v1.0.2
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/openai/openai-go/v3 v3.66.0
